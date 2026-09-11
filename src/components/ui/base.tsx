@@ -6,7 +6,7 @@
 import { type ButtonHTMLAttributes, type ComponentPropsWithRef, type ReactNode } from 'react';
 import { cn } from '../../lib/utils.ts';
 import { X } from 'lucide-react';
-import { ICONO_GENERICO, ICONOS } from './iconos.ts';
+import { GRUPOS_ICONO, ICONO_GENERICO, ICONOS } from './iconos.ts';
 
 // --- iconos --------------------------------------------------------------
 
@@ -214,34 +214,58 @@ export function Avatar({ nombre, color, emoji, size = 32 }: {
  * Solo ofrece los del registro explicito (ver ./iconos.ts): si dejara escribir
  * cualquier nombre, la mitad caeria en el generico porque el empaquetador solo
  * incluye los que estan declarados.
+ *
+ * Agrupado por tema, y sin los iconos de la interfaz. Antes mostraba el
+ * registro entero, asi que para elegir "comida" habia que pasar por flechas,
+ * cruces y engranajes que no representan ningun gasto.
  */
 export function SelectorIcono({ valor, alElegir, color }: {
   valor: string; alElegir: (n: string) => void; color: string;
 }) {
   return (
-    <div className="grid grid-cols-8 gap-1.5 max-h-44 overflow-y-auto sin-barra">
-      {Object.keys(ICONOS).map((n) => (
-        <button
-          key={n}
-          onClick={() => alElegir(n)}
-          aria-label={`Icono ${n}`}
-          className={cn(
-            'aspect-square rounded-xl flex items-center justify-center transition-transform active:scale-90',
-            valor === n ? '' : 'superficie-2 txt-2',
-          )}
-          style={valor === n ? { background: `${color}26`, color, boxShadow: `0 0 0 2px ${color}` } : undefined}
-        >
-          <Icono nombre={n} size={17} />
-        </button>
+    <div className="max-h-56 overflow-y-auto sin-barra space-y-2.5">
+      {GRUPOS_ICONO.map(({ grupo, iconos }) => (
+        <div key={grupo}>
+          <p className="text-[11px] font-medium txt-3 mb-1 px-0.5">{grupo}</p>
+          <div className="grid grid-cols-8 gap-1.5">
+            {iconos.map((n) => (
+              <button
+                key={n}
+                onClick={() => alElegir(n)}
+                aria-label={`Icono ${n}`}
+                className={cn(
+                  'aspect-square rounded-xl flex items-center justify-center transition-transform active:scale-90',
+                  valor === n ? '' : 'superficie-2 txt-2',
+                )}
+                style={valor === n ? { background: `${color}26`, color, boxShadow: `0 0 0 2px ${color}` } : undefined}
+              >
+                <Icono nombre={n} size={17} />
+              </button>
+            ))}
+          </div>
+        </div>
       ))}
     </div>
   );
 }
 
-/** Paleta compartida por cuentas, categorias, jarras y personas. */
+/**
+ * Paleta compartida por cuentas, categorias, jarras y personas.
+ *
+ * Ordenada por tono y no por gusto: buscando "algo verde" o "algo naranja" se
+ * llega derecho, que es como se elige de verdad. Las ocho primeras de la
+ * version anterior siguen estando todas, asi que lo ya elegido se sigue
+ * reconociendo como propio en vez de aparecer como un color suelto.
+ *
+ * Ninguna es tan oscura como para perderse contra el fondo negro ni tan clara
+ * como para perderse contra el blanco: se usan de relleno al 15% y tambien
+ * como punto solido.
+ */
 export const COLORES = [
-  '#10b981', '#3b82f6', '#8b5cf6', '#ec4899',
-  '#f59e0b', '#ef4444', '#06b6d4', '#64748b',
+  '#10b981', '#22c55e', '#84cc16', '#eab308', '#f59e0b', '#f97316',
+  '#ef4444', '#f43f5e', '#ec4899', '#d946ef', '#a855f7', '#8b5cf6',
+  '#6366f1', '#3b82f6', '#0ea5e9', '#06b6d4', '#14b8a6', '#059669',
+  '#b45309', '#92400e', '#be123c', '#0369a1', '#78716c', '#64748b',
 ] as const;
 
 export function SelectorColor({ valor, alElegir }: {
@@ -254,10 +278,10 @@ export function SelectorColor({ valor, alElegir }: {
           key={c}
           onClick={() => alElegir(c)}
           aria-label={`Color ${c}`}
-          className="w-10 h-10 rounded-xl transition-transform active:scale-95 flex items-center justify-center"
+          className="w-9 h-9 rounded-xl transition-transform active:scale-90 flex items-center justify-center"
           style={{ background: `${c}26`, outline: valor === c ? `2px solid ${c}` : 'none' }}
         >
-          <span className="w-5 h-5 rounded-lg" style={{ background: c }} />
+          <span className="w-4.5 h-4.5 rounded-lg" style={{ background: c }} />
         </button>
       ))}
     </div>

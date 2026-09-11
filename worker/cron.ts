@@ -13,16 +13,7 @@
 
 import { aRecurring, listarCuentas, listarJarras, listarMovimientos } from './db.ts';
 import type { Env } from './env.ts';
-import { fechasVencidas } from '../shared/recurrencia.ts';
-import type { Recurring } from '../shared/types.ts';
-import { siguienteFecha } from '../shared/recurrencia.ts';
-
-const reglaDe = (r: Recurring) => ({
-  frecuencia: r.frequency,
-  diaDelMes: r.dayOfMonth ?? undefined,
-  diaDeSemana: r.dayOfWeek ?? undefined,
-  mesDelAnio: r.monthOfYear ?? undefined,
-});
+import { fechasVencidas, reglaDe, siguienteFecha } from '../shared/recurrencia.ts';
 
 export async function correrPagosHabituales(env: Env): Promise<{ creados: number; hogares: string[] }> {
   const ahora = Date.now();

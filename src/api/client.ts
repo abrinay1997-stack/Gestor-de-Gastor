@@ -4,7 +4,7 @@
 
 import { derivarClave } from '@shared/kdf';
 import type {
-  Account, Budget, Category, Jar, Member, Recurring, SeccionInicio,
+  Account, Adjustment, Budget, Category, Jar, Member, Recurring, SeccionInicio,
   Snapshot, Transaction, TransactionInput,
 } from '@shared/types';
 
@@ -131,6 +131,22 @@ export const api = {
   editarCuenta: (id: string, a: Partial<Account>) => put<{ account: Account }>(`/api/accounts/${id}`, a),
   archivarCuenta: (id: string) => del<{ ok: true; account?: Account }>(`/api/accounts/${id}`),
   borrarCuenta: (id: string) => del<{ ok: true }>(`/api/accounts/${id}?purge=1`),
+
+  /**
+   * Fijar el saldo de una cuenta a mano.
+   *
+   * Se manda el saldo que se quiere ver, no la diferencia: la resta la hace el
+   * servidor contra el saldo del momento. Si mandaramos la diferencia
+   * calculada aca, un movimiento cargado por la otra persona entremedio la
+   * dejaria mal.
+   */
+  ajustarSaldo: (accountId: string, balanceMinor: number, note?: string) =>
+    post<{ account: Account; adjustment: Adjustment | null }>('/api/adjustments', {
+      accountId, balanceMinor, note: note ?? null,
+    }),
+
+  ajustesDeCuenta: (accountId: string) =>
+    get<{ adjustments: Adjustment[] }>(`/api/adjustments?account=${encodeURIComponent(accountId)}`),
 
   crearCategoria: (c: Partial<Category>) => post<{ category: Category }>('/api/categories', c),
   editarCategoria: (id: string, c: Partial<Category>) =>

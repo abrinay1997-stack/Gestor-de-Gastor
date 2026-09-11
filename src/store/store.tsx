@@ -240,6 +240,7 @@ interface Acciones {
   borrarTx: (id: string) => Promise<void>;
   guardarCuenta: (c: Partial<Account>, id?: string) => Promise<void>;
   archivarCuenta: (id: string) => Promise<void>;
+  ajustarSaldo: (id: string, saldoMinor: number, nota?: string) => Promise<void>;
   guardarCategoria: (c: Partial<Category>, id?: string) => Promise<void>;
   guardarJarras: (jars: Partial<Jar>[]) => Promise<void>;
   guardarPresupuesto: (b: { categoryId: string | null; amountMinor: number; period: string }) => Promise<void>;
@@ -455,6 +456,11 @@ export function Store({ children }: { children: ReactNode }) {
 
     guardarCuenta: async (c, id) => {
       const r = id ? await api.editarCuenta(id, c) : await api.crearCuenta(c);
+      dispatch({ t: 'account:upsert', account: r.account });
+    },
+
+    ajustarSaldo: async (id, saldoMinor, nota) => {
+      const r = await api.ajustarSaldo(id, saldoMinor, nota);
       dispatch({ t: 'account:upsert', account: r.account });
     },
 

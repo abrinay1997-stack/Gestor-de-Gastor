@@ -212,6 +212,32 @@ export interface Budget {
 }
 
 // ---------------------------------------------------------------------------
+// Ajustes manuales de saldo
+// ---------------------------------------------------------------------------
+
+/**
+ * Una correccion a mano del saldo de una cuenta.
+ *
+ * No es un movimiento: no aparece en la lista, no entra en las estadisticas y
+ * no tiene categoria. Es la constancia de que alguien dijo "esta cuenta tiene
+ * tanto" y de cuanto se movio el numero al decirlo. Por dentro lo que cambia
+ * es el saldo inicial de la cuenta, nunca los movimientos.
+ */
+export interface Adjustment {
+  id: string;
+  householdId: string;
+  accountId: string;
+  /** Quien lo hizo. null si esa persona ya no esta en el hogar. */
+  memberId: string | null;
+  fromMinor: number;
+  toMinor: number;
+  /** toMinor - fromMinor. Guardado aparte para no recalcularlo al leer. */
+  deltaMinor: number;
+  note: string | null;
+  createdAt: number;
+}
+
+// ---------------------------------------------------------------------------
 // Pagos habituales
 // ---------------------------------------------------------------------------
 
@@ -226,8 +252,10 @@ export interface Recurring {
   categoryId: string | null;
   jarId: string | null;
   paidBy: string | null;
-  frequency: 'semanal' | 'mensual' | 'anual';
+  frequency: 'semanal' | 'quincenal' | 'mensual' | 'anual';
   dayOfMonth: number | null;
+  /** Segundo cobro del mes. Solo quincenal; 31 significa el ultimo dia. */
+  dayOfMonth2: number | null;
   dayOfWeek: number | null;
   monthOfYear: number | null;
   active: boolean;

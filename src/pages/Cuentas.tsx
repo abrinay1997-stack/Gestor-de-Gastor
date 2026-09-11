@@ -5,14 +5,17 @@
  * saldo de la tarjeta de credito al patrimonio como si fuera plata disponible.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store/store.tsx';
+import { api } from '../api/client.ts';
 import { formatMonto, montoPlano, parseMonto } from '@shared/money';
 import {
-  ACCOUNT_CATEGORY_LABEL, AccountCategory, esActivo, type Account,
+  ACCOUNT_CATEGORY_LABEL, AccountCategory, esActivo, type Account, type Adjustment,
 } from '@shared/types';
 import { calcularPatrimonio } from '@shared/domain';
-import { Boton, Campo, Ficha, Hoja, Icono, Selector, Tarjeta, Vacio } from '../components/ui/base.tsx';
+import {
+  Boton, Campo, COLORES, Ficha, Hoja, Icono, Selector, SelectorColor, Tarjeta, Vacio,
+} from '../components/ui/base.tsx';
 import { cn } from '../lib/utils.ts';
 
 const ICONOS: Record<AccountCategory, string> = {
@@ -24,8 +27,6 @@ const ICONOS: Record<AccountCategory, string> = {
   [AccountCategory.DEUDA]: 'file-minus',
   [AccountCategory.POR_COBRAR]: 'hand-coins',
 };
-
-const COLORES = ['#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#ef4444', '#06b6d4', '#64748b'];
 
 export function Cuentas() {
   const { accounts, household, members } = useStore();
@@ -159,23 +160,29 @@ function Grupo({ titulo, cuentas, alTocar, members }: {
 function FormularioCuenta({ abierta, alCerrar, editando }: {
   abierta: boolean; alCerrar: () => void; editando: Account | null;
 }) {
-  const { household, members, guardarCuenta, archivarCuenta, avisar } = useStore();
+  const { household, members, guardarCuenta, archivarCuenta, ajustarSaldo, avisar } = useStore();
   const moneda = household?.currency ?? 'USD';
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState<AccountCategory>(AccountCategory.EFECTIVO);
   const [saldoTexto, setSaldoTexto] = useState('');
-  const [color, setColor] = useState(COLORES[0]);
+  const [nota, setNota] = useState('');
+  const [color, setColor] = useState<string>(COLORES[0]);
   const [owner, setOwner] = useState('compartida');
   const [guardando, setGuardando] = useState(false);
+  const [historial, setHistorial] = useState<Adjustment[]>([]);
 
-  // Recarga los campos cada vez que se abre.
-  useMemo(() => {
+  // Al editar, el campo del saldo muestra el saldo ACTUAL (el que se ve en la
+  // lista), no el inicial. Es el numero que la persona quiere corregir: el
+  // inicial es un dato interno que ya nadie recuerda despues del primer mes.
+  const saldoDeReferencia = editando ? editando.balanceMinor : 0;
+
+  useEffect(() => {
     if (!abierta) return;
     if (editando) {
       setName(editando.name);
       setCategory(editando.category);
-      setSaldoTexto(montoPlano(editando.initialBalanceMinor, moneda));
+      setSaldoTexto(montoPlano(editando.balanceMinor, moneda));
       setColor(editando.color);
       setOwner(editando.owner);
     } else {
@@ -185,9 +192,24 @@ function FormularioCuenta({ abierta, alCerrar, editando }: {
       setColor(COLORES[0]);
       setOwner('compartida');
     }
+    setNota('');
+    setHistorial([]);
   }, [abierta, editando, moneda]);
 
+  // El historial se pide al abrir, no viene en el snapshot: son datos que se
+  // miran una vez cada tanto y cargarlos siempre engordaria cada arranque.
+  useEffect(() => {
+    if (!abierta || !editando) return;
+    let vigente = true;
+    api.ajustesDeCuenta(editando.id)
+      .then((r) => { if (vigente) setHistorial(r.adjustments); })
+      .catch(() => { /* el historial es informativo: si falla, no molesta */ });
+    return () => { vigente = false; };
+  }, [abierta, editando]);
+
   const saldoMinor = parseMonto(saldoTexto || '0', moneda) ?? 0;
+  const cambioElSaldo = editando !== null && saldoMinor !== saldoDeReferencia;
+  const diferencia = saldoMinor - saldoDeReferencia;
 
   async function guardar() {
     if (!name.trim()) return;
@@ -197,11 +219,18 @@ function FormularioCuenta({ abierta, alCerrar, editando }: {
         name: name.trim(),
         category,
         currency: moneda,
-        initialBalanceMinor: saldoMinor,
+        // En una cuenta nueva no hay movimientos, asi que el saldo que se
+        // escribe ES el inicial. En una que ya existe el saldo no se toca por
+        // aca: va por el ajuste, que ademas deja constancia.
+        ...(editando ? {} : { initialBalanceMinor: saldoMinor }),
         color,
         icon: ICONOS[category],
         owner,
       }, editando?.id);
+
+      if (editando && cambioElSaldo) {
+        await ajustarSaldo(editando.id, saldoMinor, nota.trim() || undefined);
+      }
       alCerrar();
     } catch (e) {
       avisar(e instanceof Error ? e.message : 'No se pudo guardar');
@@ -251,17 +280,70 @@ function FormularioCuenta({ abierta, alCerrar, editando }: {
         )}
 
         <Campo
-          etiqueta={editando ? 'Saldo inicial' : 'Saldo actual'}
+          etiqueta="Saldo actual"
           value={saldoTexto}
           onChange={(e) => setSaldoTexto(e.target.value)}
           placeholder="0.00"
           inputMode="decimal"
         />
-        {editando && (
-          <p className="text-xs txt-3 px-1 -mt-2">
-            El saldo que se muestra es este más todos los movimientos. Cambialo
-            solo si el saldo de origen estaba mal.
+        {editando && !cambioElSaldo && (
+          <p className="text-xs txt-3 px-1 -mt-2 leading-relaxed">
+            Se calcula solo con cada movimiento. Escribí otro número si la
+            cuenta real dice algo distinto y no aparece por qué.
           </p>
+        )}
+        {cambioElSaldo && (
+          <div className="-mt-2 space-y-3">
+            <div className="rounded-2xl p-3 superficie-2 borde border">
+              <p className="text-xs txt-2 leading-relaxed">
+                Queda en{' '}
+                <span className="font-semibold txt tabular">{formatMonto(saldoMinor, moneda)}</span>
+                {' '}·{' '}
+                <span className={cn('font-semibold tabular', diferencia < 0 ? 'text-red-500' : 'text-marca-600 dark:text-marca-500')}>
+                  {diferencia > 0 ? '+' : '−'}{formatMonto(Math.abs(diferencia), moneda)}
+                </span>
+              </p>
+              <p className="text-xs txt-3 mt-1 leading-relaxed">
+                No se crea ni se toca ningún movimiento. Los que cargues después
+                siguen sumando y restando desde acá.
+              </p>
+            </div>
+            <Campo
+              etiqueta="Por qué (opcional)"
+              value={nota}
+              onChange={(e) => setNota(e.target.value)}
+              placeholder="Faltaba plata, propina no anotada..."
+              maxLength={200}
+            />
+          </div>
+        )}
+
+        {historial.length > 0 && (
+          <details className="rounded-2xl superficie-2 borde border overflow-hidden">
+            <summary className="text-xs font-medium txt-2 px-3 py-2.5 cursor-pointer select-none">
+              Ajustes anteriores ({historial.length})
+            </summary>
+            <div className="px-3 pb-3 space-y-2">
+              {historial.map((a) => {
+                const quien = members.find((m) => m.id === a.memberId)?.displayName;
+                return (
+                  <div key={a.id} className="flex items-start gap-2 text-xs">
+                    <span className={cn(
+                      'font-semibold tabular shrink-0',
+                      a.deltaMinor < 0 ? 'text-red-500' : 'text-marca-600 dark:text-marca-500',
+                    )}>
+                      {a.deltaMinor > 0 ? '+' : '−'}{formatMonto(Math.abs(a.deltaMinor), moneda, { compacto: true })}
+                    </span>
+                    <span className="txt-3 flex-1 min-w-0">
+                      {new Date(a.createdAt).toLocaleDateString('es', { day: 'numeric', month: 'short' })}
+                      {quien && ` · ${quien}`}
+                      {a.note && <span className="block txt-3 truncate">{a.note}</span>}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </details>
         )}
 
         {members.length > 1 && (
@@ -275,19 +357,7 @@ function FormularioCuenta({ abierta, alCerrar, editando }: {
 
         <div>
           <span className="block text-xs font-medium txt-2 mb-2">Color</span>
-          <div className="flex gap-2 flex-wrap">
-            {COLORES.map((c) => (
-              <button
-                key={c}
-                onClick={() => setColor(c)}
-                aria-label={`Color ${c}`}
-                className="w-10 h-10 rounded-xl transition-transform active:scale-95 flex items-center justify-center"
-                style={{ background: `${c}26`, outline: color === c ? `2px solid ${c}` : 'none' }}
-              >
-                <span className="w-5 h-5 rounded-lg" style={{ background: c }} />
-              </button>
-            ))}
-          </div>
+          <SelectorColor valor={color} alElegir={setColor} />
         </div>
 
         <div className="flex gap-2 pt-1">

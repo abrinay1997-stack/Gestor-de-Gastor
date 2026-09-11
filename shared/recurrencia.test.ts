@@ -194,3 +194,129 @@ describe('describirRegla', () => {
       .toBe('El 25 de diciembre');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Quincenal
+// ---------------------------------------------------------------------------
+
+/** El caso real: sueldo el 15 y el ultimo dia del mes. */
+const sueldo: ReglaRecurrencia = { frecuencia: 'quincenal', diaDelMes: 15, diaDelMes2: 31 };
+
+describe('quincenal / primeraFecha', () => {
+  it('antes del 15 cobra el 15 de este mes', () => {
+    expect(f(primeraFecha(sueldo, en(2026, 3, 3)))).toBe('2026-03-15');
+  });
+
+  it('el mismo 15 cobra hoy, no espera a fin de mes', () => {
+    expect(f(primeraFecha(sueldo, en(2026, 3, 15)))).toBe('2026-03-15');
+  });
+
+  it('pasado el 15 cobra a fin de mes', () => {
+    expect(f(primeraFecha(sueldo, en(2026, 3, 16)))).toBe('2026-03-31');
+  });
+
+  it('el ultimo dia cobra ese dia', () => {
+    expect(f(primeraFecha(sueldo, en(2026, 3, 31)))).toBe('2026-03-31');
+  });
+
+  it('en febrero el "31" es el 28', () => {
+    expect(f(primeraFecha(sueldo, en(2026, 2, 20)))).toBe('2026-02-28');
+  });
+
+  it('con los dos dias ya pasados salta al mes que viene', () => {
+    // Con 15 y ultimo dia esta rama no se alcanza nunca (el ultimo dia del
+    // mes siempre es hoy o despues), asi que se prueba con dos dias
+    // tempranos, que es cuando de verdad puede pasar.
+    const temprano: ReglaRecurrencia = { frecuencia: 'quincenal', diaDelMes: 10, diaDelMes2: 20 };
+    expect(f(primeraFecha(temprano, en(2026, 4, 25)))).toBe('2026-05-10');
+  });
+
+  it('acepta cualquier par de dias, no solo 15 y 31', () => {
+    const r: ReglaRecurrencia = { frecuencia: 'quincenal', diaDelMes: 5, diaDelMes2: 20 };
+    expect(f(primeraFecha(r, en(2026, 6, 10)))).toBe('2026-06-20');
+    expect(f(primeraFecha(r, en(2026, 6, 21)))).toBe('2026-07-05');
+  });
+
+  it('da igual el orden en que se carguen los dos dias', () => {
+    const alReves: ReglaRecurrencia = { frecuencia: 'quincenal', diaDelMes: 31, diaDelMes2: 15 };
+    expect(primeraFecha(alReves, en(2026, 3, 3))).toBe(primeraFecha(sueldo, en(2026, 3, 3)));
+  });
+
+  it('sin dias explicitos usa 15 y ultimo dia', () => {
+    expect(f(primeraFecha({ frecuencia: 'quincenal' }, en(2026, 3, 3)))).toBe('2026-03-15');
+  });
+});
+
+describe('quincenal / siguienteFecha', () => {
+  it('del 15 va a fin de mes', () => {
+    expect(f(siguienteFecha(sueldo, en(2026, 1, 15)))).toBe('2026-01-31');
+  });
+
+  it('de fin de mes va al 15 del siguiente', () => {
+    expect(f(siguienteFecha(sueldo, en(2026, 1, 31)))).toBe('2026-02-15');
+  });
+
+  it('desde el 28 de febrero no se queda pegado al 28', () => {
+    // Es LA trampa de la quincenal: en febrero el "31" cae 28, y si se
+    // avanzara desde el dia que cayo, el cobro de fin de mes pasaria a ser el
+    // 28 para siempre. Tiene que volver al 15 de marzo y despues al 31.
+    expect(f(siguienteFecha(sueldo, en(2026, 2, 28)))).toBe('2026-03-15');
+    expect(f(siguienteFecha(sueldo, en(2026, 3, 15)))).toBe('2026-03-31');
+  });
+
+  it('cruza el año', () => {
+    expect(f(siguienteFecha(sueldo, en(2026, 12, 31)))).toBe('2027-01-15');
+  });
+
+  it('un año entero da 24 cobros, siempre creciendo', () => {
+    let fecha = primeraFecha(sueldo, en(2026, 1, 1));
+    const fechas: string[] = [];
+    for (let i = 0; i < 24; i++) {
+      fechas.push(f(fecha));
+      const proxima = siguienteFecha(sueldo, fecha);
+      expect(proxima).toBeGreaterThan(fecha);
+      fecha = proxima;
+    }
+    expect(fechas[0]).toBe('2026-01-15');
+    expect(fechas[1]).toBe('2026-01-31');
+    expect(fechas[2]).toBe('2026-02-15');
+    expect(fechas[3]).toBe('2026-02-28');
+    expect(fechas[23]).toBe('2026-12-31');
+    // 24 fechas distintas: ninguna repetida, ninguna salteada.
+    expect(new Set(fechas).size).toBe(24);
+  });
+
+  it('en un mes de 30 dias el segundo cobro es el 30', () => {
+    expect(f(siguienteFecha(sueldo, en(2026, 4, 15)))).toBe('2026-04-30');
+  });
+
+  it('con dos dias que se recortan al mismo, cobra una sola vez ese mes', () => {
+    // 30 y 31 en febrero son los dos el 28. Cobrar dos veces el mismo dia
+    // seria duplicar plata: se salta al mes siguiente.
+    const pegados: ReglaRecurrencia = { frecuencia: 'quincenal', diaDelMes: 30, diaDelMes2: 31 };
+    expect(f(siguienteFecha(pegados, en(2026, 2, 28)))).toBe('2026-03-30');
+  });
+});
+
+describe('quincenal / fechasVencidas', () => {
+  it('dos meses sin correr dan cuatro sueldos', () => {
+    const r = fechasVencidas(sueldo, en(2026, 1, 15), en(2026, 2, 28));
+    expect(r.map(f)).toEqual(['2026-01-15', '2026-01-31', '2026-02-15', '2026-02-28']);
+  });
+
+  it('no adelanta la que todavia no vencio', () => {
+    const r = fechasVencidas(sueldo, en(2026, 1, 15), en(2026, 1, 20));
+    expect(r.map(f)).toEqual(['2026-01-15']);
+  });
+});
+
+describe('quincenal / describirRegla', () => {
+  it('llama al 31 "el ultimo dia"', () => {
+    expect(describirRegla(sueldo)).toBe('El 15 y el último día de cada mes');
+  });
+
+  it('con dos dias normales los nombra a los dos', () => {
+    expect(describirRegla({ frecuencia: 'quincenal', diaDelMes: 1, diaDelMes2: 16 }))
+      .toBe('El 1 y el 16 de cada mes');
+  });
+});

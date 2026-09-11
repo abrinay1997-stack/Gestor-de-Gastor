@@ -11,10 +11,11 @@
  * cambio de horario de verano no puede correr el pago al dia anterior.
  */
 
-export type Frecuencia = 'semanal' | 'mensual' | 'anual';
+export type Frecuencia = 'semanal' | 'quincenal' | 'mensual' | 'anual';
 
 export const FRECUENCIA_LABEL: Record<Frecuencia, string> = {
   semanal: 'Cada semana',
+  quincenal: 'Cada quincena',
   mensual: 'Cada mes',
   anual: 'Cada año',
 };
@@ -44,12 +45,56 @@ export function fechaSegura(anio: number, mes0: number, dia: number): Date {
 
 export interface ReglaRecurrencia {
   frecuencia: Frecuencia;
-  /** 1-31, para mensual y anual. */
+  /** 1-31, para quincenal, mensual y anual. */
   diaDelMes?: number;
+  /** 1-31, el segundo cobro del mes. Solo quincenal. */
+  diaDelMes2?: number;
   /** 0 = domingo, para semanal. */
   diaDeSemana?: number;
   /** 1-12, para anual. */
   mesDelAnio?: number;
+}
+
+/** Valores por defecto de la quincena: el 15 y el ultimo dia del mes. */
+export const QUINCENA_POR_DEFECTO = [15, 31] as const;
+
+/**
+ * Los dos dias de una regla quincenal, ordenados.
+ *
+ * Se ordenan aca y no al guardar porque el orden es lo unico que hace que las
+ * listas de candidatas de mas abajo salgan crecientes, y de eso depende que
+ * "la primera posterior a X" sea de verdad la primera.
+ */
+function diasQuincena(regla: ReglaRecurrencia): [number, number] {
+  const a = regla.diaDelMes ?? QUINCENA_POR_DEFECTO[0];
+  const b = regla.diaDelMes2 ?? QUINCENA_POR_DEFECTO[1];
+  return a <= b ? [a, b] : [b, a];
+}
+
+/**
+ * Pasa un pago habitual guardado a la regla que entienden estas funciones.
+ *
+ * Existe porque esta traduccion se estaba escribiendo a mano en cuatro
+ * lugares (el disparador, las dos rutas y la pantalla de ajustes) y ya habia
+ * costado un error: la lista de Ajustes armaba la regla sin el segundo dia de
+ * la quincena, asi que un sueldo del 1 y el 16 se describia como "el 1 y el
+ * ultimo dia". Con una sola version, agregar un campo no puede olvidarse en
+ * la mitad de los lugares.
+ */
+export function reglaDe(r: {
+  frequency: Frecuencia;
+  dayOfMonth?: number | null;
+  dayOfMonth2?: number | null;
+  dayOfWeek?: number | null;
+  monthOfYear?: number | null;
+}): ReglaRecurrencia {
+  return {
+    frecuencia: r.frequency,
+    diaDelMes: r.dayOfMonth ?? undefined,
+    diaDelMes2: r.dayOfMonth2 ?? undefined,
+    diaDeSemana: r.dayOfWeek ?? undefined,
+    mesDelAnio: r.monthOfYear ?? undefined,
+  };
 }
 
 /**
@@ -68,6 +113,18 @@ export function primeraFecha(regla: ReglaRecurrencia, desde = Date.now()): numbe
       const objetivo = regla.diaDeSemana ?? 1;
       const faltan = (objetivo - d.getDay() + 7) % 7;
       return new Date(anio, mes0, d.getDate() + faltan, 12, 0, 0, 0).getTime();
+    }
+
+    case 'quincenal': {
+      const [a, b] = diasQuincena(regla);
+      // Crecientes: los dos de este mes y el primero del que viene, que
+      // siempre cae despues. Con eso alcanza para cubrir cualquier "desde".
+      const candidatas = [
+        fechaSegura(anio, mes0, a).getTime(),
+        fechaSegura(anio, mes0, b).getTime(),
+        fechaSegura(anio, mes0 + 1, a).getTime(),
+      ];
+      return candidatas.find((f) => f >= hoy) ?? candidatas[2];
     }
 
     case 'mensual': {
@@ -103,6 +160,25 @@ export function siguienteFecha(regla: ReglaRecurrencia, ultima: number): number 
   switch (regla.frecuencia) {
     case 'semanal':
       return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 7, 12, 0, 0, 0).getTime();
+
+    case 'quincenal': {
+      const [a, b] = diasQuincena(regla);
+      const anio = d.getFullYear();
+      const mes0 = d.getMonth();
+      // No se mira que dia cayo, se busca la proxima candidata posterior. Es
+      // lo unico que funciona cuando el dia se recorto: un cobro "el 31" que
+      // en febrero cayo el 28 no coincide con ninguno de los dos numeros de
+      // la regla, pero si es anterior al 15 de marzo, que es la que sigue.
+      const candidatas = [
+        fechaSegura(anio, mes0, a).getTime(),
+        fechaSegura(anio, mes0, b).getTime(),
+        fechaSegura(anio, mes0 + 1, a).getTime(),
+        fechaSegura(anio, mes0 + 1, b).getTime(),
+      ];
+      // Estricto: si los dos dias caen en la misma fecha real (el 30 y el 31
+      // en abril, por ejemplo) se cobra una sola vez y no dos el mismo dia.
+      return candidatas.find((f) => f > ultima) ?? fechaSegura(anio, mes0 + 2, a).getTime();
+    }
 
     case 'mensual':
       return fechaSegura(d.getFullYear(), d.getMonth() + 1, regla.diaDelMes ?? d.getDate()).getTime();
@@ -152,6 +228,10 @@ export function describirRegla(regla: ReglaRecurrencia): string {
   switch (regla.frecuencia) {
     case 'semanal':
       return `Cada ${DIAS_SEMANA[regla.diaDeSemana ?? 1].toLowerCase()}`;
+    case 'quincenal': {
+      const [a, b] = diasQuincena(regla);
+      return `El ${a} y ${b === 31 ? 'el último día' : `el ${b}`} de cada mes`;
+    }
     case 'mensual':
       return `El ${regla.diaDelMes ?? 1} de cada mes`;
     case 'anual':

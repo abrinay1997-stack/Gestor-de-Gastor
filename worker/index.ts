@@ -12,6 +12,7 @@ import type { Env } from './env.ts';
 import { ErrorValidacion, error, json } from './http.ts';
 import * as auth from './routes/auth.ts';
 import * as data from './routes/data.ts';
+import * as adjustments from './routes/adjustments.ts';
 import * as recurring from './routes/recurring.ts';
 import * as tx from './routes/transactions.ts';
 import { correrPagosHabituales } from './cron.ts';
@@ -35,6 +36,7 @@ const RUTAS: Record<string, Partial<Record<string, Handler>>> = {
   '/api/transactions/batch': { POST: tx.crearLote },
   '/api/profile': { PUT: data.editarPerfil },
   '/api/recurring': { GET: recurring.listar, POST: recurring.crear },
+  '/api/adjustments': { GET: adjustments.listar, POST: adjustments.crear },
 };
 
 /** Rutas con un id al final: /api/algo/:id */

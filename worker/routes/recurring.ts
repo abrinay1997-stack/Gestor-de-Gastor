@@ -13,9 +13,11 @@ import {
   nuevoId, texto, unoDe,
 } from '../http.ts';
 import { TxType } from '../../shared/types.ts';
-import { primeraFecha, type Frecuencia } from '../../shared/recurrencia.ts';
+import {
+  primeraFecha, QUINCENA_POR_DEFECTO, reglaDe, type Frecuencia,
+} from '../../shared/recurrencia.ts';
 
-const FRECUENCIAS = ['semanal', 'mensual', 'anual'] as const;
+const FRECUENCIAS = ['semanal', 'quincenal', 'mensual', 'anual'] as const;
 /** Solo ingreso o gasto: una transferencia automatica no tiene sentido aca. */
 const TIPOS = [TxType.INGRESO, TxType.GASTO] as const;
 const MAX_MONTO = 999_999_999_999;
@@ -33,6 +35,7 @@ interface Validado {
   paidBy: string | null;
   frequency: Frecuencia;
   dayOfMonth: number | null;
+  dayOfMonth2: number | null;
   dayOfWeek: number | null;
   monthOfYear: number | null;
   active: boolean;
@@ -76,11 +79,22 @@ async function validar(
   // Cada frecuencia necesita lo suyo. Se valida por separado para que el
   // mensaje diga exactamente que falta.
   let dayOfMonth: number | null = null;
+  let dayOfMonth2: number | null = null;
   let dayOfWeek: number | null = null;
   let monthOfYear: number | null = null;
 
-  if (frequency === 'mensual' || frequency === 'anual') {
+  if (frequency !== 'semanal') {
     dayOfMonth = entero(body.dayOfMonth ?? 1, 'dayOfMonth', { min: 1, max: 31 });
+  }
+  if (frequency === 'quincenal') {
+    dayOfMonth2 = entero(
+      body.dayOfMonth2 ?? QUINCENA_POR_DEFECTO[1], 'dayOfMonth2', { min: 1, max: 31 },
+    );
+    // Dos cobros el mismo dia no son una quincena. Se rechaza en vez de
+    // corregirlo por lo bajo: quien lo cargo tiene que ver que eligio mal.
+    if (dayOfMonth === dayOfMonth2) {
+      return error('Los dos días de la quincena tienen que ser distintos', 400);
+    }
   }
   if (frequency === 'semanal') {
     dayOfWeek = entero(body.dayOfWeek ?? 1, 'dayOfWeek', { min: 0, max: 6 });
@@ -91,7 +105,7 @@ async function validar(
 
   return {
     name, type, amountMinor, accountId, categoryId, jarId, paidBy,
-    frequency, dayOfMonth, dayOfWeek, monthOfYear,
+    frequency, dayOfMonth, dayOfMonth2, dayOfWeek, monthOfYear,
     active: booleano(body.active ?? true),
   };
 }
@@ -109,22 +123,17 @@ export async function crear(req: Request, env: Env, sesion: Sesion): Promise<Res
     ? entero(body.startAt, 'startAt', { min: 0, max: 4_102_444_800_000 })
     : t;
 
-  const nextRun = primeraFecha({
-    frecuencia: v.frequency,
-    diaDelMes: v.dayOfMonth ?? undefined,
-    diaDeSemana: v.dayOfWeek ?? undefined,
-    mesDelAnio: v.monthOfYear ?? undefined,
-  }, desde);
+  const nextRun = primeraFecha(reglaDe(v), desde);
 
   await env.DB.prepare(
     `INSERT INTO recurring (id, household_id, name, type, amount_minor, account_id,
                             category_id, jar_id, paid_by, frequency, day_of_month,
-                            day_of_week, month_of_year, active, next_run, last_run,
-                            created_at, updated_at)
-     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,NULL,?16,?16)`,
+                            day_of_month_2, day_of_week, month_of_year, active,
+                            next_run, last_run, created_at, updated_at)
+     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,NULL,?17,?17)`,
   ).bind(
     id, sesion.householdId, v.name, v.type, v.amountMinor, v.accountId,
-    v.categoryId, v.jarId, v.paidBy, v.frequency, v.dayOfMonth,
+    v.categoryId, v.jarId, v.paidBy, v.frequency, v.dayOfMonth, v.dayOfMonth2,
     v.dayOfWeek, v.monthOfYear, v.active ? 1 : 0, nextRun, t,
   ).run();
 
@@ -152,28 +161,22 @@ export async function editar(
   const cambioLaRegla =
     v.frequency !== existente.frequency ||
     v.dayOfMonth !== existente.dayOfMonth ||
+    v.dayOfMonth2 !== existente.dayOfMonth2 ||
     v.dayOfWeek !== existente.dayOfWeek ||
     v.monthOfYear !== existente.monthOfYear;
 
-  const nextRun = cambioLaRegla
-    ? primeraFecha({
-      frecuencia: v.frequency,
-      diaDelMes: v.dayOfMonth ?? undefined,
-      diaDeSemana: v.dayOfWeek ?? undefined,
-      mesDelAnio: v.monthOfYear ?? undefined,
-    })
-    : existente.nextRun;
+  const nextRun = cambioLaRegla ? primeraFecha(reglaDe(v)) : existente.nextRun;
 
   await env.DB.prepare(
     `UPDATE recurring SET name=?1, type=?2, amount_minor=?3, account_id=?4,
                           category_id=?5, jar_id=?6, paid_by=?7, frequency=?8,
-                          day_of_month=?9, day_of_week=?10, month_of_year=?11,
-                          active=?12, next_run=?13, updated_at=?14
-     WHERE id=?15 AND household_id=?16`,
+                          day_of_month=?9, day_of_month_2=?10, day_of_week=?11,
+                          month_of_year=?12, active=?13, next_run=?14, updated_at=?15
+     WHERE id=?16 AND household_id=?17`,
   ).bind(
     v.name, v.type, v.amountMinor, v.accountId, v.categoryId, v.jarId, v.paidBy,
-    v.frequency, v.dayOfMonth, v.dayOfWeek, v.monthOfYear, v.active ? 1 : 0,
-    nextRun, ahora(), id, sesion.householdId,
+    v.frequency, v.dayOfMonth, v.dayOfMonth2, v.dayOfWeek, v.monthOfYear,
+    v.active ? 1 : 0, nextRun, ahora(), id, sesion.householdId,
   ).run();
 
   const recurrente = await recurrentePorId(env, sesion.householdId, id);

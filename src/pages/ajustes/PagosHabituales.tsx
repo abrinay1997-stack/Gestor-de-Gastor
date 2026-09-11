@@ -11,7 +11,8 @@ import { useStore } from '../../store/store.tsx';
 import { formatMonto, montoPlano, parseMonto } from '@shared/money';
 import { TxType, type Recurring } from '@shared/types';
 import {
-  DIAS_SEMANA, describirRegla, MESES, primeraFecha, type Frecuencia,
+  DIAS_SEMANA, describirRegla, MESES, primeraFecha, QUINCENA_POR_DEFECTO,
+  reglaDe, type Frecuencia,
 } from '@shared/recurrencia';
 import { Boton, Campo, Ficha, Hoja, Icono, Selector, Tarjeta } from '../../components/ui/base.tsx';
 import { useConfirmar } from '../../components/ui/confirmar.tsx';
@@ -77,12 +78,7 @@ export function PagosHabituales() {
                       {!r.active && <span className="txt-3 font-normal"> · en pausa</span>}
                     </p>
                     <p className="text-xs txt-3 truncate">
-                      {describirRegla({
-                        frecuencia: r.frequency,
-                        diaDelMes: r.dayOfMonth ?? undefined,
-                        diaDeSemana: r.dayOfWeek ?? undefined,
-                        mesDelAnio: r.monthOfYear ?? undefined,
-                      })}
+                      {describirRegla(reglaDe(r))}
                       {cuenta && ` · ${cuenta.name}`}
                       {r.active && dias >= 0 && dias <= 31 &&
                         ` · ${dias === 0 ? 'hoy' : `en ${dias} día${dias > 1 ? 's' : ''}`}`}
@@ -117,6 +113,15 @@ export function PagosHabituales() {
   );
 }
 
+const DIAS_DEL_MES = Array.from({ length: 31 }, (_, i) => i + 1);
+
+/**
+ * El 31 se muestra como "ultimo dia" porque es lo que de verdad significa:
+ * el calculo lo recorta al ultimo dia real de cada mes. Poner "31" a secas
+ * haria dudar a cualquiera que cobre a fin de mes en febrero.
+ */
+const etiquetaDia = (d: number) => (d === 31 ? '31 · último día' : String(d));
+
 function FormularioPago({ abierto, alCerrar, editando }: {
   abierto: boolean; alCerrar: () => void; editando: Recurring | null;
 }) {
@@ -133,6 +138,7 @@ function FormularioPago({ abierto, alCerrar, editando }: {
   const [paidBy, setPaidBy] = useState('');
   const [frecuencia, setFrecuencia] = useState<Frecuencia>('mensual');
   const [diaMes, setDiaMes] = useState(1);
+  const [diaMes2, setDiaMes2] = useState<number>(QUINCENA_POR_DEFECTO[1]);
   const [diaSemana, setDiaSemana] = useState(1);
   const [mesAnio, setMesAnio] = useState(1);
   const [activo, setActivo] = useState(true);
@@ -151,6 +157,7 @@ function FormularioPago({ abierto, alCerrar, editando }: {
       setPaidBy(editando.paidBy ?? '');
       setFrecuencia(editando.frequency);
       setDiaMes(editando.dayOfMonth ?? 1);
+      setDiaMes2(editando.dayOfMonth2 ?? QUINCENA_POR_DEFECTO[1]);
       setDiaSemana(editando.dayOfWeek ?? 1);
       setMesAnio(editando.monthOfYear ?? 1);
       setActivo(editando.active);
@@ -164,6 +171,7 @@ function FormularioPago({ abierto, alCerrar, editando }: {
       setPaidBy('');
       setFrecuencia('mensual');
       setDiaMes(new Date().getDate());
+      setDiaMes2(QUINCENA_POR_DEFECTO[1]);
       setDiaSemana(1);
       setMesAnio(new Date().getMonth() + 1);
       setActivo(true);
@@ -175,12 +183,38 @@ function FormularioPago({ abierto, alCerrar, editando }: {
   const tipoCategoria = tipo === TxType.INGRESO ? 'ingreso' : 'gasto';
   const categoriasVisibles = categories.filter((c) => !c.archived && c.type === tipoCategoria);
 
-  const proxima = primeraFecha({
-    frecuencia,
-    diaDelMes: frecuencia !== 'semanal' ? diaMes : undefined,
-    diaDeSemana: frecuencia === 'semanal' ? diaSemana : undefined,
-    mesDelAnio: frecuencia === 'anual' ? mesAnio : undefined,
+  // Si el primer dia se mueve encima del segundo, se corre el segundo: es
+  // menos molesto que bloquear el boton y dejar a la persona adivinando.
+  const dia2Efectivo = frecuencia === 'quincenal' && diaMes2 === diaMes
+    ? (diaMes === 31 ? 15 : 31)
+    : diaMes2;
+
+  const regla = reglaDe({
+    frequency: frecuencia,
+    dayOfMonth: frecuencia !== 'semanal' ? diaMes : null,
+    dayOfMonth2: frecuencia === 'quincenal' ? dia2Efectivo : null,
+    dayOfWeek: frecuencia === 'semanal' ? diaSemana : null,
+    monthOfYear: frecuencia === 'anual' ? mesAnio : null,
   });
+  const proxima = primeraFecha(regla);
+
+  /**
+   * Al pasar a quincenal se proponen el 15 y el ultimo dia.
+   *
+   * El dia que arrastraba la mensual es "hoy", que para un pago mensual es un
+   * buen punto de partida y para una quincena no significa nada: quien cobra
+   * cada quince dias casi siempre cobra el 15 y a fin de mes.
+   */
+  function cambiarFrecuencia(nueva: Frecuencia) {
+    setFrecuencia(nueva);
+    if (nueva === 'quincenal' && frecuencia !== 'quincenal') {
+      setDiaMes(QUINCENA_POR_DEFECTO[0]);
+      setDiaMes2(QUINCENA_POR_DEFECTO[1]);
+    }
+    if (nueva !== 'quincenal' && frecuencia === 'quincenal') {
+      setDiaMes(new Date().getDate());
+    }
+  }
 
   const puedeGuardar = name.trim() !== '' && montoMinor !== null && montoMinor > 0 && accountId !== '' && !guardando;
 
@@ -199,6 +233,7 @@ function FormularioPago({ abierto, alCerrar, editando }: {
         paidBy: paidBy || null,
         frequency: frecuencia,
         dayOfMonth: frecuencia !== 'semanal' ? diaMes : null,
+        dayOfMonth2: frecuencia === 'quincenal' ? dia2Efectivo : null,
         dayOfWeek: frecuencia === 'semanal' ? diaSemana : null,
         monthOfYear: frecuencia === 'anual' ? mesAnio : null,
         active: activo,
@@ -245,20 +280,36 @@ function FormularioPago({ abierto, alCerrar, editando }: {
           inputMode="decimal"
         />
 
-        <Selector etiqueta="Frecuencia" value={frecuencia} onChange={(e) => setFrecuencia(e.target.value as Frecuencia)}>
+        <Selector etiqueta="Frecuencia" value={frecuencia} onChange={(e) => cambiarFrecuencia(e.target.value as Frecuencia)}>
           <option value="mensual">Cada mes</option>
+          <option value="quincenal">Cada quincena (dos veces al mes)</option>
           <option value="semanal">Cada semana</option>
           <option value="anual">Cada año</option>
         </Selector>
 
-        {frecuencia === 'semanal' ? (
+        {frecuencia === 'semanal' && (
           <Selector etiqueta="Día" value={diaSemana} onChange={(e) => setDiaSemana(Number(e.target.value))}>
             {DIAS_SEMANA.map((d, i) => <option key={d} value={i}>{d}</option>)}
           </Selector>
-        ) : (
+        )}
+
+        {frecuencia === 'quincenal' && (
+          <div className="grid grid-cols-2 gap-3">
+            <Selector etiqueta="Primer cobro" value={diaMes} onChange={(e) => setDiaMes(Number(e.target.value))}>
+              {DIAS_DEL_MES.map((d) => <option key={d} value={d}>{etiquetaDia(d)}</option>)}
+            </Selector>
+            <Selector etiqueta="Segundo cobro" value={dia2Efectivo} onChange={(e) => setDiaMes2(Number(e.target.value))}>
+              {DIAS_DEL_MES.filter((d) => d !== diaMes).map((d) => (
+                <option key={d} value={d}>{etiquetaDia(d)}</option>
+              ))}
+            </Selector>
+          </div>
+        )}
+
+        {(frecuencia === 'mensual' || frecuencia === 'anual') && (
           <div className={cn('grid gap-3', frecuencia === 'anual' ? 'grid-cols-2' : 'grid-cols-1')}>
             <Selector etiqueta="Día del mes" value={diaMes} onChange={(e) => setDiaMes(Number(e.target.value))}>
-              {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => <option key={d} value={d}>{d}</option>)}
+              {DIAS_DEL_MES.map((d) => <option key={d} value={d}>{etiquetaDia(d)}</option>)}
             </Selector>
             {frecuencia === 'anual' && (
               <Selector etiqueta="Mes" value={mesAnio} onChange={(e) => setMesAnio(Number(e.target.value))}>
@@ -270,9 +321,11 @@ function FormularioPago({ abierto, alCerrar, editando }: {
 
         {/* Un día 29, 30 o 31 no existe en todos los meses. Decirlo acá evita
             la sorpresa de que el pago "se corrió". */}
-        {frecuencia !== 'semanal' && diaMes > 28 && (
+        {frecuencia !== 'semanal' && Math.max(diaMes, frecuencia === 'quincenal' ? dia2Efectivo : 0) > 28 && (
           <p className="text-xs txt-3 px-1 -mt-2 leading-relaxed">
-            En los meses que no tienen día {diaMes}, se cobra el último día del mes.
+            {frecuencia === 'quincenal'
+              ? `${describirRegla(regla)}. En febrero, el último día es el 28 (o el 29).`
+              : `En los meses que no tienen día ${diaMes}, se cobra el último día del mes.`}
           </p>
         )}
 

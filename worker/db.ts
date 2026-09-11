@@ -16,7 +16,7 @@
  */
 
 import type {
-  Account, Budget, Category, Household, Jar, Member, Recurring, SeccionInicio,
+  Account, Adjustment, Budget, Category, Household, Jar, Member, Recurring, SeccionInicio,
   Snapshot, Transaction,
 } from '../shared/types.ts';
 import { SECCIONES_INICIO } from '../shared/types.ts';
@@ -31,6 +31,7 @@ type Fila = Record<string, unknown>;
 const int = (v: unknown): number => Number(v ?? 0);
 const str = (v: unknown): string => String(v ?? '');
 const strOpt = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));
+const intOpt = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
 const bool = (v: unknown): boolean => Number(v ?? 0) === 1;
 
 export const aAccount = (f: Fila): Account => ({
@@ -148,17 +149,30 @@ export const aRecurring = (f: Fila): Recurring => ({
   categoryId: strOpt(f.category_id),
   jarId: strOpt(f.jar_id),
   paidBy: strOpt(f.paid_by),
-  frequency: (['semanal', 'mensual', 'anual'] as const).includes(f.frequency as 'mensual')
-    ? (f.frequency as 'semanal' | 'mensual' | 'anual')
+  frequency: (['semanal', 'quincenal', 'mensual', 'anual'] as const).includes(f.frequency as 'mensual')
+    ? (f.frequency as 'semanal' | 'quincenal' | 'mensual' | 'anual')
     : 'mensual',
-  dayOfMonth: f.day_of_month === null || f.day_of_month === undefined ? null : int(f.day_of_month),
-  dayOfWeek: f.day_of_week === null || f.day_of_week === undefined ? null : int(f.day_of_week),
-  monthOfYear: f.month_of_year === null || f.month_of_year === undefined ? null : int(f.month_of_year),
+  dayOfMonth: intOpt(f.day_of_month),
+  dayOfMonth2: intOpt(f.day_of_month_2),
+  dayOfWeek: intOpt(f.day_of_week),
+  monthOfYear: intOpt(f.month_of_year),
   active: bool(f.active),
   nextRun: int(f.next_run),
-  lastRun: f.last_run === null || f.last_run === undefined ? null : int(f.last_run),
+  lastRun: intOpt(f.last_run),
   createdAt: int(f.created_at),
   updatedAt: int(f.updated_at),
+});
+
+export const aAdjustment = (f: Fila): Adjustment => ({
+  id: str(f.id),
+  householdId: str(f.household_id),
+  accountId: str(f.account_id),
+  memberId: strOpt(f.member_id),
+  fromMinor: int(f.from_minor),
+  toMinor: int(f.to_minor),
+  deltaMinor: int(f.delta_minor),
+  note: strOpt(f.note),
+  createdAt: int(f.created_at),
 });
 
 export const aHousehold = (f: Fila): Household => ({
@@ -171,29 +185,38 @@ export const aHousehold = (f: Fila): Household => ({
 // --- consultas -----------------------------------------------------------
 
 /**
- * Cuentas con el saldo ya calculado.
+ * Lo que los movimientos le suman o restan a una cuenta.
  *
  * Los numeros de tipo (1 ajuste, 2 ingreso, 3 gasto, 4 transferencia) son los
  * de TxType en shared/types.ts, y el signo de cada caso replica exactamente el
  * de `efectoEnCuenta`. Los dos lugares tienen que decir lo mismo; el test
  * 'calcularSaldos' cubre la version de TypeScript.
+ *
+ * Es una funcion y se exporta porque el ajuste manual de saldo necesita
+ * exactamente esta cuenta para despejar el saldo inicial. Tenerla escrita dos
+ * veces no era una duplicacion inofensiva: la primera copia ya se habia
+ * olvidado el COALESCE de la pata de entrada de las transferencias, y el
+ * ajuste habria quedado corrido por el monto de cada transferencia recibida.
  */
-const SQL_CUENTAS = `
-  SELECT a.*,
-    a.initial_balance_minor
-    + COALESCE((
+export const sumaDeMovimientos = (cuenta: string): string => `
+    COALESCE((
         SELECT SUM(CASE
           WHEN t.type = 2 THEN  t.amount_minor
           WHEN t.type = 3 THEN -t.amount_minor
           WHEN t.type = 1 THEN  t.amount_minor
           WHEN t.type = 4 THEN -t.amount_minor
           ELSE 0 END)
-        FROM tx t WHERE t.account_id = a.id
+        FROM tx t WHERE t.account_id = ${cuenta}
       ), 0)
     + COALESCE((
         SELECT SUM(COALESCE(t.dest_amount_minor, t.amount_minor))
-        FROM tx t WHERE t.dest_account_id = a.id AND t.type = 4
-      ), 0)
+        FROM tx t WHERE t.dest_account_id = ${cuenta} AND t.type = 4
+      ), 0)`;
+
+/** Cuentas con el saldo ya calculado. */
+const SQL_CUENTAS = `
+  SELECT a.*,
+    a.initial_balance_minor + ${sumaDeMovimientos('a.id')}
     AS balance_minor
   FROM account a
   WHERE a.household_id = ?1
