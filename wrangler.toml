@@ -3,6 +3,16 @@ main = "worker/index.ts"
 compatibility_date = "2025-01-15"
 compatibility_flags = ["nodejs_compat"]
 
+# URL publica en workers.dev. Es la direccion por la que entran los dos.
+workers_dev = true
+
+# Las "preview URLs" se activan solas si no se dicen que no. Le dan a CADA
+# version publicada su propia direccion publica, apuntando a la MISMA base de
+# datos y con los MISMOS secretos. Para una app privada de finanzas eso es
+# superficie de ataque a cambio de nada: nunca las vamos a usar, y dejarlas
+# encendidas mantiene accesibles versiones viejas del codigo para siempre.
+preview_urls = false
+
 # El frontend compilado se sirve desde el mismo Worker.
 [assets]
 directory = "./dist"
