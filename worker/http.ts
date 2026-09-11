@@ -47,9 +47,9 @@ export function textoOpcional(v: unknown, campo: string, max = 1000): string | n
  * silencio esconderia el bug.
  */
 export function entero(v: unknown, campo: string, opciones: { min?: number; max?: number } = {}): number {
-  if (typeof v !== 'number' || !Number.isFinite(v)) falla(`${campo} debe ser un numero`);
+  if (typeof v !== 'number' || !Number.isFinite(v)) falla(`${campo} debe ser un número`);
   if (!Number.isInteger(v)) falla(`${campo} debe ser un entero en centavos, no un decimal`);
-  if (!Number.isSafeInteger(v)) falla(`${campo} esta fuera del rango seguro`);
+  if (!Number.isSafeInteger(v)) falla(`${campo} está fuera del rango seguro`);
 
   const { min = Number.MIN_SAFE_INTEGER, max = Number.MAX_SAFE_INTEGER } = opciones;
   if (v < min) falla(`${campo} no puede ser menor que ${min}`);
@@ -87,7 +87,7 @@ export function periodo(v: unknown, campo: string): string {
 
 export function email(v: unknown): string {
   const s = texto(v, 'email', { max: 254, min: 3 }).toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)) falla('El email no tiene un formato valido');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)) falla('El email no tiene un formato válido');
   return s;
 }
 
@@ -108,7 +108,7 @@ export async function cuerpo(req: Request): Promise<Record<string, unknown>> {
     return data as Record<string, unknown>;
   } catch (e) {
     if (e instanceof ErrorValidacion) throw e;
-    throw new ErrorValidacion('El cuerpo no es JSON valido');
+    throw new ErrorValidacion('El cuerpo no es JSON válido');
   }
 }
 

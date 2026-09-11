@@ -386,7 +386,7 @@ export function Store({ children }: { children: ReactNode }) {
         if (e instanceof ApiError && e.esDeRed && esNuevo) {
           // Sin conexion: se deja en pantalla y se encola para despues.
           setCola([...colaRef.current, { ...entrada, id }]);
-          avisar('Guardado sin conexion. Se subira al volver la señal.', 'ok');
+          avisar('Guardado sin conexión. Se subirá al volver la señal.', 'ok');
         } else {
           // El servidor lo rechazo: se deshace para no mostrar algo falso.
           if (previo) dispatch({ t: 'tx:upsert', tx: previo });

@@ -156,11 +156,11 @@ export async function crearCategoria(req: Request, env: Env, sesion: Sesion): Pr
       'SELECT id, type, parent_id FROM category WHERE id = ?1 AND household_id = ?2',
     ).bind(parentId, sesion.householdId).first<{ type: string; parent_id: string | null }>();
 
-    if (!padre) return error('La categoria padre no existe', 404);
-    if (padre.type !== type) return error('La subcategoria debe ser del mismo tipo que su padre', 400);
+    if (!padre) return error('La categoría padre no existe', 404);
+    if (padre.type !== type) return error('La subcategoría debe ser del mismo tipo que su padre', 400);
     // Dos niveles y nada mas, como ezBookkeeping. Sin esto se arma un arbol
     // que ninguna pantalla sabe dibujar.
-    if (padre.parent_id) return error('Solo se admiten dos niveles de categoria', 400);
+    if (padre.parent_id) return error('Solo se admiten dos niveles de categoría', 400);
   }
 
   const t = ahora();
@@ -177,7 +177,7 @@ export async function crearCategoria(req: Request, env: Env, sesion: Sesion): Pr
 
   const fila = await env.DB.prepare('SELECT * FROM category WHERE id = ?1').bind(id)
     .first<Record<string, unknown>>();
-  if (!fila) return error('No se pudo crear la categoria', 500);
+  if (!fila) return error('No se pudo crear la categoría', 500);
 
   const category = aCategory(fila);
   await difundir(env, sesion.householdId, { kind: 'category:upsert', category, by: sesion.memberId });
@@ -189,7 +189,7 @@ export async function editarCategoria(
 ): Promise<Response> {
   const fila0 = await env.DB.prepare('SELECT * FROM category WHERE id = ?1 AND household_id = ?2')
     .bind(id, sesion.householdId).first<Record<string, unknown>>();
-  if (!fila0) return error('La categoria no existe', 404);
+  if (!fila0) return error('La categoría no existe', 404);
 
   const actual = aCategory(fila0);
   const body = await cuerpo(req);
@@ -229,7 +229,7 @@ export async function guardarJarras(req: Request, env: Env, sesion: Sesion): Pro
   const body = await cuerpo(req);
   const items = Array.isArray(body.jars) ? body.jars : null;
   if (!items) return error('Se esperaba la lista completa de jarras', 400);
-  if (items.length > 20) return error('Como maximo 20 jarras', 400);
+  if (items.length > 20) return error('Como máximo 20 jarras', 400);
 
   const jarras: Jar[] = [];
   const t = ahora();
@@ -304,7 +304,7 @@ export async function guardarPresupuesto(req: Request, env: Env, sesion: Sesion)
   if (categoryId) {
     const cat = await env.DB.prepare('SELECT id FROM category WHERE id = ?1 AND household_id = ?2')
       .bind(categoryId, sesion.householdId).first();
-    if (!cat) return error('La categoria no existe', 404);
+    if (!cat) return error('La categoría no existe', 404);
   }
 
   const t = ahora();

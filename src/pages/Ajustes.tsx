@@ -67,7 +67,7 @@ export function Ajustes() {
         {delMes.length === 0 ? (
           <p className="text-sm txt-3">
             Sin presupuestos para {nombreMes(mesActual)}. Poner un tope por
-            categoria ayuda a ver el desvio antes de que sea tarde.
+            categoría ayuda a ver el desvío antes de que sea tarde.
           </p>
         ) : (
           <div className="space-y-2">
@@ -88,7 +88,7 @@ export function Ajustes() {
       <Tarjeta className="p-0 overflow-hidden">
         <Opcion
           icono="tags"
-          titulo="Categorias"
+          titulo="Categorías"
           detalle={`${categories.filter((c) => !c.archived).length} activas`}
           alTocar={() => setHoja('categorias')}
         />
@@ -110,7 +110,7 @@ export function Ajustes() {
       </Boton>
 
       <p className="text-xs txt-3 text-center px-6 leading-relaxed pb-2">
-        Tus datos viven en tu propia base de Cloudflare. Nadie mas que ustedes
+        Tus datos viven en tu propia base de Cloudflare. Nadie más que ustedes
         dos tiene acceso.
       </p>
 
@@ -169,12 +169,12 @@ function HojaInvitar({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => 
     <Hoja abierta={abierta} alCerrar={alCerrar} titulo="Sumar a tu pareja">
       <div className="space-y-4">
         <p className="text-sm txt-2 leading-relaxed">
-          Le creas la cuenta vos y le pasas los datos. Va a ver exactamente lo
+          Le creás la cuenta vos y le pasás los datos. Va a ver exactamente lo
           mismo que vos, en tiempo real.
         </p>
-        <Campo etiqueta="Nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Como se llama" />
+        <Campo etiqueta="Nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Cómo se llama" />
         <Campo etiqueta="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="su@email.com" autoComplete="off" />
-        <Campo etiqueta="Contraseña" type="password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="Minimo 8 caracteres" autoComplete="new-password" />
+        <Campo etiqueta="Contraseña" type="password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="Mínimo 8 caracteres" autoComplete="new-password" />
         {error && <p className="text-sm text-red-500">{error}</p>}
         <Boton
           onClick={() => void enviar()}
@@ -214,7 +214,7 @@ function HojaPassword({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =>
     <Hoja abierta={abierta} alCerrar={alCerrar} titulo="Cambiar contraseña">
       <div className="space-y-4">
         <Campo etiqueta="Contraseña actual" type="password" value={actual} onChange={(e) => setActual(e.target.value)} autoComplete="current-password" />
-        <Campo etiqueta="Nueva contraseña" type="password" value={nueva} onChange={(e) => setNueva(e.target.value)} placeholder="Minimo 8 caracteres" autoComplete="new-password" />
+        <Campo etiqueta="Nueva contraseña" type="password" value={nueva} onChange={(e) => setNueva(e.target.value)} placeholder="Mínimo 8 caracteres" autoComplete="new-password" />
         <p className="text-xs txt-3">Al cambiarla se cierran las sesiones abiertas en otros dispositivos.</p>
         {error && <p className="text-sm text-red-500">{error}</p>}
         <Boton onClick={() => void enviar()} disabled={!actual || nueva.length < 8 || cargando} className="w-full min-h-12">
@@ -251,7 +251,7 @@ function HojaPresupuesto({ abierta, alCerrar, alGuardar }: {
     <Hoja abierta={abierta} alCerrar={alCerrar} titulo={`Presupuesto de ${nombreMes(mesActual)}`}>
       <div className="space-y-4">
         <Selector
-          etiqueta="Categoria"
+          etiqueta="Categoría"
           value={categoryId}
           onChange={(e) => {
             setCategoryId(e.target.value);
@@ -273,7 +273,7 @@ function HojaPresupuesto({ abierta, alCerrar, alGuardar }: {
 
         {existente && (
           <p className="text-xs txt-3">
-            Ya habia un tope de {formatMonto(existente.amountMinor, moneda)}. Se reemplaza.
+            Ya había un tope de {formatMonto(existente.amountMinor, moneda)}. Se reemplaza.
           </p>
         )}
 
@@ -309,13 +309,13 @@ function HojaCategorias({ abierta, alCerrar }: { abierta: boolean; alCerrar: () 
   const visibles = categories.filter((c) => !c.archived);
 
   return (
-    <Hoja abierta={abierta} alCerrar={alCerrar} titulo="Categorias">
+    <Hoja abierta={abierta} alCerrar={alCerrar} titulo="Categorías">
       <div className="space-y-4">
         <div className="flex gap-2">
           <Campo
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
-            placeholder="Nueva categoria"
+            placeholder="Nueva categoría"
             className="flex-1"
           />
           <Selector value={tipo} onChange={(e) => setTipo(e.target.value as 'ingreso' | 'gasto')} className="w-32">

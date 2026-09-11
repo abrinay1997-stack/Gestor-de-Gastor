@@ -156,8 +156,8 @@ export function Movimientos({ alEditar, alAgregar }: {
             icono={hayFiltros ? 'search-x' : 'receipt-text'}
             titulo={hayFiltros ? 'Nada coincide' : 'Mes sin movimientos'}
             texto={hayFiltros
-              ? 'Proba cambiando los filtros o buscando otra cosa.'
-              : 'Todavia no registraron nada en este mes.'}
+              ? 'Probá cambiando los filtros o buscando otra cosa.'
+              : 'Todavía no registraron nada en este mes.'}
             accion={hayFiltros
               ? <Boton variante="secundario" onClick={() => {
                 setQuien('todos'); setTipo('todos'); setCategoria(''); setBusqueda('');

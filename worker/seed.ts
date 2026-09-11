@@ -19,7 +19,7 @@ export const CATEGORIAS_INICIALES: {
   { name: 'Ocio', type: 'gasto', icon: 'popcorn', color: '#8b5cf6' },
   { name: 'Servicios', type: 'gasto', icon: 'zap', color: '#06b6d4' },
   { name: 'Mascotas', type: 'gasto', icon: 'paw-print', color: '#a16207' },
-  { name: 'Educacion', type: 'gasto', icon: 'graduation-cap', color: '#0ea5e9' },
+  { name: 'Educación', type: 'gasto', icon: 'graduation-cap', color: '#0ea5e9' },
   { name: 'Otros', type: 'gasto', icon: 'circle-ellipsis', color: '#64748b' },
   // Ingresos
   { name: 'Sueldo', type: 'ingreso', icon: 'briefcase', color: '#10b981' },
@@ -33,8 +33,8 @@ export const JARRAS_INICIALES: {
 }[] = [
   { name: 'Necesidades', percentageBp: 5500, icon: 'house', color: '#3b82f6' },
   { name: 'Ahorro largo plazo', percentageBp: 1000, icon: 'piggy-bank', color: '#10b981' },
-  { name: 'Educacion', percentageBp: 1000, icon: 'graduation-cap', color: '#8b5cf6' },
-  { name: 'Diversion', percentageBp: 1000, icon: 'party-popper', color: '#ec4899' },
+  { name: 'Educación', percentageBp: 1000, icon: 'graduation-cap', color: '#8b5cf6' },
+  { name: 'Diversión', percentageBp: 1000, icon: 'party-popper', color: '#ec4899' },
   { name: 'Libertad financiera', percentageBp: 1000, icon: 'trending-up', color: '#f59e0b' },
   { name: 'Donaciones', percentageBp: 500, icon: 'heart-handshake', color: '#f43f5e' },
 ];

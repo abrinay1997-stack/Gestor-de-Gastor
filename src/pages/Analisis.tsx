@@ -40,7 +40,7 @@ export function Analisis() {
     () => porCategoria(delMes, categories, 'gasto')
       .filter((x) => x.totalMinor > 0)
       .map((x) => ({
-        nombre: x.category?.name ?? 'Sin categoria',
+        nombre: x.category?.name ?? 'Sin categoría',
         valor: x.totalMinor / 10 ** decimales,
         minor: x.totalMinor,
         color: x.category?.color ?? '#64748b',
@@ -93,20 +93,20 @@ export function Analisis() {
           <Vacio
             icono="chart-pie"
             titulo="Sin datos este mes"
-            texto="Cuando registren movimientos vas a ver aca en que se va la plata y como evoluciona mes a mes."
+            texto="Cuando registren movimientos vas a ver acá en qué se va la plata y cómo evoluciona mes a mes."
           />
         </Tarjeta>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3">
             <Tarjeta className="p-4">
-              <p className="text-xs txt-2 mb-1">Entro</p>
+              <p className="text-xs txt-2 mb-1">Entró</p>
               <p className="text-lg font-semibold tabular text-marca-600 dark:text-marca-500">
                 {formatMonto(resumen.ingresoMinor, moneda, { compacto: true })}
               </p>
             </Tarjeta>
             <Tarjeta className="p-4">
-              <p className="text-xs txt-2 mb-1">Salio</p>
+              <p className="text-xs txt-2 mb-1">Salió</p>
               <p className="text-lg font-semibold tabular text-red-500">
                 {formatMonto(resumen.gastoMinor, moneda, { compacto: true })}
               </p>
@@ -115,7 +115,7 @@ export function Analisis() {
 
           {torta.length > 0 && (
             <Tarjeta>
-              <h2 className="font-semibold txt mb-3">Gastos por categoria</h2>
+              <h2 className="font-semibold txt mb-3">Gastos por categoría</h2>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -159,7 +159,7 @@ export function Analisis() {
           )}
 
           <Tarjeta>
-            <h2 className="font-semibold txt mb-3">Ultimos 6 meses</h2>
+            <h2 className="font-semibold txt mb-3">Últimos 6 meses</h2>
             <div className="h-52">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={tendencia} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>

@@ -175,7 +175,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
                 ref={refFrase}
                 value={frase}
                 onChange={(e) => setFrase(e.target.value)}
-                placeholder='Escribi "super 12500" y listo'
+                placeholder='Escribí "super 12500" y listo'
                 inputMode="text"
                 enterKeyHint="done"
                 className="pr-10"
@@ -189,8 +189,8 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
             {lectura && lectura.razon !== 'ninguna' && (
               <p className="text-xs txt-3 mt-1.5 px-1">
                 {lectura.razon === 'historial'
-                  ? 'Categoria sugerida por movimientos parecidos tuyos'
-                  : 'Categoria sugerida por la descripcion'}
+                  ? 'Categoría sugerida por movimientos parecidos tuyos'
+                  : 'Categoría sugerida por la descripción'}
               </p>
             )}
           </div>
@@ -239,16 +239,16 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
         </div>
 
         <Campo
-          etiqueta="Descripcion"
+          etiqueta="Descripción"
           value={descripcion}
           onChange={(e) => setDescripcion(e.target.value)}
-          placeholder="En que fue"
+          placeholder="En qué fue"
         />
 
         {/* Categoria en fichas: mas rapido que un desplegable en el celular */}
         {!esTransferencia && categoriasVisibles.length > 0 && (
           <div>
-            <span className="block text-xs font-medium txt-2 mb-2">Categoria</span>
+            <span className="block text-xs font-medium txt-2 mb-2">Categoría</span>
             <div className="flex gap-2 overflow-x-auto sin-barra pb-1 -mx-1 px-1">
               {categoriasVisibles.map((c) => (
                 <button
@@ -273,7 +273,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           value={accountId}
           onChange={(e) => setAccountId(e.target.value)}
         >
-          <option value="">Elegi una cuenta</option>
+          <option value="">Elegí una cuenta</option>
           {activas.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name} · {formatMonto(c.balanceMinor, c.currency, { compacto: true })}
@@ -287,7 +287,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
             value={destAccountId}
             onChange={(e) => setDestAccountId(e.target.value)}
           >
-            <option value="">Elegi una cuenta</option>
+            <option value="">Elegí una cuenta</option>
             {activas.filter((c) => c.id !== accountId).map((c) => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
@@ -307,7 +307,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium txt">Repartir entre las jarras</p>
               <p className="text-xs txt-3">
-                {montoMinor ? `Se reparten ${formatMonto(montoMinor, moneda)} segun los porcentajes` : 'Segun los porcentajes de cada jarra'}
+                {montoMinor ? `Se reparten ${formatMonto(montoMinor, moneda)} según los porcentajes` : 'Según los porcentajes de cada jarra'}
               </p>
             </div>
             <div className={cn(
@@ -327,7 +327,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           onClick={() => setAvanzado(!avanzado)}
           className="w-full flex items-center justify-between min-h-11 px-1 text-sm txt-2"
         >
-          <span>Mas detalles</span>
+          <span>Más detalles</span>
           <Icono nombre={avanzado ? 'chevron-up' : 'chevron-down'} size={17} />
         </button>
 
@@ -362,7 +362,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
 
         {cuentaSel && montoMinor !== null && montoMinor > 0 && tipo === TxType.GASTO && (
           <p className="text-xs txt-3 text-center">
-            Saldo despues: {formatMonto(cuentaSel.balanceMinor - montoMinor, cuentaSel.currency)}
+            Saldo después: {formatMonto(cuentaSel.balanceMinor - montoMinor, cuentaSel.currency)}
           </p>
         )}
 

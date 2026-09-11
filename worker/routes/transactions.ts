@@ -72,7 +72,7 @@ async function validar(
   if (categoryId) {
     const cat = await env.DB.prepare('SELECT id FROM category WHERE id = ?1 AND household_id = ?2')
       .bind(categoryId, householdId).first();
-    if (!cat) return error('La categoria no existe', 404);
+    if (!cat) return error('La categoría no existe', 404);
   }
 
   const jarId = idOpcional(body.jarId, 'jarId');
@@ -200,7 +200,7 @@ export async function crearLote(req: Request, env: Env, sesion: Sesion): Promise
   const items = Array.isArray(body.transactions) ? body.transactions : [];
 
   if (items.length === 0) return error('No hay movimientos para guardar', 400);
-  if (items.length > 100) return error('Como maximo 100 movimientos por lote', 400);
+  if (items.length > 100) return error('Como máximo 100 movimientos por lote', 400);
 
   const guardados: Transaction[] = [];
   const rechazados: { indice: number; motivo: string }[] = [];

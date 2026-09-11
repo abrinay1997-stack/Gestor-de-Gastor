@@ -51,7 +51,7 @@ function Ingreso() {
   }
 
   return (
-    <Marco titulo="Nuestros gastos" subtitulo="Entra con tu email y contraseña.">
+    <Marco titulo="Nuestros gastos" subtitulo="Entrá con tu email y contraseña.">
       <form onSubmit={enviar} className="space-y-3">
         <Campo
           type="email"
@@ -80,7 +80,7 @@ function Ingreso() {
       </form>
 
       <p className="text-xs txt-3 text-center mt-6 leading-relaxed">
-        Solo ustedes dos tienen acceso. No hay registro publico.
+        Solo ustedes dos tienen acceso. No hay registro público.
       </p>
     </Marco>
   );
@@ -114,14 +114,14 @@ function Instalacion() {
   return (
     <Marco
       titulo="Primera vez"
-      subtitulo="Crea tu hogar. Despues suma a tu pareja desde Ajustes."
+      subtitulo="Creá tu hogar. Después sumás a tu pareja desde Ajustes."
     >
       <form onSubmit={enviar} className="space-y-3">
         <Campo
-          etiqueta="Clave de instalacion"
+          etiqueta="Clave de instalación"
           value={setupKey}
           onChange={(e) => setSetupKey(e.target.value)}
-          placeholder="La que pusiste con wrangler secret"
+          placeholder="La SETUP_KEY que cargaste en GitHub"
           autoComplete="off"
           required
         />
@@ -135,7 +135,7 @@ function Instalacion() {
           etiqueta="Tu nombre"
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
-          placeholder="Como te llamas"
+          placeholder="Cómo te llamás"
           required
         />
         <Campo
@@ -152,7 +152,7 @@ function Instalacion() {
           type="password"
           value={pass}
           onChange={(e) => setPass(e.target.value)}
-          placeholder="Minimo 8 caracteres"
+          placeholder="Mínimo 8 caracteres"
           autoComplete="new-password"
           required
         />

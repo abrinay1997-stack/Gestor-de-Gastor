@@ -83,7 +83,7 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
             </div>
             <button
               onClick={() => void salir()}
-              aria-label="Cerrar sesion"
+              aria-label="Cerrar sesión"
               className="txt-3 hover:txt-2 p-2"
             >
               <LogOut size={17} />
@@ -154,7 +154,7 @@ function EstadoConexion({ estado, pareja, enLinea }: {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs txt-3">
         <span className={cn('w-1.5 h-1.5 rounded-full', estado === 'conectando' ? 'bg-amber-500 animate-pulse' : 'bg-stone-400')} />
-        {estado === 'conectando' ? 'Conectando...' : 'Sin conexion'}
+        {estado === 'conectando' ? 'Conectando...' : 'Sin conexión'}
       </span>
     );
   }
@@ -162,7 +162,7 @@ function EstadoConexion({ estado, pareja, enLinea }: {
   return (
     <span className="inline-flex items-center gap-1.5 text-xs txt-3">
       <span className="w-1.5 h-1.5 rounded-full bg-marca-500" />
-      {enLinea && pareja ? `${pareja} esta en linea` : 'En vivo'}
+      {enLinea && pareja ? `${pareja} está en línea` : 'En vivo'}
     </span>
   );
 }

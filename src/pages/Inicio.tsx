@@ -68,13 +68,13 @@ export function Inicio({ alEditar, alAgregar }: {
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-white/15 rounded-2xl p-3">
             <div className="flex items-center gap-1.5 text-xs opacity-80 mb-1">
-              <Icono nombre="arrow-up-right" size={13} /> Entro
+              <Icono nombre="arrow-up-right" size={13} /> Entró
             </div>
             <p className="font-semibold tabular">{formatMonto(resumen.ingresoMinor, moneda)}</p>
           </div>
           <div className="bg-white/15 rounded-2xl p-3">
             <div className="flex items-center gap-1.5 text-xs opacity-80 mb-1">
-              <Icono nombre="arrow-down-left" size={13} /> Salio
+              <Icono nombre="arrow-down-left" size={13} /> Salió
             </div>
             <p className="font-semibold tabular">{formatMonto(resumen.gastoMinor, moneda)}</p>
           </div>
@@ -93,7 +93,7 @@ export function Inicio({ alEditar, alAgregar }: {
       {/* Quien puso cuanto */}
       {members.length > 1 && resumen.gastoMinor > 0 && (
         <Tarjeta>
-          <h2 className="font-semibold txt mb-3.5">Quien gasto</h2>
+          <h2 className="font-semibold txt mb-3.5">Quién gastó</h2>
           <div className="space-y-3">
             {porPers.map(({ member, resumen: r }) => {
               const pct = resumen.gastoMinor > 0 ? r.gastoMinor / resumen.gastoMinor : 0;
@@ -156,7 +156,7 @@ export function Inicio({ alEditar, alAgregar }: {
       {/* En que se fue */}
       {gastoPorCat.length > 0 && (
         <Tarjeta>
-          <h2 className="font-semibold txt mb-3.5">En que se fue</h2>
+          <h2 className="font-semibold txt mb-3.5">En qué se fue</h2>
           <div className="space-y-3">
             {gastoPorCat.map(({ category, totalMinor }) => (
               <div key={category?.id ?? 'sin'} className="flex items-center gap-3">
@@ -167,7 +167,7 @@ export function Inicio({ alEditar, alAgregar }: {
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline justify-between mb-1.5">
-                    <span className="text-sm font-medium txt truncate">{category?.name ?? 'Sin categoria'}</span>
+                    <span className="text-sm font-medium txt truncate">{category?.name ?? 'Sin categoría'}</span>
                     <span className="text-sm tabular txt shrink-0 ml-2">
                       {formatMonto(totalMinor, moneda)}
                     </span>
@@ -185,12 +185,12 @@ export function Inicio({ alEditar, alAgregar }: {
 
       {/* Ultimos movimientos */}
       <Tarjeta>
-        <h2 className="font-semibold txt mb-1">Ultimos movimientos</h2>
+        <h2 className="font-semibold txt mb-1">Últimos movimientos</h2>
         {ultimos.length === 0 ? (
           <Vacio
             icono="receipt-text"
-            titulo="Todavia no hay nada"
-            texto="Registra tu primer movimiento y va a aparecer aca, tambien en el telefono de tu pareja."
+            titulo="Todavía no hay nada"
+            texto="Registrá tu primer movimiento y va a aparecer acá, también en el teléfono de tu pareja."
             accion={<Boton onClick={alAgregar}>Registrar el primero</Boton>}
           />
         ) : (

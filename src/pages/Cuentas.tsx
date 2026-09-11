@@ -67,8 +67,8 @@ export function Cuentas() {
         <Tarjeta>
           <Vacio
             icono="wallet"
-            titulo="Sin cuentas todavia"
-            texto="Crea una cuenta para empezar a registrar movimientos: efectivo, banco, tarjeta."
+            titulo="Sin cuentas todavía"
+            texto="Creá una cuenta para empezar a registrar movimientos: efectivo, banco, tarjeta."
             accion={<Boton onClick={abrirNueva}>Crear la primera</Boton>}
           />
         </Tarjeta>
@@ -79,7 +79,7 @@ export function Cuentas() {
             <p className="text-3xl font-bold tabular txt mb-4">{formatMonto(patrimonio, moneda)}</p>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
-                <p className="text-xs txt-3 mb-0.5">Tenes</p>
+                <p className="text-xs txt-3 mb-0.5">Tenés</p>
                 <p className="font-semibold tabular text-marca-600 dark:text-marca-500">
                   {formatMonto(totalActivos, moneda)}
                 </p>
@@ -94,7 +94,7 @@ export function Cuentas() {
           </Tarjeta>
 
           {activos.length > 0 && (
-            <Grupo titulo="Lo que tenes" cuentas={activos} alTocar={abrirEdicion} members={members} />
+            <Grupo titulo="Lo que tenés" cuentas={activos} alTocar={abrirEdicion} members={members} />
           )}
           {pasivos.length > 0 && (
             <Grupo titulo="Lo que debes" cuentas={pasivos} alTocar={abrirEdicion} members={members} />
@@ -259,13 +259,13 @@ function FormularioCuenta({ abierta, alCerrar, editando }: {
         />
         {editando && (
           <p className="text-xs txt-3 px-1 -mt-2">
-            El saldo que se muestra es este mas todos los movimientos. Cambia
-            este numero solo si el saldo de origen estaba mal.
+            El saldo que se muestra es este más todos los movimientos. Cambialo
+            solo si el saldo de origen estaba mal.
           </p>
         )}
 
         {members.length > 1 && (
-          <Selector etiqueta="De quien es" value={owner} onChange={(e) => setOwner(e.target.value)}>
+          <Selector etiqueta="De quién es" value={owner} onChange={(e) => setOwner(e.target.value)}>
             <option value="compartida">Compartida</option>
             {members.map((m) => (
               <option key={m.id} value={m.id}>{m.displayName}</option>

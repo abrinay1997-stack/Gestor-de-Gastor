@@ -26,14 +26,14 @@ export async function setup(req: Request, env: Env): Promise<Response> {
   const body = await cuerpo(req);
 
   if (!env.SETUP_KEY) {
-    return error('Falta configurar SETUP_KEY. Ejecuta: wrangler secret put SETUP_KEY', 503);
+    return error('Falta configurar SETUP_KEY. Cargala como secreto en GitHub y volvé a publicar.', 503);
   }
   if (texto(body.setupKey, 'setupKey', { max: 200 }) !== env.SETUP_KEY) {
-    return error('Clave de instalacion incorrecta', 403);
+    return error('Clave de instalación incorrecta', 403);
   }
 
   const existente = await env.DB.prepare('SELECT id FROM household LIMIT 1').first();
-  if (existente) return error('El hogar ya fue creado. Entra con tu email y contraseña.', 409);
+  if (existente) return error('El hogar ya fue creado. Entrá con tu email y contraseña.', 409);
 
   const mail = email(body.email);
   const pass = password(body.password);
@@ -100,7 +100,7 @@ export async function invitar(req: Request, env: Env, sesion: Sesion): Promise<R
   ).bind(sesion.householdId).first<{ total: number }>() ?? { total: 0 };
 
   if (total >= 2) {
-    return error('El hogar ya tiene dos personas. Esta app esta pensada para una pareja.', 409);
+    return error('El hogar ya tiene dos personas. Esta app está pensada para una pareja.', 409);
   }
 
   const mail = email(body.email);
@@ -109,7 +109,7 @@ export async function invitar(req: Request, env: Env, sesion: Sesion): Promise<R
 
   const yaExiste = await env.DB.prepare('SELECT id FROM member WHERE LOWER(email) = ?1')
     .bind(mail).first();
-  if (yaExiste) return error('Ese email ya esta registrado', 409);
+  if (yaExiste) return error('Ese email ya está registrado', 409);
 
   const t = ahora();
   const memberId = nuevoId();

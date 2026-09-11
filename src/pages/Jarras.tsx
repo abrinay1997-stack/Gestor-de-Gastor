@@ -41,7 +41,7 @@ export function Jarras() {
           <Vacio
             icono="piggy-bank"
             titulo="Sin jarras"
-            texto="Reparti cada ingreso en frascos con un proposito: necesidades, ahorro, diversion. Te da control sin llevar la cuenta a mano."
+            texto="Repartí cada ingreso en frascos con un propósito: necesidades, ahorro, diversión. Te da control sin llevar la cuenta a mano."
             accion={<Boton onClick={() => setEditando(true)}>Crear jarras</Boton>}
           />
         </Tarjeta>
@@ -85,7 +85,7 @@ export function Jarras() {
 
                   {enRojo && (
                     <p className="text-xs text-red-500 mt-2">
-                      Gastaste mas de lo que esta jarra tenia.
+                      Gastaste más de lo que esta jarra tenía.
                     </p>
                   )}
                 </Tarjeta>
@@ -94,8 +94,8 @@ export function Jarras() {
           </div>
 
           <p className="text-xs txt-3 text-center px-4 leading-relaxed">
-            Al registrar un ingreso, marca "Repartir entre las jarras" y el
-            monto se divide segun estos porcentajes, al centavo.
+            Al registrar un ingreso, marcá "Repartir entre las jarras" y el
+            monto se divide según estos porcentajes, al centavo.
           </p>
         </>
       )}

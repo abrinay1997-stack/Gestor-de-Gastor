@@ -55,7 +55,7 @@ export default {
     } catch (e) {
       if (e instanceof ErrorValidacion) return error(e.message, 400);
       console.error('Error no controlado', e);
-      return error('Algo salio mal de nuestro lado', 500);
+      return error('Algo salió mal de nuestro lado', 500);
     }
   },
 };
@@ -72,13 +72,13 @@ async function manejarApi(req: Request, env: Env, url: URL): Promise<Response> {
 
   // --- de aca en adelante hace falta sesion -----------------------------
   const sesion = await sesionActual(req, env);
-  if (!sesion) return error('Necesitas iniciar sesion', 401);
+  if (!sesion) return error('Necesitás iniciar sesión', 401);
 
   // Conexion de tiempo real. Se valida la sesion aca y recien despues se
   // entrega al Durable Object del hogar, que es el unico que ve a ambos.
   if (pathname === '/api/live') {
     if (req.headers.get('Upgrade') !== 'websocket') {
-      return error('Se esperaba una conexion WebSocket', 426);
+      return error('Se esperaba una conexión WebSocket', 426);
     }
 
     const hub = env.HUB.get(env.HUB.idFromName(sesion.householdId));
@@ -92,7 +92,7 @@ async function manejarApi(req: Request, env: Env, url: URL): Promise<Response> {
   const exacta = RUTAS[pathname];
   if (exacta) {
     const handler = exacta[metodo];
-    if (!handler) return error(`Metodo ${metodo} no permitido aca`, 405);
+    if (!handler) return error(`Método ${metodo} no permitido acá`, 405);
     return handler(req, env, sesion);
   }
 
@@ -104,7 +104,7 @@ async function manejarApi(req: Request, env: Env, url: URL): Promise<Response> {
     if (!id || id.includes('/')) break;
 
     const handler = metodos[metodo];
-    if (!handler) return error(`Metodo ${metodo} no permitido aca`, 405);
+    if (!handler) return error(`Método ${metodo} no permitido acá`, 405);
     return handler(req, env, sesion, id);
   }
 
