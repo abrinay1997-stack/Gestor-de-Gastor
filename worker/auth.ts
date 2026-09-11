@@ -1,8 +1,10 @@
 /**
  * Autenticacion propia. Sin Google, sin Firebase, sin terceros.
  *
- * - Contraseñas: PBKDF2-SHA256 con sal por persona, via WebCrypto (nativo del
- *   runtime de Workers, sin dependencias).
+ * - Contraseñas: el dispositivo ya hizo el trabajo caro (210.000 iteraciones,
+ *   ver shared/kdf.ts) y manda una clave derivada. Aca se le aplica otra
+ *   vuelta de PBKDF2 con sal aleatoria por persona, barata, para no guardar
+ *   esa clave tal cual.
  * - Sesion: token aleatorio de 256 bits en cookie HttpOnly + Secure +
  *   SameSite=Lax. En la base solo se guarda el SHA-256 del token, nunca el
  *   token: si alguien leyera la base, no podria hacerse pasar por nadie.
@@ -11,11 +13,22 @@
 import type { Env } from './env.ts';
 
 /**
- * 210.000 iteraciones es la recomendacion de OWASP para PBKDF2-SHA256.
+ * Pocas iteraciones a proposito, y esta bien que asi sea.
+ *
+ * La fuerza contra la fuerza bruta ya la puso el dispositivo: adivinar una
+ * contraseña obliga a calcular 210.000 iteraciones por intento antes de llegar
+ * siquiera a esto. Lo de aca solo evita guardar la clave derivada en claro y
+ * le pone una sal propia a cada persona, para que dos contraseñas iguales no
+ * se vean iguales en la base.
+ *
+ * El numero tambien tiene un techo duro: Workers en plan gratuito da 10 ms de
+ * CPU por peticion, y cambiar la contraseña hace DOS derivaciones (verificar
+ * la vieja y guardar la nueva). Con 4.000 son unos 2 ms cada una.
+ *
  * Se guarda junto al hash para poder subirlo mas adelante sin invalidar las
- * contraseñas existentes.
+ * contraseñas que ya existen.
  */
-const ITERACIONES = 210_000;
+const ITERACIONES = 4_000;
 const DURACION_SESION_MS = 90 * 24 * 60 * 60 * 1000; // 90 dias
 export const COOKIE = 'gg_session';
 
@@ -30,6 +43,11 @@ function bytesAleatorios(n: number): Uint8Array {
   return b;
 }
 
+/**
+ * Convierte la clave que llego del dispositivo en lo que se guarda.
+ * El parametro se sigue llamando password por comodidad, pero nunca es la
+ * contraseña real: es la clave ya derivada.
+ */
 export async function hashearPassword(
   password: string,
   saltHex?: string,

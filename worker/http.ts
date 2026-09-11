@@ -91,11 +91,21 @@ export function email(v: unknown): string {
   return s;
 }
 
-export function password(v: unknown): string {
-  if (typeof v !== 'string') falla('La contraseña debe ser texto');
-  const s = v as string;
-  if (s.length < 8) falla('La contraseña necesita al menos 8 caracteres');
-  if (s.length > 200) falla('La contraseña es demasiado larga');
+/**
+ * Valida la clave derivada que manda el dispositivo: 64 caracteres
+ * hexadecimales.
+ *
+ * El largo minimo de la contraseña de verdad se controla en el cliente, antes
+ * de derivar. Aca ya no se puede: despues de pasar por PBKDF2, una contraseña
+ * de 3 caracteres y una de 30 se ven exactamente igual. Es el precio de que el
+ * servidor nunca vea la contraseña, y es un precio que conviene pagar.
+ */
+export function claveDerivada(v: unknown): string {
+  if (typeof v !== 'string') falla('Falta la clave de acceso');
+  const s = (v as string).trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(s)) {
+    falla('La clave de acceso no tiene el formato esperado');
+  }
   return s;
 }
 

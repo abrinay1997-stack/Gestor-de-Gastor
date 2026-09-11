@@ -11,7 +11,7 @@ import {
 } from '../auth.ts';
 import { aMember } from '../db.ts';
 import type { Env } from '../env.ts';
-import { ahora, color, cuerpo, email, error, json, nuevoId, password, texto } from '../http.ts';
+import { ahora, claveDerivada, color, cuerpo, email, error, json, nuevoId, texto } from '../http.ts';
 import { CATEGORIAS_INICIALES, JARRAS_INICIALES } from '../seed.ts';
 
 const esHttps = (req: Request): boolean => new URL(req.url).protocol === 'https:';
@@ -36,7 +36,7 @@ export async function setup(req: Request, env: Env): Promise<Response> {
   if (existente) return error('El hogar ya fue creado. Entrá con tu email y contraseña.', 409);
 
   const mail = email(body.email);
-  const pass = password(body.password);
+  const pass = claveDerivada(body.password);
   const nombre = texto(body.displayName, 'displayName', { max: 60, min: 1 });
   const nombreHogar = texto(body.householdName ?? 'Nuestra casa', 'householdName', { max: 60, min: 1 });
   const moneda = texto(body.currency ?? 'USD', 'currency', { max: 3, min: 3 }).toUpperCase();
@@ -104,7 +104,7 @@ export async function invitar(req: Request, env: Env, sesion: Sesion): Promise<R
   }
 
   const mail = email(body.email);
-  const pass = password(body.password);
+  const pass = claveDerivada(body.password);
   const nombre = texto(body.displayName, 'displayName', { max: 60, min: 1 });
 
   const yaExiste = await env.DB.prepare('SELECT id FROM member WHERE LOWER(email) = ?1')
@@ -165,7 +165,7 @@ export async function logout(req: Request, env: Env): Promise<Response> {
 export async function cambiarPassword(req: Request, env: Env, sesion: Sesion): Promise<Response> {
   const body = await cuerpo(req);
   const actual = typeof body.currentPassword === 'string' ? body.currentPassword : '';
-  const nueva = password(body.newPassword);
+  const nueva = claveDerivada(body.newPassword);
 
   const fila = await env.DB.prepare(
     'SELECT password_hash, password_salt, iterations FROM member WHERE id = ?1',

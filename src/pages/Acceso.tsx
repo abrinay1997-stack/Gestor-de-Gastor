@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { useStore } from '../store/store.tsx';
 import { Boton, Campo, Icono } from '../components/ui/base.tsx';
+import { MIN_PASSWORD } from '@shared/kdf';
 
 export function Acceso() {
   const { instalado } = useStore();
@@ -161,7 +162,7 @@ function Instalacion() {
 
         <Boton
           type="submit"
-          disabled={!setupKey || !email || !nombre || pass.length < 8 || cargando}
+          disabled={!setupKey || !email || !nombre || pass.length < MIN_PASSWORD || cargando}
           className="w-full min-h-12"
         >
           {cargando ? 'Creando...' : 'Crear el hogar'}

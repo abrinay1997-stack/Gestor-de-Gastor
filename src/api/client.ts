@@ -2,6 +2,7 @@
  * Cliente HTTP. Fino a proposito: la logica esta en el store.
  */
 
+import { derivarClave } from '@shared/kdf';
 import type {
   Account, Budget, Category, Jar, Member, Snapshot, Transaction, TransactionInput,
 } from '@shared/types';
@@ -65,24 +66,49 @@ interface ConSaldos {
   jars: Jar[];
 }
 
+/**
+ * Todo lo que toca contraseñas pasa antes por derivarClave.
+ *
+ * La contraseña de verdad no sale nunca del dispositivo: lo que viaja es una
+ * clave derivada con 210.000 iteraciones de PBKDF2. El motivo esta explicado
+ * en shared/kdf.ts, pero el resumen es que el servidor tiene 10 ms de CPU y
+ * ese trabajo cuesta 150; aca no hay limite.
+ *
+ * La sal es el email, asi que hay que derivar con el email de la persona DUEÑA
+ * de la contraseña. En el alta de la pareja, eso significa el email de ella,
+ * no el de quien esta invitando.
+ */
 export const api = {
   estado: () => get<{ instalado: boolean }>('/api/status'),
 
-  setup: (d: {
+  setup: async (d: {
     email: string; password: string; displayName: string;
     householdName: string; currency: string; setupKey: string;
-  }) => post<{ ok: true; householdId: string }>('/api/setup', d),
+  }) => post<{ ok: true; householdId: string }>('/api/setup', {
+    ...d,
+    password: await derivarClave(d.password, d.email),
+  }),
 
-  login: (email: string, password: string) =>
-    post<{ ok: true }>('/api/login', { email, password }),
+  login: async (email: string, password: string) =>
+    post<{ ok: true }>('/api/login', {
+      email,
+      password: await derivarClave(password, email),
+    }),
 
   logout: () => post<{ ok: true }>('/api/logout', {}),
 
-  invitar: (d: { email: string; password: string; displayName: string; color?: string }) =>
-    post<{ member: Member }>('/api/invite', d),
+  invitar: async (d: { email: string; password: string; displayName: string; color?: string }) =>
+    post<{ member: Member }>('/api/invite', {
+      ...d,
+      // Con el email de ELLA: es su contraseña, y su email es la sal.
+      password: await derivarClave(d.password, d.email),
+    }),
 
-  cambiarPassword: (currentPassword: string, newPassword: string) =>
-    post<{ ok: true }>('/api/password', { currentPassword, newPassword }),
+  cambiarPassword: async (email: string, currentPassword: string, newPassword: string) =>
+    post<{ ok: true }>('/api/password', {
+      currentPassword: await derivarClave(currentPassword, email),
+      newPassword: await derivarClave(newPassword, email),
+    }),
 
   snapshot: () => get<Snapshot>('/api/snapshot'),
 

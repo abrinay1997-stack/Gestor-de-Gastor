@@ -9,6 +9,7 @@ import { claveMes } from '@shared/domain';
 import { TX_TYPE_LABEL, TxType } from '@shared/types';
 import { nombreMes } from '../lib/utils.ts';
 import { api } from '../api/client.ts';
+import { MIN_PASSWORD } from '@shared/kdf';
 import { Avatar, Boton, Campo, Ficha, Hoja, Icono, Selector, Tarjeta } from '../components/ui/base.tsx';
 
 export function Ajustes() {
@@ -178,7 +179,7 @@ function HojaInvitar({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => 
         {error && <p className="text-sm text-red-500">{error}</p>}
         <Boton
           onClick={() => void enviar()}
-          disabled={!email || !nombre || pass.length < 8 || cargando}
+          disabled={!email || !nombre || pass.length < MIN_PASSWORD || cargando}
           className="w-full min-h-12"
         >
           {cargando ? 'Creando...' : 'Crear su cuenta'}
@@ -189,7 +190,7 @@ function HojaInvitar({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => 
 }
 
 function HojaPassword({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => void }) {
-  const { avisar } = useStore();
+  const { avisar, me } = useStore();
   const [actual, setActual] = useState('');
   const [nueva, setNueva] = useState('');
   const [cargando, setCargando] = useState(false);
@@ -199,7 +200,8 @@ function HojaPassword({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =>
     setCargando(true);
     setError(null);
     try {
-      await api.cambiarPassword(actual, nueva);
+      // El email va como sal de la derivacion; ver shared/kdf.ts.
+      await api.cambiarPassword(me?.email ?? '', actual, nueva);
       avisar('Contraseña actualizada', 'ok');
       setActual(''); setNueva('');
       alCerrar();
@@ -217,7 +219,7 @@ function HojaPassword({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =>
         <Campo etiqueta="Nueva contraseña" type="password" value={nueva} onChange={(e) => setNueva(e.target.value)} placeholder="Mínimo 8 caracteres" autoComplete="new-password" />
         <p className="text-xs txt-3">Al cambiarla se cierran las sesiones abiertas en otros dispositivos.</p>
         {error && <p className="text-sm text-red-500">{error}</p>}
-        <Boton onClick={() => void enviar()} disabled={!actual || nueva.length < 8 || cargando} className="w-full min-h-12">
+        <Boton onClick={() => void enviar()} disabled={!actual || nueva.length < MIN_PASSWORD || cargando} className="w-full min-h-12">
           {cargando ? 'Guardando...' : 'Cambiar'}
         </Boton>
       </div>
