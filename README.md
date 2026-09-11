@@ -32,68 +32,142 @@ src/        Interfaz React
 migrations/ Esquema de D1
 ```
 
-## Desplegar
+## Desplegar desde GitHub Actions
 
-Necesitás una cuenta de Cloudflare (el plan gratuito alcanza de sobra) y Node.
+El despliegue se lanza a mano desde GitHub y **no publica nada hasta que los
+tests pasan**. Hacer merge de un pull request no publica: solo verifica.
+
+```
+push / pull request  ──>  Verificar  (tipos + tests + build)
+                              │
+boton "Run workflow"  ──>  Verificar  ──>  Publicar en Cloudflare
+                                            (solo si lo anterior esta en verde)
+```
+
+Se configura una vez y despues no volves a tocar una terminal.
+
+### 1. Crear la base de datos
+
+Esto es lo unico que se hace desde tu computadora, una sola vez:
 
 ```bash
 npm install
-npx wrangler login
-```
-
-**1. Crear la base**
-
-```bash
+npx wrangler login          # abre el navegador para autorizar
 npx wrangler d1 create gastos-db
 ```
 
-Copiá el `database_id` que imprime y pegalo en `wrangler.toml`, reemplazando
-`REEMPLAZAR_CON_TU_DATABASE_ID`.
+Guarda el `database_id` que imprime. Lo vas a necesitar en el paso 3.
 
-**2. Crear las tablas**
+### 2. Sacar las credenciales de Cloudflare
+
+**`CLOUDFLARE_ACCOUNT_ID`**
+
+1. Entra a [dash.cloudflare.com](https://dash.cloudflare.com)
+2. En el menu de la izquierda, **Compute (Workers)**
+3. A la derecha aparece **Account ID**, con un boton para copiarlo
+
+También está en la URL cuando navegás el panel:
+`dash.cloudflare.com/`**`<esto es tu account id>`**`/workers`
+
+**`CLOUDFLARE_API_TOKEN`**
+
+1. [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens)
+2. **Create Token**
+3. Busca la plantilla **Edit Cloudflare Workers** y toca **Use template**
+4. Agregale un permiso mas, porque la plantilla no siempre lo trae:
+   **Account** → **D1** → **Edit**
+5. En *Account Resources* elegi tu cuenta; en *Zone Resources*, todas las zonas
+   (o ninguna, si no vas a usar dominio propio)
+6. **Continue to summary** → **Create Token**
+7. **Copialo ahora.** Cloudflare no te lo vuelve a mostrar
+
+Los permisos que necesita, y para que:
+
+| Permiso | Para que |
+|---|---|
+| Account → Workers Scripts → Edit | publicar el Worker y el Durable Object |
+| Account → D1 → Edit | aplicar las migraciones de la base |
+| Account → Account Settings → Read | que wrangler identifique la cuenta |
+| Zone → Workers Routes → Edit | solo si usas dominio propio |
+
+**`SETUP_KEY`**
+
+Esta la inventas vos. Es la que te habilita a crear el hogar la primera vez.
+Que sea larga y no la uses en ningun otro lado. Por ejemplo:
 
 ```bash
-npm run db:init
+openssl rand -base64 24
 ```
 
-**3. Definir la clave de instalación**
+### 3. Cargarlas en GitHub
 
-Es la que te habilita a crear el hogar la primera vez. Elegí algo largo:
+En tu repositorio: **Settings** → **Secrets and variables** → **Actions**.
 
-```bash
-npx wrangler secret put SETUP_KEY
-```
+En la pestaña **Secrets** (valores ocultos), boton *New repository secret*:
 
-**4. Publicar**
+| Nombre | Valor |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | el token del paso 2 |
+| `CLOUDFLARE_ACCOUNT_ID` | el account id del paso 2 |
+| `SETUP_KEY` | la clave que inventaste |
 
-```bash
-npm run deploy
-```
+En la pestaña **Variables** (valores visibles), boton *New repository variable*:
 
-Wrangler imprime la URL (`https://gestor-de-gastos.TU-CUENTA.workers.dev`).
+| Nombre | Valor |
+|---|---|
+| `CLOUDFLARE_D1_DATABASE_ID` | el `database_id` del paso 1 |
 
-**5. Crear el hogar**
+> El id de la base va como *variable* y no como *secret* porque no es
+> secreto: sin el token de API no sirve de nada. Si preferis, podes escribirlo
+> directamente en `wrangler.toml` y saltear la variable; el workflow acepta
+> las dos formas.
 
-Entrá a esa URL. Te va a pedir la clave de instalación, tu nombre, email y
-contraseña. Después, en **Ajustes → Sumar a tu pareja**, le creás la cuenta a
-ella y le pasás email y contraseña.
+### 4. Publicar
 
-**6. Instalarla en el teléfono**
+1. Pestaña **Actions** del repositorio
+2. **Publicar** en la lista de la izquierda
+3. **Run workflow** → elegi la rama → **Run workflow**
+
+Corre los tests, y solo si pasan: aplica las migraciones, publica el Worker y
+comprueba que la app responda. Al terminar, el resumen de la corrida te muestra
+la URL.
+
+### 5. Crear el hogar
+
+Entra a esa URL. Te pide la clave de instalacion (`SETUP_KEY`), tu nombre,
+email y contraseña. Despues, en **Ajustes → Sumar a tu pareja**, le creas la
+cuenta a ella.
+
+### 6. Instalarla en el telefono
 
 - iPhone: abrir en Safari → Compartir → *Agregar a inicio*
-- Android: abrir en Chrome → menú → *Instalar aplicación*
+- Android: abrir en Chrome → menu → *Instalar aplicacion*
 
-### Dominio propio (opcional)
+### Ajustes opcionales del despliegue
 
-Si tenés un dominio en Cloudflare, agregá al final de `wrangler.toml`:
+**Pedir tu aprobacion antes de publicar.** En **Settings** → **Environments**
+→ **produccion** → *Required reviewers*, agregate a vos. A partir de ahi, el
+workflow corre los tests y despues se queda esperando que toques *Approve*.
+
+**Publicar solo al mergear a main.** En `.github/workflows/deploy.yml`,
+descomenta:
+
+```yaml
+  # push:
+  #   branches: [main]
+```
+
+Los tests van a seguir siendo obligatorios: la barrera es `needs: verificar`,
+no el disparador.
+
+**Dominio propio.** Si tenes un dominio en Cloudflare, agrega al final de
+`wrangler.toml`:
 
 ```toml
 [[routes]]
 pattern = "gastos.tudominio.com"
 custom_domain = true
 ```
-
-Y volvé a correr `npm run deploy`.
 
 ## Desarrollo local
 
@@ -111,6 +185,16 @@ caliente y redirige `/api` al Worker.
 npm test        # 51 tests del núcleo de dominio
 npm run lint    # typecheck de cliente y Worker
 ```
+
+### Publicar a mano
+
+`npm run deploy` publica directo desde tu maquina, sin pasar por los tests. Es
+una salida de emergencia, no la via normal: usa el workflow **Publicar**, que
+verifica antes.
+
+Si guardaste el id de la base como variable de GitHub en vez de escribirlo en
+`wrangler.toml`, este comando va a fallar porque el archivo todavia tiene el
+marcador. Escribi el id en `wrangler.toml` para poder publicar a mano.
 
 ## Decisiones que conviene conocer
 
