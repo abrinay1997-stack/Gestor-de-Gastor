@@ -56,6 +56,15 @@ export class HouseholdHub implements DurableObject {
     }
 
     // El Worker avisa de un cambio para que se reparta a los conectados.
+    //
+    // Va a TODOS, incluida la persona que lo origino. A proposito: el cambio
+    // llego al Worker por HTTP, no por un WebSocket, asi que no hay forma de
+    // saber que pestaña lo genero. Y aunque se pudiera excluir por persona,
+    // seria un error: si alguien tiene la app abierta en el celular y en la
+    // compu, al cargar desde el celular la compu tiene que enterarse.
+    //
+    // Recibir el eco de lo propio no molesta: el cliente aplica los eventos
+    // por id (upsert), asi que reaplicar el mismo dato no cambia nada.
     if (url.pathname.endsWith('/broadcast')) {
       const evento = (await req.json()) as LiveEvent;
       this.difundir(evento);
@@ -94,7 +103,13 @@ export class HouseholdHub implements DurableObject {
     return [...ids];
   }
 
-  /** Manda un evento a todos los conectados, salvo al que lo origino. */
+  /**
+   * Manda un evento a los conectados.
+   *
+   * `excluir` se usa solo para los avisos de presencia, donde el socket que
+   * entra o sale no necesita que le cuenten sobre si mismo. Los cambios de
+   * datos van sin exclusion: ver el comentario en /broadcast.
+   */
   private difundir(evento: LiveEvent, excluir?: WebSocket): void {
     const payload = JSON.stringify(evento);
 
