@@ -50,28 +50,53 @@ function sql(texto) {
 /**
  * Ejecuta una consulta y devuelve la primera fila ya parseada.
  *
- * Parsea el JSON de verdad en vez de buscar un texto con una expresion
- * regular. La primera version de esto usaba regex y fallaba hacia el lado
- * peligroso: al no reconocer la salida daba por hecho que ya habia un hogar,
- * se salteaba la prueba y terminaba en verde sin haber probado nada. Una
- * prueba que no puede leer el estado tiene que gritar, no seguir de largo.
+ * Dos cosas que parecen paranoia y no lo son, porque las dos fallaron de
+ * verdad antes de quedar asi:
+ *
+ * 1. Busca el JSON probando desde CADA corchete de apertura hasta que uno
+ *    parsea. wrangler imprime un preambulo antes del JSON y ese preambulo
+ *    puede traer corchetes (por ejemplo "[WARNING]"), asi que quedarse con el
+ *    primero da basura.
+ *
+ * 2. Exige que las claves pedidas existan. La version anterior devolvia la
+ *    fila tal cual, y cuando venia sin la clave esperada el valor era
+ *    undefined; la comparacion contra 0 daba falso y la prueba se salteaba
+ *    sola informando exito. Una prueba que no puede leer el estado tiene que
+ *    gritar, no seguir de largo.
  */
-function consultar(texto) {
+function consultar(texto, ...clavesEsperadas) {
   const crudo = sql(texto);
-  const inicio = crudo.indexOf('[');
-  if (inicio === -1) {
-    throw new Error(`La salida de wrangler no trae JSON:\n${crudo.slice(0, 500)}`);
+
+  let datos = null;
+  for (let i = crudo.indexOf('['); i !== -1; i = crudo.indexOf('[', i + 1)) {
+    try {
+      datos = JSON.parse(crudo.slice(i));
+      break;
+    } catch {
+      // Ese corchete no abria el JSON; se prueba con el siguiente.
+    }
   }
-  let datos;
-  try {
-    datos = JSON.parse(crudo.slice(inicio));
-  } catch (e) {
-    throw new Error(`No se pudo parsear la salida de wrangler (${e.message}):\n${crudo.slice(0, 500)}`);
+
+  if (datos === null) {
+    throw new Error(`No se encontro JSON en la salida de wrangler:\n${crudo.slice(0, 800)}`);
   }
+
   const fila = datos?.[0]?.results?.[0];
-  if (!fila) {
-    throw new Error(`La consulta no devolvio filas:\n${JSON.stringify(datos).slice(0, 500)}`);
+  if (!fila || typeof fila !== 'object') {
+    throw new Error(`La consulta no devolvio filas.\nJSON: ${JSON.stringify(datos).slice(0, 400)}\nCrudo: ${crudo.slice(0, 400)}`);
   }
+
+  for (const clave of clavesEsperadas) {
+    if (!(clave in fila)) {
+      throw new Error(
+        `La fila no trae la clave "${clave}".\n` +
+        `Claves recibidas: ${Object.keys(fila).join(', ') || '(ninguna)'}\n` +
+        `Fila: ${JSON.stringify(fila).slice(0, 300)}\n` +
+        `Crudo: ${crudo.slice(0, 600)}`,
+      );
+    }
+  }
+
   return fila;
 }
 
@@ -79,7 +104,7 @@ const MAIL = `prueba-alta-${randomUUID().slice(0, 8)}@ejemplo.test`;
 let fallo = null;
 
 try {
-  const antes = consultar('SELECT COUNT(*) AS n FROM household;');
+  const antes = consultar('SELECT COUNT(*) AS n FROM household;', 'n');
   console.log(`0. Hogares existentes: ${antes.n}`);
   if (antes.n !== 0) {
     console.log('   Ya hay un hogar: se omite la prueba para no tocar datos reales.');
@@ -115,7 +140,8 @@ try {
       (SELECT COUNT(*) FROM member) AS personas,
       (SELECT COUNT(*) FROM category) AS categorias,
       (SELECT COUNT(*) FROM jar) AS jarras,
-      (SELECT COALESCE(SUM(percentage_bp),0) FROM jar) AS suma_bp;`);
+      (SELECT COALESCE(SUM(percentage_bp),0) FROM jar) AS suma_bp;`,
+    'hogares', 'personas', 'categorias', 'jarras', 'suma_bp');
   console.log(`   hogares=${c.hogares} personas=${c.personas} categorias=${c.categorias} jarras=${c.jarras} suma=${c.suma_bp}bp`);
 
   if (c.hogares !== 1) throw new Error(`Se esperaba 1 hogar, hay ${c.hogares}`);
@@ -134,7 +160,7 @@ try {
   console.log('\n4. Borrando el hogar de prueba...');
   try {
     sql(`DELETE FROM household WHERE id IN (SELECT household_id FROM member WHERE email = '${MAIL}');`);
-    const queda = consultar('SELECT COUNT(*) AS n FROM household;');
+    const queda = consultar('SELECT COUNT(*) AS n FROM household;', 'n');
     console.log(`   hogares que quedan: ${queda.n}`);
     if (queda.n === 0) {
       console.log('   base limpia: podes crear tu hogar');
