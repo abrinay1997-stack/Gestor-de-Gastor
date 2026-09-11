@@ -32,10 +32,10 @@ src/        Interfaz React
 migrations/ Esquema de D1
 ```
 
-## Desplegar desde GitHub Actions
+## Desplegar
 
-El despliegue se lanza a mano desde GitHub y **no publica nada hasta que los
-tests pasan**. Hacer merge de un pull request no publica: solo verifica.
+La infraestructura ya esta creada. Lo unico que falta es cargar tres secretos
+en GitHub y apretar un boton.
 
 ```
 push / pull request  ──>  Verificar  (tipos + tests + build)
@@ -44,124 +44,104 @@ boton "Run workflow"  ──>  Verificar  ──>  Publicar en Cloudflare
                                             (solo si lo anterior esta en verde)
 ```
 
-Se configura una vez y despues no volves a tocar una terminal.
+Hacer merge de un pull request **no publica**: solo verifica.
 
-### 1. Crear la base de datos
+### Lo que ya esta hecho
 
-Esto es lo unico que se hace desde tu computadora, una sola vez:
+| | Estado |
+|---|---|
+| Base de datos `gastos-db` | creada en la cuenta (region ENAM) |
+| Esquema (9 tablas, 15 indices) | aplicado y probado contra D1 real |
+| Migracion `0001_init.sql` | registrada en `d1_migrations` |
+| `database_id` en `wrangler.toml` | escrito |
+| Workflows de CI y despliegue | listos |
 
-```bash
-npm install
-npx wrangler login          # abre el navegador para autorizar
-npx wrangler d1 create gastos-db
-```
+### Lo que falta: tres secretos
 
-Guarda el `database_id` que imprime. Lo vas a necesitar en el paso 3.
+**Settings → Secrets and variables → Actions → pestaña Secrets →
+*New repository secret***
 
-### 2. Sacar las credenciales de Cloudflare
+| Nombre | De donde sale |
+|---|---|
+| `CLOUDFLARE_ACCOUNT_ID` | panel de Cloudflare, ver abajo |
+| `CLOUDFLARE_API_TOKEN` | panel de Cloudflare, ver abajo |
+| `SETUP_KEY` | la inventas vos |
 
 **`CLOUDFLARE_ACCOUNT_ID`**
 
-1. Entra a [dash.cloudflare.com](https://dash.cloudflare.com)
-2. En el menu de la izquierda, **Compute (Workers)**
-3. A la derecha aparece **Account ID**, con un boton para copiarlo
+1. [dash.cloudflare.com](https://dash.cloudflare.com)
+2. Menu izquierdo → **Compute (Workers)**
+3. A la derecha aparece **Account ID**, con boton de copiar
 
-También está en la URL cuando navegás el panel:
+También está en la URL del panel:
 `dash.cloudflare.com/`**`<esto es tu account id>`**`/workers`
 
 **`CLOUDFLARE_API_TOKEN`**
 
 1. [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens)
 2. **Create Token**
-3. Busca la plantilla **Edit Cloudflare Workers** y toca **Use template**
-4. Agregale un permiso mas, porque la plantilla no siempre lo trae:
+3. Plantilla **Edit Cloudflare Workers** → **Use template**
+4. Agregale un permiso que la plantilla no siempre trae:
    **Account** → **D1** → **Edit**
-5. En *Account Resources* elegi tu cuenta; en *Zone Resources*, todas las zonas
-   (o ninguna, si no vas a usar dominio propio)
+5. *Account Resources*: tu cuenta. *Zone Resources*: todas, o ninguna si no
+   vas a usar dominio propio
 6. **Continue to summary** → **Create Token**
-7. **Copialo ahora.** Cloudflare no te lo vuelve a mostrar
-
-Los permisos que necesita, y para que:
+7. **Copialo ahora**, Cloudflare no lo vuelve a mostrar
 
 | Permiso | Para que |
 |---|---|
 | Account → Workers Scripts → Edit | publicar el Worker y el Durable Object |
-| Account → D1 → Edit | aplicar las migraciones de la base |
+| Account → D1 → Edit | aplicar futuras migraciones |
 | Account → Account Settings → Read | que wrangler identifique la cuenta |
-| Zone → Workers Routes → Edit | solo si usas dominio propio |
+| Zone → Workers Routes → Edit | solo con dominio propio |
 
 **`SETUP_KEY`**
 
-Esta la inventas vos. Es la que te habilita a crear el hogar la primera vez.
-Que sea larga y no la uses en ningun otro lado. Por ejemplo:
+La inventas vos. Habilita a crear el hogar la primera vez, y una sola vez:
+despues de creado, el endpoint de instalacion rechaza cualquier intento. Que
+sea larga y no la uses en ningun otro lado.
 
-```bash
-openssl rand -base64 24
-```
+### Publicar
 
-### 3. Cargarlas en GitHub
-
-En tu repositorio: **Settings** → **Secrets and variables** → **Actions**.
-
-En la pestaña **Secrets** (valores ocultos), boton *New repository secret*:
-
-| Nombre | Valor |
-|---|---|
-| `CLOUDFLARE_API_TOKEN` | el token del paso 2 |
-| `CLOUDFLARE_ACCOUNT_ID` | el account id del paso 2 |
-| `SETUP_KEY` | la clave que inventaste |
-
-En la pestaña **Variables** (valores visibles), boton *New repository variable*:
-
-| Nombre | Valor |
-|---|---|
-| `CLOUDFLARE_D1_DATABASE_ID` | el `database_id` del paso 1 |
-
-> El id de la base va como *variable* y no como *secret* porque no es
-> secreto: sin el token de API no sirve de nada. Si preferis, podes escribirlo
-> directamente en `wrangler.toml` y saltear la variable; el workflow acepta
-> las dos formas.
-
-### 4. Publicar
-
-1. Pestaña **Actions** del repositorio
+1. Pestaña **Actions**
 2. **Publicar** en la lista de la izquierda
 3. **Run workflow** → elegi la rama → **Run workflow**
 
-Corre los tests, y solo si pasan: aplica las migraciones, publica el Worker y
-comprueba que la app responda. Al terminar, el resumen de la corrida te muestra
-la URL.
+Corre los tests y, solo si pasan, publica y comprueba que la app responda. El
+resumen de la corrida te muestra la URL.
 
-### 5. Crear el hogar
+### Crear el hogar
 
-Entra a esa URL. Te pide la clave de instalacion (`SETUP_KEY`), tu nombre,
-email y contraseña. Despues, en **Ajustes → Sumar a tu pareja**, le creas la
-cuenta a ella.
+Entra a esa URL. Te pide la `SETUP_KEY`, tu nombre, email y contraseña.
+Despues, en **Ajustes → Sumar a tu pareja**, le creas la cuenta a ella y le
+pasas email y contraseña.
 
-### 6. Instalarla en el telefono
+### Instalarla en el telefono
 
-- iPhone: abrir en Safari → Compartir → *Agregar a inicio*
-- Android: abrir en Chrome → menu → *Instalar aplicacion*
+- iPhone: Safari → Compartir → *Agregar a inicio*
+- Android: Chrome → menu → *Instalar aplicacion*
 
-### Ajustes opcionales del despliegue
+### Ajustes opcionales
 
-**Pedir tu aprobacion antes de publicar.** En **Settings** → **Environments**
-→ **produccion** → *Required reviewers*, agregate a vos. A partir de ahi, el
-workflow corre los tests y despues se queda esperando que toques *Approve*.
+**Pedir tu aprobacion antes de publicar.** Settings → Environments →
+`produccion` → *Required reviewers*, agregate. El workflow corre los tests y
+despues espera que toques *Approve*.
 
-**Publicar solo al mergear a main.** En `.github/workflows/deploy.yml`,
-descomenta:
+**Publicar al mergear a main.** En `.github/workflows/deploy.yml` descomenta:
 
 ```yaml
   # push:
   #   branches: [main]
 ```
 
-Los tests van a seguir siendo obligatorios: la barrera es `needs: verificar`,
-no el disparador.
+Los tests siguen siendo obligatorios: la barrera es `needs: verificar`, no el
+disparador.
 
-**Dominio propio.** Si tenes un dominio en Cloudflare, agrega al final de
-`wrangler.toml`:
+**Usar otra base de datos.** Defini la variable `CLOUDFLARE_D1_DATABASE_ID` en
+Settings → Secrets and variables → Actions → pestaña *Variables*. El workflow
+la prefiere sobre lo que diga `wrangler.toml`.
+
+**Dominio propio.** Agrega al final de `wrangler.toml`:
 
 ```toml
 [[routes]]
@@ -190,11 +170,7 @@ npm run lint    # typecheck de cliente y Worker
 
 `npm run deploy` publica directo desde tu maquina, sin pasar por los tests. Es
 una salida de emergencia, no la via normal: usa el workflow **Publicar**, que
-verifica antes.
-
-Si guardaste el id de la base como variable de GitHub en vez de escribirlo en
-`wrangler.toml`, este comando va a fallar porque el archivo todavia tiene el
-marcador. Escribi el id en `wrangler.toml` para poder publicar a mano.
+verifica antes. Necesita `npx wrangler login` primero.
 
 ## Decisiones que conviene conocer
 
