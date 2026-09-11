@@ -11,7 +11,6 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { writeFileSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
 const URL_APP = process.env.URL_APP;
@@ -35,16 +34,23 @@ async function derivar(password, email) {
   ));
 }
 
+/**
+ * Ejecuta SQL contra la base y devuelve la salida cruda de wrangler.
+ *
+ * Usa --command y no --file, y la diferencia no es cosmetica: contra la base
+ * REMOTA, wrangler trata el archivo como una importacion, lo sube, y devuelve
+ * un resumen ("Total queries executed", "Rows read"...) en lugar de los
+ * resultados de la consulta. En local devuelve los datos, asi que el problema
+ * solo aparece contra produccion. Con --command devuelve las filas en los dos
+ * casos.
+ */
 function sql(texto) {
-  const archivo = `/tmp/alta-${randomUUID()}.sql`;
-  writeFileSync(archivo, texto);
-  try {
-    return execFileSync('npx', ['wrangler', 'd1', 'execute', BASE, process.env.D1_ALCANCE ?? '--remote', `--file=${archivo}`, '-y', '--json'], {
-      stdio: 'pipe', encoding: 'utf8',
-    });
-  } finally {
-    try { unlinkSync(archivo); } catch {}
-  }
+  return execFileSync('npx', [
+    'wrangler', 'd1', 'execute', BASE,
+    process.env.D1_ALCANCE ?? '--remote',
+    '--command', texto,
+    '-y', '--json',
+  ], { stdio: 'pipe', encoding: 'utf8' });
 }
 
 /**
