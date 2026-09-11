@@ -1,0 +1,100 @@
+{
+  "rulesVersion": "2",
+  "collections": [
+    {
+      "name": "users",
+      "path": "/users/{userId}",
+      "description": "User profiles",
+      "methods": ["get", "create", "update", "delete"],
+      "authorization": {
+        "read": "request.auth != null && request.auth.uid == userId",
+        "write": "request.auth != null && request.auth.uid == userId"
+      },
+      "schema": {
+        "email": "string",
+        "createdAt": "timestamp"
+      }
+    },
+    {
+      "name": "accounts",
+      "path": "/accounts/{accountId}",
+      "description": "User accounts",
+      "methods": ["list", "get", "create", "update", "delete"],
+      "authorization": {
+        "read": "request.auth != null && resource.data.userId == request.auth.uid",
+        "write": "request.auth != null && request.resource.data.userId == request.auth.uid"
+      },
+      "schema": {
+        "userId": "string",
+        "name": "string",
+        "type": "string",
+        "balance": "number",
+        "initialBalance": "number",
+        "currency": "string",
+        "color": "string",
+        "createdAt": "timestamp",
+        "updatedAt": "timestamp"
+      }
+    },
+    {
+      "name": "categories",
+      "path": "/categories/{categoryId}",
+      "description": "User categories",
+      "methods": ["list", "get", "create", "update", "delete"],
+      "authorization": {
+        "read": "request.auth != null && resource.data.userId == request.auth.uid",
+        "write": "request.auth != null && request.resource.data.userId == request.auth.uid"
+      },
+      "schema": {
+        "userId": "string",
+        "name": "string",
+        "type": "string",
+        "icon": "string",
+        "color": "string",
+        "createdAt": "timestamp"
+      }
+    },
+    {
+      "name": "transactions",
+      "path": "/transactions/{transactionId}",
+      "description": "User transactions",
+      "methods": ["list", "get", "create", "update", "delete"],
+      "authorization": {
+        "read": "request.auth != null && resource.data.userId == request.auth.uid",
+        "write": "request.auth != null && request.resource.data.userId == request.auth.uid"
+      },
+      "schema": {
+        "userId": "string",
+        "type": "string",
+        "amount": "number",
+        "categoryId": "string",
+        "accountId": "string",
+        "destinationAccountId": "string",
+        "description": "string",
+        "date": "timestamp",
+        "paymentMethod": "string",
+        "createdAt": "timestamp",
+        "updatedAt": "timestamp"
+      }
+    },
+    {
+      "name": "budgets",
+      "path": "/budgets/{budgetId}",
+      "description": "User budgets",
+      "methods": ["list", "get", "create", "update", "delete"],
+      "authorization": {
+        "read": "request.auth != null && resource.data.userId == request.auth.uid",
+        "write": "request.auth != null && request.resource.data.userId == request.auth.uid"
+      },
+      "schema": {
+        "userId": "string",
+        "categoryId": "string",
+        "amount": "number",
+        "month": "number",
+        "year": "number",
+        "createdAt": "timestamp",
+        "updatedAt": "timestamp"
+      }
+    }
+  ]
+}
