@@ -10,18 +10,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store/store.tsx';
 import { formatBp, formatMonto } from '@shared/money';
-import { validarJarras } from '@shared/domain';
-import type { Jar } from '@shared/types';
+import { imputacionJarras, validarJarras } from '@shared/domain';
+import type { Jar, Transaction } from '@shared/types';
+import { FilaMovimiento } from './Inicio.tsx';
 import { Boton, Ficha, Hoja, Icono, Tarjeta, Vacio } from '../components/ui/base.tsx';
 import { cn } from '../lib/utils.ts';
 
 const COLORES = ['#3b82f6', '#10b981', '#8b5cf6', '#ec4899', '#f59e0b', '#f43f5e', '#06b6d4', '#64748b'];
 
-export function Jarras() {
+export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction) => void }) {
   const { jars, household, guardarJarras, avisar } = useStore();
   const moneda = household?.currency ?? 'USD';
 
   const [editando, setEditando] = useState(false);
+  const [abierta, setAbierta] = useState<Jar | null>(null);
 
   const total = useMemo(() => jars.reduce((s, j) => s + j.balanceMinor, 0), [jars]);
 
@@ -58,7 +60,8 @@ export function Jarras() {
               const enRojo = j.balanceMinor < 0;
 
               return (
-                <Tarjeta key={j.id} className="p-4">
+                <Tarjeta key={j.id} className="p-4 active:opacity-70 transition-opacity cursor-pointer"
+                  onClick={() => setAbierta(j)}>
                   <div className="flex items-center gap-3 mb-3">
                     <Ficha color={j.color} icono={j.icon} size={42} />
                     <div className="flex-1 min-w-0">
@@ -71,6 +74,7 @@ export function Jarras() {
                     )}>
                       {formatMonto(j.balanceMinor, moneda)}
                     </p>
+                    <Icono nombre="chevron-right" size={16} className="txt-3 shrink-0 -mr-1" />
                   </div>
 
                   <div className="h-1.5 rounded-full superficie-2 overflow-hidden">
@@ -100,6 +104,12 @@ export function Jarras() {
         </>
       )}
 
+      <MovimientosDeJarra
+        jarra={abierta}
+        alCerrar={() => setAbierta(null)}
+        alVerMovimiento={(tx) => { setAbierta(null); alVerMovimiento(tx); }}
+      />
+
       <EditorJarras
         abierta={editando}
         alCerrar={() => setEditando(false)}
@@ -114,6 +124,96 @@ export function Jarras() {
         }}
       />
     </div>
+  );
+}
+
+/**
+ * Movimientos que tocaron una jarra.
+ *
+ * No alcanza con filtrar por jar_id: un ingreso repartido no apunta a ninguna
+ * jarra en particular, pero le entro plata a todas. Se usa la misma funcion de
+ * imputacion que calcula los saldos, asi lo que se lista y lo que suma el
+ * saldo son siempre lo mismo.
+ */
+function MovimientosDeJarra({ jarra, alCerrar, alVerMovimiento }: {
+  jarra: Jar | null;
+  alCerrar: () => void;
+  alVerMovimiento: (tx: Transaction) => void;
+}) {
+  const { transactions, jars, household } = useStore();
+  const moneda = household?.currency ?? 'USD';
+
+  const movimientos = useMemo(() => {
+    if (!jarra) return [];
+    return transactions
+      .map((tx) => ({ tx, delta: imputacionJarras(tx, jars).get(jarra.id) ?? 0 }))
+      .filter((x) => x.delta !== 0);
+  }, [jarra, transactions, jars]);
+
+  if (!jarra) return null;
+
+  const entro = movimientos.filter((m) => m.delta > 0).reduce((a, m) => a + m.delta, 0);
+  const salio = movimientos.filter((m) => m.delta < 0).reduce((a, m) => a - m.delta, 0);
+
+  return (
+    <Hoja abierta alCerrar={alCerrar} titulo={jarra.name}>
+      <div className="space-y-4">
+        <div className="flex flex-col items-center text-center pt-1">
+          <Ficha color={jarra.color} icono={jarra.icon} size={52} />
+          <p className={cn(
+            'text-3xl font-bold tabular mt-3',
+            jarra.balanceMinor < 0 ? 'text-red-500' : 'txt',
+          )}>
+            {formatMonto(jarra.balanceMinor, moneda)}
+          </p>
+          <p className="text-xs txt-3 mt-1">{formatBp(jarra.percentageBp)} de cada ingreso</p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="superficie-2 rounded-2xl p-3 text-center">
+            <p className="text-[10px] txt-3 mb-0.5">Entró</p>
+            <p className="text-sm font-semibold tabular text-marca-600 dark:text-marca-500">
+              {formatMonto(entro, moneda)}
+            </p>
+          </div>
+          <div className="superficie-2 rounded-2xl p-3 text-center">
+            <p className="text-[10px] txt-3 mb-0.5">Salió</p>
+            <p className="text-sm font-semibold tabular text-red-500">
+              {formatMonto(salio, moneda)}
+            </p>
+          </div>
+        </div>
+
+        {movimientos.length === 0 ? (
+          <Vacio
+            icono="receipt-text"
+            titulo="Sin movimientos"
+            texto="Esta jarra todavía no recibió ni gastó nada. Repartí un ingreso o imputale un gasto."
+          />
+        ) : (
+          <div>
+            <p className="text-xs font-medium txt-3 px-1 mb-1">
+              {movimientos.length} movimiento{movimientos.length > 1 ? 's' : ''}
+            </p>
+            <div className="divide-y divide-[var(--borde)]">
+              {movimientos.map(({ tx, delta }) => (
+                <div key={tx.id} className="relative">
+                  <FilaMovimiento tx={tx} alTocar={() => alVerMovimiento(tx)} />
+                  {/* Lo que entro o salio DE ESTA JARRA, que en un ingreso
+                      repartido no es el monto total del movimiento. */}
+                  <span className={cn(
+                    'absolute right-1 bottom-2 text-[10px] tabular font-medium',
+                    delta > 0 ? 'text-marca-600 dark:text-marca-500' : 'text-red-500',
+                  )}>
+                    {delta > 0 ? '+' : '−'}{formatMonto(Math.abs(delta), moneda, { compacto: true })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </Hoja>
   );
 }
 

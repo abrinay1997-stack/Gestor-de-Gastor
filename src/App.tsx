@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from 'react';
 import { useStore } from './store/store.tsx';
 import { AppLayout, type Solapa } from './components/layout/AppLayout.tsx';
 import { CargaRapida } from './components/transactions/CargaRapida.tsx';
+import { DetalleMovimiento } from './components/transactions/DetalleMovimiento.tsx';
 import { Acceso } from './pages/Acceso.tsx';
 import { Inicio } from './pages/Inicio.tsx';
 import { Movimientos } from './pages/Movimientos.tsx';
@@ -24,6 +25,9 @@ export default function App() {
   const [solapa, setSolapa] = useState<Solapa>('inicio');
   const [cargaAbierta, setCargaAbierta] = useState(false);
   const [editando, setEditando] = useState<Transaction | null>(null);
+  // Movimiento cuyo detalle se esta mirando. Tocar uno abre esto, no el
+  // formulario: mirar es mucho mas frecuente que corregir.
+  const [viendo, setViendo] = useState<Transaction | null>(null);
 
   if (cargando) {
     return (
@@ -37,15 +41,20 @@ export default function App() {
   if (!autenticado) return <Acceso />;
 
   const abrirNuevo = () => { setEditando(null); setCargaAbierta(true); };
-  const abrirEdicion = (tx: Transaction) => { setEditando(tx); setCargaAbierta(true); };
+
+  const abrirEdicion = (tx: Transaction) => {
+    setViendo(null);
+    setEditando(tx);
+    setCargaAbierta(true);
+  };
 
   return (
     <>
       <AppLayout solapa={solapa} alCambiar={setSolapa} alAgregar={abrirNuevo}>
-        {solapa === 'inicio' && <Inicio alEditar={abrirEdicion} alAgregar={abrirNuevo} />}
-        {solapa === 'movimientos' && <Movimientos alEditar={abrirEdicion} alAgregar={abrirNuevo} />}
+        {solapa === 'inicio' && <Inicio alVerMovimiento={setViendo} alAgregar={abrirNuevo} />}
+        {solapa === 'movimientos' && <Movimientos alVerMovimiento={setViendo} alAgregar={abrirNuevo} />}
         {solapa === 'cuentas' && <Cuentas />}
-        {solapa === 'jarras' && <Jarras />}
+        {solapa === 'jarras' && <Jarras alVerMovimiento={setViendo} />}
         {solapa === 'ajustes' && <Ajustes />}
         {solapa === 'analisis' && (
           <Suspense fallback={
@@ -58,23 +67,25 @@ export default function App() {
         )}
       </AppLayout>
 
+      <DetalleMovimiento
+        tx={viendo}
+        alCerrar={() => setViendo(null)}
+        alEditar={abrirEdicion}
+      />
+
       <CargaRapida
         abierta={cargaAbierta}
         alCerrar={() => { setCargaAbierta(false); setEditando(null); }}
         editando={editando}
       />
 
-      {/* Cambios cargados sin señal, esperando para subir */}
       {cola.length > 0 && (
         <div className="fixed bottom-24 left-4 md:bottom-6 z-40 superficie borde border rounded-2xl px-3.5 py-2 shadow-lg flex items-center gap-2">
           <Icono nombre="cloud-off" size={15} className="txt-3" />
-          <span className="text-xs txt-2">
-            {cola.length} sin subir
-          </span>
+          <span className="text-xs txt-2">{cola.length} sin subir</span>
         </div>
       )}
 
-      {/* Avisos */}
       {aviso && (
         <div
           role="status"

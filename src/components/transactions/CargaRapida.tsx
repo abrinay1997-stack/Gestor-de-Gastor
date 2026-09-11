@@ -1,9 +1,12 @@
 /**
  * Carga de un movimiento.
  *
- * La pantalla que mas se usa, asi que esta optimizada para el caso comun:
- * escribir "super 12500" y tocar guardar. El parser local deduce monto,
- * categoria y tipo mientras se escribe; todo queda visible y corregible.
+ * La pantalla que mas se usa. Todo esta a la vista: no hay seccion plegada de
+ * "mas detalles", porque esconder la fecha o la jarra hacia que nadie las
+ * tocara y despues costaba entender por que los numeros no cerraban.
+ *
+ * El orden sigue al de la cabeza de quien carga: cuanto, en que, de donde
+ * sale, a que jarra se imputa, quien lo hizo, cuando.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -12,7 +15,7 @@ import { leer } from '@shared/parser';
 import { formatMonto, montoPlano, parseMonto } from '@shared/money';
 import { TxType, type Transaction, type TransactionInput } from '@shared/types';
 import { aInputDate, deInputDate, vibrar } from '../../lib/utils.ts';
-import { Boton, Campo, Ficha, Hoja, Icono, Selector } from '../ui/base.tsx';
+import { Avatar, Boton, Campo, Ficha, Hoja, Icono, Selector } from '../ui/base.tsx';
 import { cn } from '../../lib/utils.ts';
 
 const TIPOS: { id: TxType; etiqueta: string; icono: string; color: string }[] = [
@@ -21,12 +24,26 @@ const TIPOS: { id: TxType; etiqueta: string; icono: string; color: string }[] = 
   { id: TxType.TRANSFERENCIA, etiqueta: 'Transferencia', icono: 'arrow-left-right', color: '#3b82f6' },
 ];
 
+/**
+ * Nombre de cuenta con su dueño: "Banco Central · Avalon".
+ * Sin esto, dos cuentas parecidas de personas distintas son imposibles de
+ * distinguir en el desplegable.
+ */
+export function etiquetaCuenta(
+  cuenta: { name: string; owner: string },
+  members: { id: string; displayName: string }[],
+): string {
+  if (cuenta.owner === 'compartida') return `${cuenta.name} · Compartida`;
+  const duenio = members.find((m) => m.id === cuenta.owner);
+  return duenio ? `${cuenta.name} · ${duenio.displayName}` : cuenta.name;
+}
+
 export function CargaRapida({ abierta, alCerrar, editando }: {
   abierta: boolean;
   alCerrar: () => void;
   editando?: Transaction | null;
 }) {
-  const { accounts, categories, jars, transactions, household, guardarTx, borrarTx } = useStore();
+  const { accounts, categories, jars, transactions, members, me, household, guardarTx } = useStore();
   const moneda = household?.currency ?? 'USD';
 
   const activas = useMemo(() => accounts.filter((c) => !c.archived), [accounts]);
@@ -39,17 +56,15 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
   const [destAccountId, setDestAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [jarId, setJarId] = useState('');
+  const [paidBy, setPaidBy] = useState('');
   const [repartir, setRepartir] = useState(false);
   const [fecha, setFecha] = useState(aInputDate(Date.now()));
   const [notas, setNotas] = useState('');
-  const [avanzado, setAvanzado] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refFrase = useRef<HTMLInputElement>(null);
 
-  // Carga los valores al abrir: los de la transaccion si se esta editando,
-  // o los de un movimiento nuevo si no.
   useEffect(() => {
     if (!abierta) return;
 
@@ -61,11 +76,11 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
       setDestAccountId(editando.destAccountId ?? '');
       setCategoryId(editando.categoryId ?? '');
       setJarId(editando.jarId ?? '');
+      setPaidBy(editando.paidBy ?? editando.createdBy);
       setRepartir(editando.distributeToJars);
       setFecha(aInputDate(editando.date));
       setNotas(editando.notes ?? '');
       setFrase('');
-      setAvanzado(true);
     } else {
       setTipo(TxType.GASTO);
       setMontoTexto('');
@@ -74,22 +89,16 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
       setDestAccountId('');
       setCategoryId('');
       setJarId('');
+      setPaidBy(me?.id ?? '');
       setRepartir(false);
       setFecha(aInputDate(Date.now()));
       setNotas('');
       setFrase('');
-      setAvanzado(false);
-      // Enfocar en el proximo cuadro para que el teclado suba solo.
       setTimeout(() => refFrase.current?.focus(), 80);
     }
     setError(null);
-  }, [abierta, editando, moneda, activas]);
+  }, [abierta, editando, moneda, activas, me]);
 
-  /**
-   * Interpreta la frase mientras se escribe y completa el formulario.
-   * No pisa lo que ya se toco a mano: si la persona eligio una categoria,
-   * el parser no se la cambia.
-   */
   const lectura = useMemo(() => {
     if (!frase.trim() || editando) return null;
     return leer(frase, { categories, historial: transactions, currency: moneda });
@@ -122,7 +131,6 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
 
   async function guardar() {
     if (!puedeGuardar || montoMinor === null) return;
-
     setGuardando(true);
     setError(null);
 
@@ -138,6 +146,10 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
       description: descripcion.trim() || 'Movimiento',
       notes: notas.trim() || null,
       date: deInputDate(fecha),
+      // Solo se manda si difiere de quien lo carga: null quiere decir
+      // "el mismo", y guardarlo asi mantiene los datos limpios.
+      paidBy: paidBy && paidBy !== me?.id ? paidBy : null,
+      recurringId: editando?.recurringId ?? null,
     };
 
     try {
@@ -151,23 +163,9 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
     }
   }
 
-  async function eliminar() {
-    if (!editando) return;
-    setGuardando(true);
-    try {
-      await borrarTx(editando.id);
-      alCerrar();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo borrar');
-    } finally {
-      setGuardando(false);
-    }
-  }
-
   return (
     <Hoja abierta={abierta} alCerrar={alCerrar} titulo={editando ? 'Editar movimiento' : 'Nuevo movimiento'}>
       <div className="space-y-4">
-        {/* Entrada en lenguaje natural */}
         {!editando && (
           <div>
             <div className="relative">
@@ -196,7 +194,6 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           </div>
         )}
 
-        {/* Tipo */}
         <div className="grid grid-cols-3 gap-2">
           {TIPOS.map((t) => (
             <button
@@ -204,35 +201,29 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
               onClick={() => { setTipo(t.id); if (t.id !== TxType.INGRESO) setRepartir(false); }}
               className={cn(
                 'min-h-11 rounded-xl text-sm font-medium border transition-all flex items-center justify-center gap-1.5',
-                tipo === t.id
-                  ? 'text-white border-transparent'
-                  : 'superficie-2 borde txt-2',
+                tipo === t.id ? 'text-white border-transparent' : 'superficie-2 borde txt-2',
               )}
               style={tipo === t.id ? { background: t.color } : undefined}
             >
               <Icono nombre={t.icono} size={15} />
-              <span className="hidden xs:inline">{t.etiqueta}</span>
-              <span className="xs:hidden">{t.etiqueta.slice(0, 5)}</span>
+              <span className="truncate">{t.etiqueta}</span>
             </button>
           ))}
         </div>
 
-        {/* Monto, grande y con teclado numerico */}
         <div>
           <span className="block text-xs font-medium txt-2 mb-1.5">Monto</span>
-          <div className="relative">
-            <input
-              value={montoTexto}
-              onChange={(e) => setMontoTexto(e.target.value)}
-              placeholder="0.00"
-              inputMode="decimal"
-              className={cn(
-                'w-full min-h-16 px-4 rounded-2xl superficie-2 borde border txt',
-                'text-3xl font-semibold tabular text-center outline-none',
-                'focus:border-marca-500 focus:ring-2 focus:ring-marca-500/20',
-              )}
-            />
-          </div>
+          <input
+            value={montoTexto}
+            onChange={(e) => setMontoTexto(e.target.value)}
+            placeholder="0.00"
+            inputMode="decimal"
+            className={cn(
+              'w-full min-h-16 px-4 rounded-2xl superficie-2 borde border txt',
+              'text-3xl font-semibold tabular text-center outline-none',
+              'focus:border-marca-500 focus:ring-2 focus:ring-marca-500/20',
+            )}
+          />
           {montoMinor !== null && montoMinor > 0 && (
             <p className="text-xs txt-3 mt-1.5 text-center">{formatMonto(montoMinor, moneda)}</p>
           )}
@@ -245,7 +236,6 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           placeholder="En qué fue"
         />
 
-        {/* Categoria en fichas: mas rapido que un desplegable en el celular */}
         {!esTransferencia && categoriasVisibles.length > 0 && (
           <div>
             <span className="block text-xs font-medium txt-2 mb-2">Categoría</span>
@@ -268,6 +258,8 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           </div>
         )}
 
+        {/* Cuenta, y justo debajo la jarra: el dinero sale de una cuenta y se
+            imputa a una jarra, asi que van juntos y en ese orden. */}
         <Selector
           etiqueta={esTransferencia ? 'Desde' : 'Cuenta'}
           value={accountId}
@@ -276,25 +268,31 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           <option value="">Elegí una cuenta</option>
           {activas.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name} · {formatMonto(c.balanceMinor, c.currency, { compacto: true })}
+              {etiquetaCuenta(c, members)} · {formatMonto(c.balanceMinor, c.currency, { compacto: true })}
             </option>
           ))}
         </Selector>
 
         {esTransferencia && (
-          <Selector
-            etiqueta="Hacia"
-            value={destAccountId}
-            onChange={(e) => setDestAccountId(e.target.value)}
-          >
+          <Selector etiqueta="Hacia" value={destAccountId} onChange={(e) => setDestAccountId(e.target.value)}>
             <option value="">Elegí una cuenta</option>
             {activas.filter((c) => c.id !== accountId).map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+              <option key={c.id} value={c.id}>{etiquetaCuenta(c, members)}</option>
             ))}
           </Selector>
         )}
 
-        {/* Repartir entre jarras: solo tiene sentido en un ingreso */}
+        {!esTransferencia && !repartir && jars.length > 0 && (
+          <Selector etiqueta="Jarra" value={jarId} onChange={(e) => setJarId(e.target.value)}>
+            <option value="">Sin jarra</option>
+            {jars.map((j) => (
+              <option key={j.id} value={j.id}>
+                {j.name} · {formatMonto(j.balanceMinor, moneda, { compacto: true })}
+              </option>
+            ))}
+          </Selector>
+        )}
+
         {tipo === TxType.INGRESO && jars.length > 0 && (
           <button
             onClick={() => { setRepartir(!repartir); if (!repartir) setJarId(''); }}
@@ -307,58 +305,54 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium txt">Repartir entre las jarras</p>
               <p className="text-xs txt-3">
-                {montoMinor ? `Se reparten ${formatMonto(montoMinor, moneda)} según los porcentajes` : 'Según los porcentajes de cada jarra'}
+                {montoMinor
+                  ? `Se reparten ${formatMonto(montoMinor, moneda)} según los porcentajes`
+                  : 'Según los porcentajes de cada jarra'}
               </p>
             </div>
             <div className={cn(
               'w-11 h-6 rounded-full p-0.5 transition-colors shrink-0',
               repartir ? 'bg-marca-500' : 'superficie-2 borde border',
             )}>
-              <div className={cn(
-                'w-5 h-5 rounded-full bg-white shadow transition-transform',
-                repartir && 'translate-x-5',
-              )} />
+              <div className={cn('w-5 h-5 rounded-full bg-white shadow transition-transform', repartir && 'translate-x-5')} />
             </div>
           </button>
         )}
 
-        {/* Detalles que casi nunca se tocan, plegados por defecto */}
-        <button
-          onClick={() => setAvanzado(!avanzado)}
-          className="w-full flex items-center justify-between min-h-11 px-1 text-sm txt-2"
-        >
-          <span>Más detalles</span>
-          <Icono nombre={avanzado ? 'chevron-up' : 'chevron-down'} size={17} />
-        </button>
-
-        {avanzado && (
-          <div className="space-y-4 pt-1">
-            <Campo
-              etiqueta="Fecha"
-              type="date"
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-            />
-
-            {!esTransferencia && !repartir && jars.length > 0 && (
-              <Selector etiqueta="Jarra" value={jarId} onChange={(e) => setJarId(e.target.value)}>
-                <option value="">Sin jarra</option>
-                {jars.map((j) => (
-                  <option key={j.id} value={j.id}>
-                    {j.name} · {formatMonto(j.balanceMinor, moneda, { compacto: true })}
-                  </option>
-                ))}
-              </Selector>
-            )}
-
-            <Campo
-              etiqueta="Notas"
-              value={notas}
-              onChange={(e) => setNotas(e.target.value)}
-              placeholder="Opcional"
-            />
+        {/* Quién lo hizo. Solo aparece si son dos o mas: con una sola persona
+            la pregunta no tiene sentido. */}
+        {members.length > 1 && !esTransferencia && (
+          <div>
+            <span className="block text-xs font-medium txt-2 mb-2">Quién lo hizo</span>
+            <div className="flex gap-2">
+              {members.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => setPaidBy(m.id)}
+                  className={cn(
+                    'flex-1 min-h-12 rounded-xl border flex items-center justify-center gap-2 px-2 transition-all',
+                    paidBy === m.id ? 'border-transparent' : 'superficie-2 borde',
+                  )}
+                  style={paidBy === m.id ? { background: `${m.color}1f`, boxShadow: `0 0 0 2px ${m.color}` } : undefined}
+                >
+                  <Avatar nombre={m.displayName} color={m.color} emoji={m.emoji} size={26} />
+                  <span className={cn('text-sm font-medium truncate', paidBy === m.id ? 'txt' : 'txt-2')}>
+                    {m.displayName}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
+
+        <Campo etiqueta="Fecha" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+
+        <Campo
+          etiqueta="Notas"
+          value={notas}
+          onChange={(e) => setNotas(e.target.value)}
+          placeholder="Opcional"
+        />
 
         {cuentaSel && montoMinor !== null && montoMinor > 0 && tipo === TxType.GASTO && (
           <p className="text-xs txt-3 text-center">
@@ -366,20 +360,11 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           </p>
         )}
 
-        {error && (
-          <p className="text-sm text-red-500 text-center px-2">{error}</p>
-        )}
+        {error && <p className="text-sm text-red-500 text-center px-2">{error}</p>}
 
-        <div className="flex gap-2 pt-1">
-          {editando && (
-            <Boton variante="peligro" onClick={() => void eliminar()} disabled={guardando} className="px-4">
-              <Icono nombre="trash-2" size={17} />
-            </Boton>
-          )}
-          <Boton onClick={() => void guardar()} disabled={!puedeGuardar} className="flex-1 min-h-12">
-            {guardando ? 'Guardando...' : editando ? 'Guardar cambios' : 'Registrar'}
-          </Boton>
-        </div>
+        <Boton onClick={() => void guardar()} disabled={!puedeGuardar} className="w-full min-h-12">
+          {guardando ? 'Guardando...' : editando ? 'Guardar cambios' : 'Registrar'}
+        </Boton>
       </div>
     </Hoja>
   );

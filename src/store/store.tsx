@@ -19,8 +19,8 @@ import { api, ApiError } from '../api/client.ts';
 import { live, type EstadoLive } from '../api/live.ts';
 import { calcularJarras, calcularSaldos } from '@shared/domain';
 import type {
-  Account, Budget, Category, Jar, LiveEvent, Member, Snapshot, Transaction,
-  TransactionInput,
+  Account, Budget, Category, Jar, LiveEvent, Member, Recurring, SeccionInicio,
+  Snapshot, Transaction, TransactionInput,
 } from '@shared/types';
 
 const CLAVE_COLA = 'gg_cola_v1';
@@ -37,6 +37,7 @@ interface Estado {
   jars: Jar[];
   budgets: Budget[];
   transactions: Transaction[];
+  recurring: Recurring[];
   /** Ids con una escritura en vuelo: la UI los muestra atenuados. */
   enVuelo: Set<string>;
   /** Movimientos cargados sin conexion, esperando para subir. */
@@ -49,7 +50,7 @@ interface Estado {
 const inicial: Estado = {
   cargando: true, autenticado: false, instalado: true, me: null, members: [],
   household: null, accounts: [], categories: [], jars: [], budgets: [],
-  transactions: [], enVuelo: new Set(), cola: [], online: [],
+  transactions: [], recurring: [], enVuelo: new Set(), cola: [], online: [],
   estadoLive: 'desconectado', aviso: null,
 };
 
@@ -68,6 +69,9 @@ type Accion =
   | { t: 'budget:upsert'; budget: Budget }
   | { t: 'budget:delete'; id: string }
   | { t: 'members'; members: Member[] }
+  | { t: 'member:upsert'; member: Member }
+  | { t: 'recurring:upsert'; recurring: Recurring }
+  | { t: 'recurring:delete'; id: string }
   | { t: 'vuelo:add'; id: string }
   | { t: 'vuelo:del'; id: string }
   | { t: 'cola'; cola: TransactionInput[] }
@@ -92,7 +96,7 @@ function reducer(s: Estado, a: Accion): Estado {
         ...s, cargando: false, autenticado: true, instalado: true,
         me: a.snap.me, members: a.snap.members, household: a.snap.household,
         accounts: a.snap.accounts, categories: a.snap.categories,
-        jars: a.snap.jars, budgets: a.snap.budgets,
+        jars: a.snap.jars, budgets: a.snap.budgets, recurring: a.snap.recurring,
         transactions: ordenar(a.snap.transactions),
       };
 
@@ -152,6 +156,29 @@ function reducer(s: Estado, a: Accion): Estado {
 
     case 'members':
       return { ...s, members: a.members };
+
+    case 'member:upsert': {
+      const resto = s.members.filter((m) => m.id !== a.member.id);
+      return {
+        ...s,
+        members: [...resto, a.member].sort((x, y) => x.createdAt - y.createdAt),
+        // Si el que cambio soy yo, tambien se actualiza mi propia ficha.
+        me: s.me?.id === a.member.id ? a.member : s.me,
+      };
+    }
+
+    case 'recurring:upsert': {
+      const resto = s.recurring.filter((r) => r.id !== a.recurring.id);
+      return {
+        ...s,
+        recurring: [...resto, a.recurring].sort(
+          (x, y) => Number(y.active) - Number(x.active) || x.nextRun - y.nextRun,
+        ),
+      };
+    }
+
+    case 'recurring:delete':
+      return { ...s, recurring: s.recurring.filter((r) => r.id !== a.id) };
 
     case 'vuelo:add': {
       const v = new Set(s.enVuelo);
@@ -216,6 +243,10 @@ interface Acciones {
   guardarCategoria: (c: Partial<Category>, id?: string) => Promise<void>;
   guardarJarras: (jars: Partial<Jar>[]) => Promise<void>;
   guardarPresupuesto: (b: { categoryId: string | null; amountMinor: number; period: string }) => Promise<void>;
+  borrarPresupuesto: (id: string) => Promise<void>;
+  guardarPerfil: (d: { displayName?: string; color?: string; emoji?: string; homeLayout?: SeccionInicio[] }) => Promise<void>;
+  guardarRecurrente: (r: Partial<Recurring> & { startAt?: number }, id?: string) => Promise<void>;
+  borrarRecurrente: (id: string) => Promise<void>;
   invitar: (d: { email: string; password: string; displayName: string }) => Promise<void>;
   avisar: (texto: string, tipo?: 'error' | 'ok') => void;
 }
@@ -302,7 +333,16 @@ export function Store({ children }: { children: ReactNode }) {
         case 'account:delete': dispatch({ t: 'account:delete', id: ev.id }); break;
         case 'category:upsert': dispatch({ t: 'category:upsert', category: ev.category }); break;
         case 'budget:upsert': dispatch({ t: 'budget:upsert', budget: ev.budget }); break;
+        case 'budget:delete': dispatch({ t: 'budget:delete', id: ev.id }); break;
+        case 'member:upsert': dispatch({ t: 'member:upsert', member: ev.member }); break;
+        case 'recurring:upsert': dispatch({ t: 'recurring:upsert', recurring: ev.recurring }); break;
+        case 'recurring:delete': dispatch({ t: 'recurring:delete', id: ev.id }); break;
         case 'jar:upsert': break; // los saldos llegan recalculados aparte
+        case 'recargar':
+          // El disparador de pagos habituales creo movimientos por fuera de la
+          // app. Se recarga entero en vez de parchear evento por evento.
+          void cargar();
+          break;
         case 'hello':
         case 'presence': dispatch({ t: 'online', ids: ev.online }); break;
       }
@@ -437,6 +477,26 @@ export function Store({ children }: { children: ReactNode }) {
     guardarPresupuesto: async (b) => {
       const r = await api.guardarPresupuesto(b);
       dispatch({ t: 'budget:upsert', budget: r.budget });
+    },
+
+    borrarPresupuesto: async (id) => {
+      await api.borrarPresupuesto(id);
+      dispatch({ t: 'budget:delete', id });
+    },
+
+    guardarPerfil: async (d) => {
+      const r = await api.editarPerfil(d);
+      dispatch({ t: 'member:upsert', member: r.member });
+    },
+
+    guardarRecurrente: async (rec, id) => {
+      const r = id ? await api.editarRecurrente(id, rec) : await api.crearRecurrente(rec);
+      dispatch({ t: 'recurring:upsert', recurring: r.recurring });
+    },
+
+    borrarRecurrente: async (id) => {
+      await api.borrarRecurrente(id);
+      dispatch({ t: 'recurring:delete', id });
     },
 
     invitar: async (d) => {

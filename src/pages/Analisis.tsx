@@ -8,11 +8,12 @@
 
 import { useMemo, useState } from 'react';
 import {
-  Bar, BarChart, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, AreaChart, Bar, BarChart, Cell, Legend, Pie, PieChart,
+  ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { useStore } from '../store/store.tsx';
 import { formatMonto } from '@shared/money';
-import { claveMes, porCategoria, porPersona, resumir, transaccionesDelMes } from '@shared/domain';
+import { balancePorMes, claveMes, porCategoria, porPersona, resumir, transaccionesDelMes } from '@shared/domain';
 import { moverMes, nombreMes } from '../lib/utils.ts';
 import { Icono, Tarjeta, Vacio } from '../components/ui/base.tsx';
 import { decimalesDe } from '@shared/money';
@@ -63,6 +64,29 @@ export function Analisis() {
     });
   }, [transactions, mes, decimales]);
 
+  /**
+   * Balance mes a mes del ultimo año, con su acumulado.
+   *
+   * El balance de un mes dice si ese mes se cerro en positivo; el acumulado
+   * dice a donde va la cosa. Un mes malo suelto no significa nada, una linea
+   * acumulada que baja sostenido si.
+   */
+  const balances = useMemo(() => {
+    const meses: string[] = [];
+    for (let i = 11; i >= 0; i--) meses.push(moverMes(mes, -i));
+
+    return balancePorMes(transactions, meses).map(({ periodo, resumen: r, acumuladoMinor }) => ({
+      mes: new Date(`${periodo}-02`).toLocaleDateString('es', { month: 'short' }),
+      periodo,
+      Balance: r.flujoMinor / 10 ** decimales,
+      Acumulado: acumuladoMinor / 10 ** decimales,
+    }));
+  }, [transactions, mes, decimales]);
+
+  const mesesConDatos = balances.filter((b) => b.Balance !== 0).length;
+  const mejor = balances.reduce((a, b) => (b.Balance > a.Balance ? b : a), balances[0]);
+  const peor = balances.reduce((a, b) => (b.Balance < a.Balance ? b : a), balances[0]);
+
   const personas = useMemo(() => porPersona(delMes, members), [delMes, members]);
 
   const hayDatos = delMes.length > 0;
@@ -77,7 +101,7 @@ export function Analisis() {
         >
           <Icono nombre="chevron-left" size={19} />
         </button>
-        <h1 className="font-semibold txt capitalize">{nombreMes(mes)}</h1>
+        <h1 className="font-semibold txt">{nombreMes(mes)}</h1>
         <button
           onClick={() => setMes(moverMes(mes, 1))}
           disabled={mes === claveMes(Date.now())}
@@ -154,6 +178,82 @@ export function Analisis() {
                     </span>
                   </div>
                 ))}
+              </div>
+            </Tarjeta>
+          )}
+
+          {/* Balance mensual: barras que cruzan el cero, verde arriba y rojo
+              abajo, con la linea del acumulado encima. */}
+          {mesesConDatos > 1 && (
+            <Tarjeta>
+              <h2 className="font-semibold txt mb-1">Balance mes a mes</h2>
+              <p className="text-xs txt-3 mb-3">Último año. La línea es el acumulado.</p>
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={balances} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="gradAcum" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.28} />
+                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis
+                      dataKey="mes"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: 'var(--texto-3)' }}
+                      interval={0}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: 'var(--texto-3)' }}
+                      tickFormatter={(v: number) =>
+                        new Intl.NumberFormat('en-US', { notation: 'compact' }).format(v)}
+                    />
+                    {/* El cero es la referencia que separa un mes bueno de uno malo. */}
+                    <ReferenceLine y={0} stroke="var(--texto-3)" strokeWidth={1} />
+                    <Tooltip
+                      formatter={(v, n) => [formatearEje(v, moneda, decimales), String(n)]}
+                      contentStyle={{
+                        background: 'var(--superficie)',
+                        border: '1px solid var(--borde)',
+                        borderRadius: 12,
+                        color: 'var(--texto)',
+                      }}
+                      cursor={{ stroke: 'var(--borde)' }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="Balance" radius={[4, 4, 0, 0]} maxBarSize={22}>
+                      {balances.map((b) => (
+                        <Cell key={b.periodo} fill={b.Balance >= 0 ? '#10b981' : '#ef4444'} />
+                      ))}
+                    </Bar>
+                    <Area
+                      type="monotone"
+                      dataKey="Acumulado"
+                      stroke="#3b82f6"
+                      strokeWidth={2}
+                      fill="url(#gradAcum)"
+                      dot={false}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div className="superficie-2 rounded-2xl p-3">
+                  <p className="text-[10px] txt-3 mb-0.5">Mejor mes</p>
+                  <p className="text-sm font-semibold tabular text-marca-600 dark:text-marca-500 capitalize">
+                    {mejor?.mes} · {formatMonto(Math.round((mejor?.Balance ?? 0) * 10 ** decimales), moneda, { compacto: true })}
+                  </p>
+                </div>
+                <div className="superficie-2 rounded-2xl p-3">
+                  <p className="text-[10px] txt-3 mb-0.5">Peor mes</p>
+                  <p className="text-sm font-semibold tabular text-red-500 capitalize">
+                    {peor?.mes} · {formatMonto(Math.round((peor?.Balance ?? 0) * 10 ** decimales), moneda, { compacto: true })}
+                  </p>
+                </div>
               </div>
             </Tarjeta>
           )}

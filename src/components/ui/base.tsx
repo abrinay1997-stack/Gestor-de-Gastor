@@ -99,9 +99,11 @@ export function Selector({
 
 // --- contenedores --------------------------------------------------------
 
-export function Tarjeta({ className, children }: { className?: string; children: ReactNode }) {
+export function Tarjeta({ className, children, onClick }: {
+  className?: string; children: ReactNode; onClick?: () => void;
+}) {
   return (
-    <div className={cn('superficie borde border rounded-3xl p-5', className)}>
+    <div className={cn('superficie borde border rounded-3xl p-5', className)} onClick={onClick}>
       {children}
     </div>
   );
@@ -122,19 +124,55 @@ export function Vacio({ icono, titulo, texto, accion }: {
   );
 }
 
-/** Barra de progreso. Se pasa de 100% con color de alerta. */
-export function Barra({ ratio, color = '#10b981' }: { ratio: number; color?: string }) {
+/**
+ * Barra de progreso.
+ *
+ * Con `alerta` (presupuestos) el color no salta de golpe: vira gradualmente
+ * hacia el rojo a medida que se acerca al tope. Un salto binario avisa cuando
+ * ya es tarde; el degradado deja verlo venir.
+ *
+ * El viraje arranca al 60% y no antes, porque gastar la mitad del presupuesto
+ * a mitad de mes es exactamente lo normal y pintarlo de amarillo seria mentir.
+ */
+export function Barra({ ratio, color = '#10b981', alerta = false }: {
+  ratio: number; color?: string; alerta?: boolean;
+}) {
   const pct = Math.min(Math.max(ratio, 0), 1) * 100;
   const excedido = ratio > 1;
+
+  let fondo = color;
+  if (alerta) {
+    if (excedido) {
+      fondo = '#ef4444';
+    } else if (ratio > 0.6) {
+      // De su color al rojo, pasando por ambar. El degradado ocupa el tramo
+      // final de la barra, asi que el rojo aparece en la punta que avanza.
+      const avance = Math.min((ratio - 0.6) / 0.4, 1);
+      const medio = mezclar(color, '#f59e0b', Math.min(avance * 2, 1));
+      const punta = avance > 0.5 ? mezclar('#f59e0b', '#ef4444', (avance - 0.5) * 2) : medio;
+      fondo = `linear-gradient(90deg, ${color} 0%, ${medio} 55%, ${punta} 100%)`;
+    }
+  } else if (excedido) {
+    fondo = '#ef4444';
+  }
 
   return (
     <div className="h-2 rounded-full superficie-2 overflow-hidden">
       <div
         className="h-full rounded-full transition-all duration-500"
-        style={{ width: `${pct}%`, background: excedido ? '#ef4444' : color }}
+        style={{ width: `${pct}%`, background: fondo }}
       />
     </div>
   );
+}
+
+/** Mezcla dos colores hexadecimales. t=0 devuelve el primero, t=1 el segundo. */
+function mezclar(a: string, b: string, t: number): string {
+  const leer = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [r1, g1, b1] = leer(a);
+  const [r2, g2, b2] = leer(b);
+  const m = (x: number, y: number) => Math.round(x + (y - x) * Math.min(Math.max(t, 0), 1));
+  return `#${[m(r1, r2), m(g1, g2), m(b1, b2)].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
 
 /** Cuadrito de color con un icono adentro. */
@@ -149,14 +187,79 @@ export function Ficha({ color, icono, size = 40 }: { color: string; icono: strin
   );
 }
 
-export function Avatar({ nombre, color, size = 32 }: { nombre: string; color: string; size?: number }) {
+export function Avatar({ nombre, color, emoji, size = 32 }: {
+  nombre: string; color: string; emoji?: string; size?: number;
+}) {
+  // El emoji manda; si no hay, las iniciales. El tamaño de fuente es mayor
+  // para el emoji porque las iniciales ocupan mas ancho que alto.
   const ini = nombre.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
   return (
     <div
-      className="rounded-full flex items-center justify-center font-semibold shrink-0"
-      style={{ width: size, height: size, background: `${color}26`, color, fontSize: size * 0.38 }}
+      className="rounded-full flex items-center justify-center font-semibold shrink-0 select-none"
+      style={{
+        width: size, height: size,
+        background: `${color}26`, color,
+        fontSize: emoji ? size * 0.55 : size * 0.38,
+        lineHeight: 1,
+      }}
     >
-      {ini}
+      {emoji || ini}
+    </div>
+  );
+}
+
+/**
+ * Elegir el icono de una categoria.
+ *
+ * Solo ofrece los del registro explicito (ver ./iconos.ts): si dejara escribir
+ * cualquier nombre, la mitad caeria en el generico porque el empaquetador solo
+ * incluye los que estan declarados.
+ */
+export function SelectorIcono({ valor, alElegir, color }: {
+  valor: string; alElegir: (n: string) => void; color: string;
+}) {
+  return (
+    <div className="grid grid-cols-8 gap-1.5 max-h-44 overflow-y-auto sin-barra">
+      {Object.keys(ICONOS).map((n) => (
+        <button
+          key={n}
+          onClick={() => alElegir(n)}
+          aria-label={`Icono ${n}`}
+          className={cn(
+            'aspect-square rounded-xl flex items-center justify-center transition-transform active:scale-90',
+            valor === n ? '' : 'superficie-2 txt-2',
+          )}
+          style={valor === n ? { background: `${color}26`, color, boxShadow: `0 0 0 2px ${color}` } : undefined}
+        >
+          <Icono nombre={n} size={17} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Paleta compartida por cuentas, categorias, jarras y personas. */
+export const COLORES = [
+  '#10b981', '#3b82f6', '#8b5cf6', '#ec4899',
+  '#f59e0b', '#ef4444', '#06b6d4', '#64748b',
+] as const;
+
+export function SelectorColor({ valor, alElegir }: {
+  valor: string; alElegir: (c: string) => void;
+}) {
+  return (
+    <div className="flex gap-2 flex-wrap">
+      {COLORES.map((c) => (
+        <button
+          key={c}
+          onClick={() => alElegir(c)}
+          aria-label={`Color ${c}`}
+          className="w-10 h-10 rounded-xl transition-transform active:scale-95 flex items-center justify-center"
+          style={{ background: `${c}26`, outline: valor === c ? `2px solid ${c}` : 'none' }}
+        >
+          <span className="w-5 h-5 rounded-lg" style={{ background: c }} />
+        </button>
+      ))}
     </div>
   );
 }

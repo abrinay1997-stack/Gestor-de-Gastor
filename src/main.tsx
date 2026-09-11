@@ -2,12 +2,15 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import { Store } from './store/store.tsx';
+import { ProveedorConfirmacion } from './components/ui/confirmar.tsx';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <Store>
-      <App />
+      <ProveedorConfirmacion>
+        <App />
+      </ProveedorConfirmacion>
     </Store>
   </StrictMode>,
 );

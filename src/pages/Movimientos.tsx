@@ -1,49 +1,51 @@
 /**
- * Listado de movimientos con busqueda y filtros.
+ * Listado de movimientos con periodo, busqueda y filtros.
  *
- * El filtro "Solo mios / Solo suyos" es la vista individual que pide el
- * planteo: el libro es uno solo y compartido, pero cada movimiento sabe quien
- * lo cargo, asi que se puede mirar por separado sin partir los datos.
+ * Todos los filtros son independientes y se combinan: se puede pedir "los
+ * gastos de comida que hizo Avalon la semana pasada" sin que uno anule a otro.
  */
 
 import { useMemo, useState } from 'react';
 import { useStore } from '../store/store.tsx';
 import { formatMonto } from '@shared/money';
-import { claveMes, resumir, transaccionesDelMes } from '@shared/domain';
+import { autorDe, resumir } from '@shared/domain';
+import { dentroDe, periodoMes, type Periodo } from '@shared/periodo';
 import { TxType, type Transaction } from '@shared/types';
-import { fechaCorta, moverMes, nombreMes } from '../lib/utils.ts';
+import { fechaCorta } from '../lib/utils.ts';
 import { Boton, Campo, Icono, Tarjeta, Vacio } from '../components/ui/base.tsx';
+import { SelectorPeriodo } from '../components/ui/periodo.tsx';
 import { FilaMovimiento } from './Inicio.tsx';
 import { cn } from '../lib/utils.ts';
 
-type FiltroQuien = 'todos' | 'mios' | 'suyos';
-type FiltroTipo = 'todos' | 'gastos' | 'ingresos';
+type FiltroQuien = 'todos' | string;
+type FiltroTipo = 'todos' | 'gastos' | 'ingresos' | 'transferencias';
 
-export function Movimientos({ alEditar, alAgregar }: {
-  alEditar: (tx: Transaction) => void;
+export function Movimientos({ alVerMovimiento, alAgregar }: {
+  alVerMovimiento: (tx: Transaction) => void;
   alAgregar: () => void;
 }) {
-  const { transactions, categories, me, members, household } = useStore();
+  const { transactions, categories, accounts, members, household } = useStore();
   const moneda = household?.currency ?? 'USD';
 
-  const [mes, setMes] = useState(() => claveMes(Date.now()));
+  const [periodo, setPeriodo] = useState<Periodo>(() => periodoMes(Date.now()));
   const [busqueda, setBusqueda] = useState('');
   const [quien, setQuien] = useState<FiltroQuien>('todos');
   const [tipo, setTipo] = useState<FiltroTipo>('todos');
   const [categoria, setCategoria] = useState('');
-
-  const pareja = members.find((m) => m.id !== me?.id);
+  const [cuenta, setCuenta] = useState('');
+  const [verFiltros, setVerFiltros] = useState(false);
 
   const filtrados = useMemo(() => {
-    let lista = transaccionesDelMes(transactions, mes);
+    let lista = transactions.filter((t) => dentroDe(t.date, periodo));
 
-    if (quien === 'mios') lista = lista.filter((t) => t.createdBy === me?.id);
-    else if (quien === 'suyos' && pareja) lista = lista.filter((t) => t.createdBy === pareja.id);
+    if (quien !== 'todos') lista = lista.filter((t) => autorDe(t) === quien);
 
     if (tipo === 'gastos') lista = lista.filter((t) => t.type === TxType.GASTO);
     else if (tipo === 'ingresos') lista = lista.filter((t) => t.type === TxType.INGRESO);
+    else if (tipo === 'transferencias') lista = lista.filter((t) => t.type === TxType.TRANSFERENCIA);
 
     if (categoria) lista = lista.filter((t) => t.categoryId === categoria);
+    if (cuenta) lista = lista.filter((t) => t.accountId === cuenta || t.destAccountId === cuenta);
 
     const q = busqueda.trim().toLowerCase();
     if (q) {
@@ -53,7 +55,7 @@ export function Movimientos({ alEditar, alAgregar }: {
     }
 
     return lista;
-  }, [transactions, mes, quien, tipo, categoria, busqueda, me, pareja]);
+  }, [transactions, periodo, quien, tipo, categoria, cuenta, busqueda]);
 
   const resumen = useMemo(() => resumir(filtrados), [filtrados]);
 
@@ -69,79 +71,109 @@ export function Movimientos({ alEditar, alAgregar }: {
     return [...grupos.entries()];
   }, [filtrados]);
 
-  const hayFiltros = quien !== 'todos' || tipo !== 'todos' || categoria !== '' || busqueda !== '';
+  const activos = [
+    quien !== 'todos', tipo !== 'todos', categoria !== '', cuenta !== '', busqueda !== '',
+  ].filter(Boolean).length;
+
+  const limpiar = () => {
+    setQuien('todos'); setTipo('todos'); setCategoria(''); setCuenta(''); setBusqueda('');
+  };
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <SelectorPeriodo periodo={periodo} alCambiar={setPeriodo} />
+
+      <div className="flex gap-2">
+        <Campo
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          placeholder="Buscar..."
+          type="search"
+          className="flex-1"
+        />
         <button
-          onClick={() => setMes(moverMes(mes, -1))}
-          aria-label="Mes anterior"
-          className="w-10 h-10 rounded-xl superficie-2 flex items-center justify-center txt-2"
+          onClick={() => setVerFiltros(!verFiltros)}
+          aria-label="Filtros"
+          className={cn(
+            'w-11 min-h-11 rounded-xl border flex items-center justify-center shrink-0 relative transition-colors',
+            activos > 0 ? 'bg-marca-600 text-white border-transparent' : 'superficie-2 borde txt-2',
+          )}
         >
-          <Icono nombre="chevron-left" size={19} />
-        </button>
-        <h1 className="font-semibold txt capitalize">{nombreMes(mes)}</h1>
-        <button
-          onClick={() => setMes(moverMes(mes, 1))}
-          disabled={mes === claveMes(Date.now())}
-          aria-label="Mes siguiente"
-          className="w-10 h-10 rounded-xl superficie-2 flex items-center justify-center txt-2 disabled:opacity-30"
-        >
-          <Icono nombre="chevron-right" size={19} />
+          <Icono nombre="filter" size={18} />
+          {activos > 0 && (
+            <span className="absolute -top-1 -right-1 w-4.5 h-4.5 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+              {activos}
+            </span>
+          )}
         </button>
       </div>
 
-      <Campo
-        value={busqueda}
-        onChange={(e) => setBusqueda(e.target.value)}
-        placeholder="Buscar..."
-        type="search"
-      />
+      {verFiltros && (
+        <div className="space-y-3 superficie-2 rounded-2xl p-3">
+          {members.length > 1 && (
+            <Segmentado
+              valor={quien}
+              alCambiar={setQuien}
+              opciones={[
+                { id: 'todos', etiqueta: 'Los dos' },
+                ...members.map((m) => ({ id: m.id, etiqueta: m.displayName })),
+              ]}
+            />
+          )}
 
-      {/* Filtros: quien y tipo */}
-      <div className="space-y-2">
-        {members.length > 1 && (
           <Segmentado
-            valor={quien}
-            alCambiar={setQuien}
+            valor={tipo}
+            alCambiar={setTipo}
             opciones={[
-              { id: 'todos', etiqueta: 'Los dos' },
-              { id: 'mios', etiqueta: 'Mios' },
-              { id: 'suyos', etiqueta: pareja?.displayName ?? 'Suyos' },
+              { id: 'todos', etiqueta: 'Todo' },
+              { id: 'gastos', etiqueta: 'Gastos' },
+              { id: 'ingresos', etiqueta: 'Ingresos' },
+              { id: 'transferencias', etiqueta: 'Transf.' },
             ]}
           />
-        )}
-        <Segmentado
-          valor={tipo}
-          alCambiar={setTipo}
-          opciones={[
-            { id: 'todos', etiqueta: 'Todo' },
-            { id: 'gastos', etiqueta: 'Gastos' },
-            { id: 'ingresos', etiqueta: 'Ingresos' },
-          ]}
-        />
-      </div>
 
-      {/* Categorias */}
-      <div className="flex gap-2 overflow-x-auto sin-barra -mx-4 px-4 pb-1">
-        {categories.filter((c) => !c.archived).map((c) => (
-          <button
-            key={c.id}
-            onClick={() => setCategoria(categoria === c.id ? '' : c.id)}
-            className={cn(
-              'shrink-0 min-h-9 px-3 rounded-full border text-xs font-medium flex items-center gap-1.5 transition-all',
-              categoria === c.id ? 'border-transparent text-white' : 'superficie-2 borde txt-2',
-            )}
-            style={categoria === c.id ? { background: c.color } : undefined}
-          >
-            <Icono nombre={c.icon} size={13} />
-            {c.name}
-          </button>
-        ))}
-      </div>
+          <div className="flex gap-2 overflow-x-auto sin-barra pb-1">
+            {categories.filter((c) => !c.archived).map((c) => (
+              <button
+                key={c.id}
+                onClick={() => setCategoria(categoria === c.id ? '' : c.id)}
+                className={cn(
+                  'shrink-0 min-h-9 px-3 rounded-full border text-xs font-medium flex items-center gap-1.5 transition-all',
+                  categoria === c.id ? 'border-transparent text-white' : 'superficie borde txt-2',
+                )}
+                style={categoria === c.id ? { background: c.color } : undefined}
+              >
+                <Icono nombre={c.icon} size={13} />
+                {c.name}
+              </button>
+            ))}
+          </div>
 
-      {/* Totales de lo filtrado */}
+          <div className="flex gap-2 overflow-x-auto sin-barra pb-1">
+            {accounts.filter((a) => !a.archived).map((a) => (
+              <button
+                key={a.id}
+                onClick={() => setCuenta(cuenta === a.id ? '' : a.id)}
+                className={cn(
+                  'shrink-0 min-h-9 px-3 rounded-full border text-xs font-medium flex items-center gap-1.5 transition-all',
+                  cuenta === a.id ? 'border-transparent text-white' : 'superficie borde txt-2',
+                )}
+                style={cuenta === a.id ? { background: a.color } : undefined}
+              >
+                <Icono nombre={a.icon} size={13} />
+                {a.name}
+              </button>
+            ))}
+          </div>
+
+          {activos > 0 && (
+            <button onClick={limpiar} className="w-full min-h-10 text-sm txt-2 rounded-xl superficie">
+              Limpiar filtros
+            </button>
+          )}
+        </div>
+      )}
+
       {filtrados.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           <Mini etiqueta="Movimientos" valor={String(resumen.cantidad)} />
@@ -153,15 +185,13 @@ export function Movimientos({ alEditar, alAgregar }: {
       {filtrados.length === 0 ? (
         <Tarjeta>
           <Vacio
-            icono={hayFiltros ? 'search-x' : 'receipt-text'}
-            titulo={hayFiltros ? 'Nada coincide' : 'Mes sin movimientos'}
-            texto={hayFiltros
+            icono={activos > 0 ? 'search-x' : 'receipt-text'}
+            titulo={activos > 0 ? 'Nada coincide' : 'Período sin movimientos'}
+            texto={activos > 0
               ? 'Probá cambiando los filtros o buscando otra cosa.'
-              : 'Todavía no registraron nada en este mes.'}
-            accion={hayFiltros
-              ? <Boton variante="secundario" onClick={() => {
-                setQuien('todos'); setTipo('todos'); setCategoria(''); setBusqueda('');
-              }}>Limpiar filtros</Boton>
+              : 'No hay movimientos registrados en este período.'}
+            accion={activos > 0
+              ? <Boton variante="secundario" onClick={limpiar}>Limpiar filtros</Boton>
               : <Boton onClick={alAgregar}>Registrar movimiento</Boton>}
           />
         </Tarjeta>
@@ -169,12 +199,10 @@ export function Movimientos({ alEditar, alAgregar }: {
         <div className="space-y-3">
           {porDia.map(([dia, txs]) => (
             <Tarjeta key={dia} className="py-3">
-              <p className="text-xs font-medium txt-3 px-1 mb-1">
-                {fechaCorta(txs[0].date)}
-              </p>
+              <p className="text-xs font-medium txt-3 px-1 mb-1">{fechaCorta(txs[0].date)}</p>
               <div className="divide-y divide-[var(--borde)] -mx-1">
                 {txs.map((tx) => (
-                  <FilaMovimiento key={tx.id} tx={tx} alTocar={() => alEditar(tx)} />
+                  <FilaMovimiento key={tx.id} tx={tx} alTocar={() => alVerMovimiento(tx)} />
                 ))}
               </div>
             </Tarjeta>
@@ -186,19 +214,17 @@ export function Movimientos({ alEditar, alAgregar }: {
 }
 
 function Segmentado<T extends string>({ valor, alCambiar, opciones }: {
-  valor: T;
-  alCambiar: (v: T) => void;
-  opciones: { id: T; etiqueta: string }[];
+  valor: T; alCambiar: (v: T) => void; opciones: { id: T; etiqueta: string }[];
 }) {
   return (
-    <div className="flex gap-1 p-1 rounded-xl superficie-2">
+    <div className="flex gap-1 p-1 rounded-xl superficie">
       {opciones.map((o) => (
         <button
           key={o.id}
           onClick={() => alCambiar(o.id)}
           className={cn(
             'flex-1 min-h-9 rounded-lg text-xs font-medium transition-all truncate px-2',
-            valor === o.id ? 'superficie txt shadow-sm' : 'txt-2',
+            valor === o.id ? 'superficie-2 txt shadow-sm' : 'txt-2',
           )}
         >
           {o.etiqueta}

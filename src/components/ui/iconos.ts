@@ -19,6 +19,8 @@ import {
   HeartPulse, House, Landmark, Laptop, Lock, LogOut, PartyPopper, PawPrint,
   PiggyBank, Plus, Popcorn, ReceiptText, SearchX, Settings, Settings2,
   ShoppingBag, Split, Tag, Tags, Trash2, TrendingUp, TriangleAlert, UserPlus,
+  Pencil, Repeat, Calendar, CalendarDays, GripVertical, Bell, Eye, Filter,
+  ChartColumn, Sparkles, Users, Palette, Trash, Check, ArrowLeft,
   Utensils, Wallet, WandSparkles, X, Zap,
   type LucideIcon,
 } from 'lucide-react';
@@ -77,6 +79,21 @@ export const ICONOS: Record<string, LucideIcon> = {
   'wand-sparkles': WandSparkles,
   'x': X,
   'zap': Zap,
+  'pencil': Pencil,
+  'repeat': Repeat,
+  'calendar': Calendar,
+  'calendar-days': CalendarDays,
+  'grip-vertical': GripVertical,
+  'bell': Bell,
+  'eye': Eye,
+  'filter': Filter,
+  'chart-column': ChartColumn,
+  'sparkles': Sparkles,
+  'users': Users,
+  'palette': Palette,
+  'trash': Trash,
+  'check': Check,
+  'arrow-left': ArrowLeft,
 };
 
 /** Se usa cuando el nombre guardado no esta en el registro. */

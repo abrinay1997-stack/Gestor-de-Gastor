@@ -4,7 +4,8 @@
 
 import { derivarClave } from '@shared/kdf';
 import type {
-  Account, Budget, Category, Jar, Member, Snapshot, Transaction, TransactionInput,
+  Account, Budget, Category, Jar, Member, Recurring, SeccionInicio,
+  Snapshot, Transaction, TransactionInput,
 } from '@shared/types';
 
 export class ApiError extends Error {
@@ -140,4 +141,14 @@ export const api = {
   guardarPresupuesto: (b: { categoryId: string | null; amountMinor: number; period: string }) =>
     put<{ budget: Budget }>('/api/budgets', b),
   borrarPresupuesto: (id: string) => del<{ ok: true }>(`/api/budgets/${id}`),
+
+  editarPerfil: (d: {
+    displayName?: string; color?: string; emoji?: string; homeLayout?: SeccionInicio[];
+  }) => put<{ member: Member }>('/api/profile', d),
+
+  crearRecurrente: (r: Partial<Recurring> & { startAt?: number }) =>
+    post<{ recurring: Recurring }>('/api/recurring', r),
+  editarRecurrente: (id: string, r: Partial<Recurring>) =>
+    put<{ recurring: Recurring }>(`/api/recurring/${id}`, r),
+  borrarRecurrente: (id: string) => del<{ ok: true }>(`/api/recurring/${id}`),
 };

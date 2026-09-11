@@ -30,11 +30,23 @@ export const fechaLarga = (epoch: number): string =>
     day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
   });
 
-/** Nombre del mes a partir de YYYY-MM: "marzo 2026". */
+/**
+ * Nombre del mes a partir de YYYY-MM: "Septiembre de 2026".
+ *
+ * Capitaliza SOLO la primera letra. El `capitalize` de CSS pone mayuscula en
+ * cada palabra y deja "Septiembre De 2026", que en español esta mal: las
+ * preposiciones van en minuscula. CSS no sabe de idiomas, asi que se resuelve
+ * aca.
+ */
 export function nombreMes(period: string): string {
   const [y, m] = period.split('-').map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString('es', { month: 'long', year: 'numeric' });
+  const texto = new Date(y, m - 1, 1).toLocaleDateString('es', { month: 'long', year: 'numeric' });
+  return mayusculaInicial(texto);
 }
+
+/** Primera letra en mayuscula, el resto intacto. */
+export const mayusculaInicial = (s: string): string =>
+  s.length === 0 ? s : s[0].toLocaleUpperCase('es') + s.slice(1);
 
 /** Valor de un <input type="date"> a partir de un epoch. */
 export function aInputDate(epoch: number): string {
