@@ -14,6 +14,12 @@ name: Probar tiempo real
 
 on:
   workflow_dispatch:
+    inputs:
+      prueba:
+        description: 'Que ejecutar'
+        type: choice
+        default: humo
+        options: [humo, diagnostico]
 
 concurrency:
   group: smoke
@@ -51,4 +57,9 @@ jobs:
           # (Settings > Secrets and variables > Actions > Variables) si algun
           # dia se cambia el nombre del Worker o se pasa a dominio propio.
           URL_APP: ${{ vars.URL_APP || 'https://gestor-de-gastos.abrinay1997.workers.dev' }}
-        run: node scripts/smoke-realtime.mjs
+        run: |
+          if [ "${{ inputs.prueba }}" = "diagnostico" ]; then
+            node scripts/diagnostico.mjs
+          else
+            node scripts/smoke-realtime.mjs
+          fi
