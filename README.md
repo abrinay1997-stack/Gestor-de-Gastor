@@ -42,6 +42,8 @@ push / pull request  ──>  Verificar  (tipos + tests + build)
                               │
 boton "Run workflow"  ──>  Verificar  ──>  Publicar en Cloudflare
                                             (solo si lo anterior esta en verde)
+
+boton "Run workflow"  ──>  Probar tiempo real  (contra produccion, cuando quieras)
 ```
 
 Hacer merge de un pull request **no publica**: solo verifica.
@@ -165,6 +167,23 @@ caliente y redirige `/api` al Worker.
 npm test        # 51 tests del núcleo de dominio
 npm run lint    # typecheck de cliente y Worker
 ```
+
+### Comprobar el tiempo real
+
+Los 51 tests cubren la aritmética del dominio, pero no dicen nada sobre si los
+WebSockets funcionan en Cloudflare: en local wrangler los simula, y lo que
+puede fallar de verdad (la hibernación de sockets, que las dos personas caigan
+en la misma instancia del hogar, el upgrade de protocolo detrás del borde)
+solo existe en producción.
+
+Para eso está **Actions → Probar tiempo real → Run workflow**. Siembra un hogar
+de prueba, abre dos WebSockets como si fueran dos teléfonos, verifica que un
+alta y una baja lleguen al otro lado, y borra todo lo sembrado. Tarda unos 20
+segundos y no toca los datos reales: todo cuelga de un `household_id` propio
+con prefijo `__smoke__`.
+
+Conviene correrlo después de cualquier cambio que toque `worker/hub.ts`,
+`src/api/live.ts` o la configuración de Durable Objects.
 
 ### Publicar a mano
 
