@@ -1,85 +1,94 @@
-import { useState } from 'react';
-import { FinanceProvider, useFinanceData } from './hooks/useFinanceData';
-import { AppLayout } from './components/layout/AppLayout';
-import { signInWithGoogle } from './services/firebase/auth';
-import { Wallet, Loader2, LogIn } from 'lucide-react';
-import { motion } from 'motion/react';
-import { DashboardPage } from './pages/DashboardPage';
-import { AccountsPage } from './pages/AccountsPage';
-import { TransactionsPage } from './pages/TransactionsPage';
-import { AnalyticsPage } from './pages/AnalyticsPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { JarsPage } from './pages/JarsPage';
-import { QuickAddModal } from './components/transactions/QuickAddModal';
+import { lazy, Suspense, useState } from 'react';
+import { useStore } from './store/store.tsx';
+import { AppLayout, type Solapa } from './components/layout/AppLayout.tsx';
+import { CargaRapida } from './components/transactions/CargaRapida.tsx';
+import { Acceso } from './pages/Acceso.tsx';
+import { Inicio } from './pages/Inicio.tsx';
+import { Movimientos } from './pages/Movimientos.tsx';
+import { Cuentas } from './pages/Cuentas.tsx';
+import { Jarras } from './pages/Jarras.tsx';
+import { Ajustes } from './pages/Ajustes.tsx';
+import { Icono } from './components/ui/base.tsx';
+import { cn } from './lib/utils.ts';
+import type { Transaction } from '@shared/types';
 
-function MainApp() {
-  const { user, isLoading } = useFinanceData();
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'accounts' | 'jars' | 'transactions' | 'analytics' | 'settings'>('dashboard');
-  const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center">
-        <Loader2 className="w-8 h-8 text-emerald-600 animate-spin mb-4" />
-        <p className="text-stone-500 font-medium">Cargando tus finanzas...</p>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-6 font-sans">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-md w-full bg-white rounded-3xl shadow-xl p-8 flex flex-col items-center text-center border border-stone-100"
-        >
-          <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-3xl flex items-center justify-center mb-8 rotate-3 shadow-sm border border-emerald-200">
-            <Wallet size={40} />
-          </div>
-          <h1 className="text-3xl font-bold text-stone-900 mb-3 tracking-tight">Finanzas Claras</h1>
-          <p className="text-stone-500 mb-10 leading-relaxed">
-            Controla tu dinero, entiende tus hábitos y toma mejores decisiones financieras en segundos.
-          </p>
-          
-          <button 
-            onClick={signInWithGoogle}
-            className="w-full flex items-center justify-center gap-3 bg-stone-900 hover:bg-stone-800 text-white py-4 px-6 rounded-2xl font-medium transition-colors shadow-md"
-          >
-            <LogIn size={20} />
-            <span>Comenzar con Google</span>
-          </button>
-          
-          <p className="text-xs text-stone-400 mt-6 max-w-[280px]">
-            Tus datos están encriptados y se almacenan de forma segura en la nube.
-          </p>
-        </motion.div>
-      </div>
-    );
-  }
-
-  return (
-    <AppLayout 
-      activeTab={activeTab as any} 
-      onTabChange={setActiveTab as any}
-      onOpenQuickAdd={() => setIsQuickAddOpen(true)}
-    >
-      {activeTab === 'dashboard' && <DashboardPage />}
-      {activeTab === 'accounts' && <AccountsPage />}
-      {activeTab === 'jars' && <JarsPage />}
-      {activeTab === 'transactions' && <TransactionsPage />}
-      {activeTab === 'analytics' && <AnalyticsPage />}
-      {activeTab === 'settings' && <SettingsPage />}
-      
-      <QuickAddModal isOpen={isQuickAddOpen} onClose={() => setIsQuickAddOpen(false)} />
-    </AppLayout>
-  );
-}
+// Analisis arrastra recharts, con diferencia la dependencia mas pesada.
+// Cargandola aparte, la app abre sin descargarla.
+const Analisis = lazy(() =>
+  import('./pages/Analisis.tsx').then((m) => ({ default: m.Analisis })),
+);
 
 export default function App() {
+  const { cargando, autenticado, aviso, cola } = useStore();
+
+  const [solapa, setSolapa] = useState<Solapa>('inicio');
+  const [cargaAbierta, setCargaAbierta] = useState(false);
+  const [editando, setEditando] = useState<Transaction | null>(null);
+
+  if (cargando) {
+    return (
+      <div className="min-h-dvh flex flex-col items-center justify-center gap-3">
+        <div className="w-9 h-9 rounded-full border-2 border-marca-500 border-t-transparent animate-spin" />
+        <p className="text-sm txt-3">Cargando...</p>
+      </div>
+    );
+  }
+
+  if (!autenticado) return <Acceso />;
+
+  const abrirNuevo = () => { setEditando(null); setCargaAbierta(true); };
+  const abrirEdicion = (tx: Transaction) => { setEditando(tx); setCargaAbierta(true); };
+
   return (
-    <FinanceProvider>
-      <MainApp />
-    </FinanceProvider>
+    <>
+      <AppLayout solapa={solapa} alCambiar={setSolapa} alAgregar={abrirNuevo}>
+        {solapa === 'inicio' && <Inicio alEditar={abrirEdicion} alAgregar={abrirNuevo} />}
+        {solapa === 'movimientos' && <Movimientos alEditar={abrirEdicion} alAgregar={abrirNuevo} />}
+        {solapa === 'cuentas' && <Cuentas />}
+        {solapa === 'jarras' && <Jarras />}
+        {solapa === 'ajustes' && <Ajustes />}
+        {solapa === 'analisis' && (
+          <Suspense fallback={
+            <div className="flex justify-center py-16">
+              <div className="w-7 h-7 rounded-full border-2 border-marca-500 border-t-transparent animate-spin" />
+            </div>
+          }>
+            <Analisis />
+          </Suspense>
+        )}
+      </AppLayout>
+
+      <CargaRapida
+        abierta={cargaAbierta}
+        alCerrar={() => { setCargaAbierta(false); setEditando(null); }}
+        editando={editando}
+      />
+
+      {/* Cambios cargados sin señal, esperando para subir */}
+      {cola.length > 0 && (
+        <div className="fixed bottom-24 left-4 md:bottom-6 z-40 superficie borde border rounded-2xl px-3.5 py-2 shadow-lg flex items-center gap-2">
+          <Icono nombre="cloud-off" size={15} className="txt-3" />
+          <span className="text-xs txt-2">
+            {cola.length} sin subir
+          </span>
+        </div>
+      )}
+
+      {/* Avisos */}
+      {aviso && (
+        <div
+          role="status"
+          className={cn(
+            'fixed top-4 inset-x-4 md:left-1/2 md:-translate-x-1/2 md:inset-x-auto md:w-96 z-[60]',
+            'rounded-2xl px-4 py-3 text-sm font-medium shadow-lg text-center safe-top',
+            'animate-[bajar_.2s_ease-out]',
+            aviso.tipo === 'ok' ? 'bg-marca-600 text-white' : 'bg-red-600 text-white',
+          )}
+        >
+          {aviso.texto}
+          <style>{`@keyframes bajar { from { transform: translateY(-120%); opacity: 0 } to { transform: translateY(0); opacity: 1 } }`}</style>
+        </div>
+      )}
+    </>
   );
 }

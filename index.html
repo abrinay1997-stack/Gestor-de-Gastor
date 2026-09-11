@@ -1,22 +1,25 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>Finanzas Familiares</title>
-    <meta name="description" content="Gestión de finanzas para familias" />
-    <meta property="og:title" content="Finanzas Familiares" />
-    <meta property="og:description" content="Gestión de finanzas para familias" />
-    <meta property="og:type" content="website" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#10b981" />
+    <!-- viewport-fit=cover habilita las variables de area segura del iPhone.
+         Sin maximum-scale: bloquear el zoom rompe la accesibilidad. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Nuestros gastos</title>
+    <meta name="description" content="Gestor de gastos compartido, en tiempo real." />
+    <meta name="theme-color" content="#10b981" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0c0a09" media="(prefers-color-scheme: dark)" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icono.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icono-180.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Gastos" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- App privada: que no la indexe nadie. -->
+    <meta name="robots" content="noindex, nofollow" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

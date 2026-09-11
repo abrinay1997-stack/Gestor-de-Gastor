@@ -1,0 +1,207 @@
+/**
+ * Primitivas visuales. Todas pensadas para el pulgar: nada de blancos de
+ * menos de 44px, que es el minimo que recomienda Apple para tocar sin errar.
+ */
+
+import { type ButtonHTMLAttributes, type ComponentPropsWithRef, type ReactNode } from 'react';
+import { cn } from '../../lib/utils.ts';
+import { X } from 'lucide-react';
+import { ICONO_GENERICO, ICONOS } from './iconos.ts';
+
+// --- iconos --------------------------------------------------------------
+
+/**
+ * Icono por nombre en kebab-case ('piggy-bank'), buscado en el registro
+ * explicito de ./iconos.ts. Si el nombre no esta, cae en uno generico en vez
+ * de romper la pantalla: los nombres vienen de la base y pueden quedar viejos.
+ */
+export function Icono({ nombre, size = 20, className }: {
+  nombre: string; size?: number; className?: string;
+}) {
+  const Comp = ICONOS[nombre] ?? ICONO_GENERICO;
+  return <Comp size={size} className={className} />;
+}
+
+// --- boton ---------------------------------------------------------------
+
+type VarianteBoton = 'primario' | 'secundario' | 'fantasma' | 'peligro';
+
+export function Boton({
+  variante = 'primario', className, children, ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variante?: VarianteBoton }) {
+  const estilos: Record<VarianteBoton, string> = {
+    primario: 'bg-marca-600 text-white hover:bg-marca-700 active:bg-marca-700 shadow-sm',
+    secundario: 'superficie-2 txt borde border hover:opacity-80',
+    fantasma: 'txt-2 hover:superficie-2',
+    peligro: 'bg-red-600 text-white hover:bg-red-700',
+  };
+
+  return (
+    <button
+      {...props}
+      className={cn(
+        'min-h-11 px-4 rounded-2xl font-medium text-sm transition-all',
+        'active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none',
+        'flex items-center justify-center gap-2',
+        estilos[variante],
+        className,
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+// --- campos --------------------------------------------------------------
+
+export function Campo({
+  etiqueta, error, className, ...props
+}: ComponentPropsWithRef<'input'> & { etiqueta?: string; error?: string }) {
+  return (
+    <label className="block">
+      {etiqueta && <span className="block text-xs font-medium txt-2 mb-1.5">{etiqueta}</span>}
+      <input
+        {...props}
+        className={cn(
+          'w-full min-h-11 px-3.5 rounded-xl superficie-2 borde border txt',
+          // 16px es el minimo que evita que iOS haga zoom al enfocar.
+          'text-base outline-none transition-colors',
+          'focus:border-marca-500 focus:ring-2 focus:ring-marca-500/20',
+          'placeholder:txt-3',
+          error && 'border-red-500 focus:border-red-500 focus:ring-red-500/20',
+          className,
+        )}
+      />
+      {error && <span className="block text-xs text-red-500 mt-1">{error}</span>}
+    </label>
+  );
+}
+
+export function Selector({
+  etiqueta, className, children, ...props
+}: ComponentPropsWithRef<'select'> & { etiqueta?: string }) {
+  return (
+    <label className="block">
+      {etiqueta && <span className="block text-xs font-medium txt-2 mb-1.5">{etiqueta}</span>}
+      <select
+        {...props}
+        className={cn(
+          'w-full min-h-11 px-3.5 rounded-xl superficie-2 borde border txt text-base',
+          'outline-none focus:border-marca-500 focus:ring-2 focus:ring-marca-500/20',
+          className,
+        )}
+      >
+        {children}
+      </select>
+    </label>
+  );
+}
+
+// --- contenedores --------------------------------------------------------
+
+export function Tarjeta({ className, children }: { className?: string; children: ReactNode }) {
+  return (
+    <div className={cn('superficie borde border rounded-3xl p-5', className)}>
+      {children}
+    </div>
+  );
+}
+
+export function Vacio({ icono, titulo, texto, accion }: {
+  icono: string; titulo: string; texto: string; accion?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center text-center py-14 px-6">
+      <div className="w-16 h-16 rounded-3xl superficie-2 flex items-center justify-center mb-4">
+        <Icono nombre={icono} size={28} className="txt-3" />
+      </div>
+      <h3 className="font-semibold txt mb-1.5">{titulo}</h3>
+      <p className="text-sm txt-2 max-w-xs leading-relaxed mb-5">{texto}</p>
+      {accion}
+    </div>
+  );
+}
+
+/** Barra de progreso. Se pasa de 100% con color de alerta. */
+export function Barra({ ratio, color = '#10b981' }: { ratio: number; color?: string }) {
+  const pct = Math.min(Math.max(ratio, 0), 1) * 100;
+  const excedido = ratio > 1;
+
+  return (
+    <div className="h-2 rounded-full superficie-2 overflow-hidden">
+      <div
+        className="h-full rounded-full transition-all duration-500"
+        style={{ width: `${pct}%`, background: excedido ? '#ef4444' : color }}
+      />
+    </div>
+  );
+}
+
+/** Cuadrito de color con un icono adentro. */
+export function Ficha({ color, icono, size = 40 }: { color: string; icono: string; size?: number }) {
+  return (
+    <div
+      className="rounded-2xl flex items-center justify-center shrink-0"
+      style={{ width: size, height: size, background: `${color}1a`, color }}
+    >
+      <Icono nombre={icono} size={size * 0.5} />
+    </div>
+  );
+}
+
+export function Avatar({ nombre, color, size = 32 }: { nombre: string; color: string; size?: number }) {
+  const ini = nombre.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
+  return (
+    <div
+      className="rounded-full flex items-center justify-center font-semibold shrink-0"
+      style={{ width: size, height: size, background: `${color}26`, color, fontSize: size * 0.38 }}
+    >
+      {ini}
+    </div>
+  );
+}
+
+/** Hoja que sube desde abajo. El patron nativo en celular. */
+export function Hoja({ abierta, alCerrar, titulo, children }: {
+  abierta: boolean; alCerrar: () => void; titulo: string; children: ReactNode;
+}) {
+  if (!abierta) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center">
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+        onClick={alCerrar}
+        aria-hidden
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={titulo}
+        className={cn(
+          'relative w-full sm:max-w-lg superficie rounded-t-3xl sm:rounded-3xl',
+          'max-h-[92vh] overflow-y-auto sin-barra safe-bottom',
+          'animate-[subir_.22s_cubic-bezier(.32,.72,0,1)]',
+        )}
+      >
+        {/* Agarradera: indica que se puede arrastrar para cerrar. */}
+        <div className="sticky top-0 superficie pt-2.5 pb-3 px-5 z-10 rounded-t-3xl">
+          <div className="w-9 h-1 rounded-full superficie-2 mx-auto mb-3 sm:hidden" />
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-lg txt">{titulo}</h2>
+            <button
+              onClick={alCerrar}
+              aria-label="Cerrar"
+              className="w-9 h-9 rounded-full superficie-2 flex items-center justify-center txt-2"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+        <div className="px-5 pb-5">{children}</div>
+      </div>
+
+      <style>{`@keyframes subir { from { transform: translateY(100%) } to { transform: translateY(0) } }`}</style>
+    </div>
+  );
+}

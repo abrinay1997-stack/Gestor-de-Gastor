@@ -1,106 +1,168 @@
-import React, { useState } from 'react';
-import { Home, PieChart, Plus, Wallet, LogOut, Settings, Briefcase, LayoutGrid } from 'lucide-react';
-import { useFinanceData } from '../../hooks/useFinanceData';
-import { logOut } from '../../services/firebase/auth';
+/**
+ * Armazon de la app. Conserva la estructura del repo original —barra inferior
+ * en celular, barra lateral en pantalla grande— porque es la parte que
+ * funcionaba bien, con tres arreglos:
+ *
+ * - La barra inferior respeta el area segura del iPhone (antes se metia debajo
+ *   del indicador de inicio).
+ * - Cada destino es un boton de 44px minimo, el tamaño que se puede tocar sin
+ *   errar con el pulgar.
+ * - Un indicador de conexion muestra si el tiempo real esta andando y si la
+ *   otra persona esta mirando la app en este momento.
+ */
 
-interface AppLayoutProps {
-  children: React.ReactNode;
-  activeTab: 'dashboard' | 'accounts' | 'jars' | 'transactions' | 'analytics' | 'settings';
-  onTabChange: (tab: 'dashboard' | 'accounts' | 'jars' | 'transactions' | 'analytics' | 'settings') => void;
-  onOpenQuickAdd: () => void;
-}
+import { type ReactNode } from 'react';
+import { LogOut, Plus } from 'lucide-react';
+import { useStore } from '../../store/store.tsx';
+import { cn } from '../../lib/utils.ts';
+import { Avatar, Icono } from '../ui/base.tsx';
 
-export const AppLayout = ({ children, activeTab, onTabChange, onOpenQuickAdd }: AppLayoutProps) => {
-  const { user } = useFinanceData();
+export type Solapa = 'inicio' | 'cuentas' | 'jarras' | 'movimientos' | 'analisis' | 'ajustes';
+
+const DESTINOS: { id: Solapa; etiqueta: string; icono: string; enBarra: boolean }[] = [
+  { id: 'inicio', etiqueta: 'Inicio', icono: 'house', enBarra: true },
+  { id: 'movimientos', etiqueta: 'Movimientos', icono: 'receipt-text', enBarra: true },
+  { id: 'jarras', etiqueta: 'Jarras', icono: 'piggy-bank', enBarra: true },
+  { id: 'cuentas', etiqueta: 'Cuentas', icono: 'wallet', enBarra: true },
+  { id: 'analisis', etiqueta: 'Analisis', icono: 'chart-pie', enBarra: false },
+  { id: 'ajustes', etiqueta: 'Ajustes', icono: 'settings', enBarra: true },
+];
+
+export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
+  solapa: Solapa;
+  alCambiar: (s: Solapa) => void;
+  alAgregar: () => void;
+  children: ReactNode;
+}) {
+  const { me, members, online, estadoLive, salir } = useStore();
+
+  const pareja = members.find((m) => m.id !== me?.id);
+  const parejaEnLinea = pareja ? online.includes(pareja.id) : false;
+  const enBarra = DESTINOS.filter((d) => d.enBarra);
 
   return (
-    <div className="min-h-screen bg-stone-50 font-sans flex flex-col md:flex-row pb-24 md:pb-0">
-      {/* Sidebar for Desktop */}
-      <aside className="hidden md:flex flex-col w-64 bg-white border-r border-stone-200 p-6 shadow-sm sticky top-0 h-screen shrink-0">
-        <div className="flex items-center gap-3 mb-10">
-          <div className="w-10 h-10 bg-emerald-100 text-emerald-700 rounded-xl flex items-center justify-center font-bold text-lg">
-            F
+    <div className="min-h-dvh flex flex-col md:flex-row">
+      {/* Barra lateral, solo en pantalla grande */}
+      <aside className="hidden md:flex flex-col w-60 superficie borde border-r p-5 sticky top-0 h-dvh shrink-0">
+        <div className="flex items-center gap-2.5 mb-8">
+          <div className="w-9 h-9 bg-marca-500 text-white rounded-xl flex items-center justify-center">
+            <Icono nombre="wallet" size={18} />
           </div>
-          <h1 className="text-xl font-bold text-stone-900 tracking-tight">Finanzas</h1>
+          <span className="font-semibold txt">Nuestros gastos</span>
         </div>
 
-        <nav className="flex-1 space-y-2">
-          <NavItem icon={<Home />} label="Inicio" active={activeTab === 'dashboard'} onClick={() => onTabChange('dashboard')} />
-          <NavItem icon={<Briefcase />} label="Cuentas" active={activeTab === 'accounts'} onClick={() => onTabChange('accounts')} />
-          <NavItem icon={<LayoutGrid />} label="Jarras (Sobres)" active={activeTab === 'jars'} onClick={() => onTabChange('jars')} />
-          <NavItem icon={<Wallet />} label="Movimientos" active={activeTab === 'transactions'} onClick={() => onTabChange('transactions')} />
-          <NavItem icon={<PieChart />} label="Estadísticas" active={activeTab === 'analytics'} onClick={() => onTabChange('analytics')} />
-          <NavItem icon={<Settings />} label="Ajustes" active={activeTab === 'settings'} onClick={() => onTabChange('settings')} />
+        <nav className="flex-1 space-y-1">
+          {DESTINOS.map((d) => (
+            <button
+              key={d.id}
+              onClick={() => alCambiar(d.id)}
+              className={cn(
+                'w-full flex items-center gap-3 px-3 min-h-11 rounded-xl text-sm font-medium transition-colors',
+                solapa === d.id ? 'bg-marca-50 text-marca-700 dark:bg-marca-500/15 dark:text-marca-500' : 'txt-2 hover:superficie-2',
+              )}
+            >
+              <Icono nombre={d.icono} size={18} />
+              {d.etiqueta}
+            </button>
+          ))}
         </nav>
 
-        <button 
-          onClick={onOpenQuickAdd}
-          className="mt-8 bg-emerald-600 text-white p-4 rounded-2xl font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
+        <button
+          onClick={alAgregar}
+          className="mt-6 bg-marca-600 hover:bg-marca-700 text-white min-h-12 rounded-2xl font-medium flex items-center justify-center gap-2 transition-colors"
         >
-          <Plus size={20} />
-          Registrar Operación
+          <Plus size={18} /> Registrar
         </button>
 
-        <div className="mt-auto pt-6 border-t border-stone-100 flex items-center justify-between">
-          <div className="flex items-center gap-3 truncate">
-            <img src={user?.photoURL || ''} alt="User" className="w-8 h-8 rounded-full bg-stone-200" />
-            <p className="text-sm font-medium text-stone-700 truncate">{user?.displayName}</p>
+        <div className="mt-6 pt-5 borde border-t">
+          <EstadoConexion estado={estadoLive} pareja={pareja?.displayName} enLinea={parejaEnLinea} />
+          <div className="flex items-center justify-between mt-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Avatar nombre={me?.displayName ?? '?'} color={me?.color ?? '#10b981'} size={30} />
+              <span className="text-sm font-medium txt truncate">{me?.displayName}</span>
+            </div>
+            <button
+              onClick={() => void salir()}
+              aria-label="Cerrar sesion"
+              className="txt-3 hover:txt-2 p-2"
+            >
+              <LogOut size={17} />
+            </button>
           </div>
-          <button onClick={logOut} className="text-stone-400 hover:text-stone-700 p-1">
-            <LogOut size={18} />
-          </button>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 w-full max-w-5xl mx-auto p-4 md:p-8 overflow-y-auto h-screen relative">
+      {/* Contenido */}
+      <main className="flex-1 w-full max-w-3xl mx-auto px-4 pt-4 pb-28 md:pb-8 md:px-8 md:pt-8">
+        {/* Encabezado movil */}
+        <div className="md:hidden flex items-center justify-between mb-4 safe-top">
+          <EstadoConexion estado={estadoLive} pareja={pareja?.displayName} enLinea={parejaEnLinea} />
+          <div className="flex items-center gap-2">
+            {pareja && (
+              <div className="relative">
+                <Avatar nombre={pareja.displayName} color={pareja.color} size={30} />
+                {parejaEnLinea && (
+                  <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-marca-500 ring-2 ring-[var(--fondo)]" />
+                )}
+              </div>
+            )}
+            <Avatar nombre={me?.displayName ?? '?'} color={me?.color ?? '#10b981'} size={30} />
+          </div>
+        </div>
+
         {children}
       </main>
 
-      {/* Floating Action Button (Mobile) */}
-      <div className="md:hidden fixed bottom-24 right-4 z-40">
-        <button 
-          onClick={onOpenQuickAdd}
-          className="w-14 h-14 bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-600/30 flex items-center justify-center active:scale-95 transition-transform"
-        >
-          <Plus size={28} />
-        </button>
-      </div>
+      {/* Boton flotante, solo en celular */}
+      <button
+        onClick={alAgregar}
+        aria-label="Registrar movimiento"
+        className="md:hidden fixed right-4 bottom-24 w-14 h-14 rounded-2xl bg-marca-600 text-white shadow-lg shadow-marca-600/30 flex items-center justify-center active:scale-95 transition-transform z-30"
+      >
+        <Plus size={26} />
+      </button>
 
-      {/* Bottom Navigation (Mobile) */}
-      <nav className="md:hidden fixed bottom-0 w-full bg-white border-t border-stone-200 flex items-center justify-around pb-safe pt-2 px-2 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] z-30">
-        <MobileNavItem icon={<Home size={24} />} label="Inicio" active={activeTab === 'dashboard'} onClick={() => onTabChange('dashboard')} />
-        <MobileNavItem icon={<Briefcase size={24} />} label="Cuentas" active={activeTab === 'accounts'} onClick={() => onTabChange('accounts')} />
-        <MobileNavItem icon={<LayoutGrid size={24} />} label="Jarras" active={activeTab === 'jars'} onClick={() => onTabChange('jars')} />
-        <MobileNavItem icon={<Wallet size={24} />} label="Flujo" active={activeTab === 'transactions'} onClick={() => onTabChange('transactions')} />
-        <MobileNavItem icon={<Settings size={24} />} label="Más" active={activeTab === 'settings'} onClick={() => onTabChange('settings')} />
+      {/* Barra inferior, solo en celular */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 superficie borde border-t flex safe-bottom z-30">
+        {enBarra.map((d) => (
+          <button
+            key={d.id}
+            onClick={() => alCambiar(d.id)}
+            aria-current={solapa === d.id ? 'page' : undefined}
+            className={cn(
+              'flex-1 flex flex-col items-center justify-center gap-0.5 min-h-14 pt-1.5 transition-colors',
+              solapa === d.id ? 'text-marca-600 dark:text-marca-500' : 'txt-3',
+            )}
+          >
+            <Icono nombre={d.icono} size={21} />
+            <span className="text-[10px] font-medium">{d.etiqueta}</span>
+          </button>
+        ))}
       </nav>
     </div>
   );
-};
+}
 
-const NavItem = ({ icon, label, active, onClick }: any) => (
-  <button 
-    onClick={onClick}
-    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors font-medium text-sm ${
-      active ? 'bg-emerald-50 text-emerald-700' : 'text-stone-500 hover:bg-stone-50 hover:text-stone-900'
-    }`}
-  >
-    {icon}
-    {label}
-  </button>
-);
+/**
+ * Estado de la conexion. Mas util de lo que parece: dice si lo que se carga
+ * esta llegando al otro telefono, y si la otra persona esta mirando ahora.
+ */
+function EstadoConexion({ estado, pareja, enLinea }: {
+  estado: string; pareja?: string; enLinea: boolean;
+}) {
+  if (estado !== 'conectado') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs txt-3">
+        <span className={cn('w-1.5 h-1.5 rounded-full', estado === 'conectando' ? 'bg-amber-500 animate-pulse' : 'bg-stone-400')} />
+        {estado === 'conectando' ? 'Conectando...' : 'Sin conexion'}
+      </span>
+    );
+  }
 
-const MobileNavItem = ({ icon, label, active, onClick }: any) => (
-  <button 
-    onClick={onClick}
-    className={`flex flex-col items-center justify-center w-16 h-14 gap-1 transition-colors ${
-      active ? 'text-emerald-600' : 'text-stone-400 hover:text-stone-700'
-    }`}
-  >
-    <div className={`p-1 rounded-xl transition-all ${active ? 'bg-emerald-50' : 'bg-transparent'}`}>
-      {icon}
-    </div>
-    <span className="text-[10px] font-medium">{label}</span>
-  </button>
-);
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs txt-3">
+      <span className="w-1.5 h-1.5 rounded-full bg-marca-500" />
+      {enLinea && pareja ? `${pareja} esta en linea` : 'En vivo'}
+    </span>
+  );
+}

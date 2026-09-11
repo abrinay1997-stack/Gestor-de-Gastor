@@ -1,0 +1,224 @@
+/**
+ * Graficos y tendencias.
+ *
+ * Recharts se carga aparte (ver manualChunks en vite.config.ts): es la
+ * dependencia mas pesada y no tiene sentido descargarla al abrir la app si
+ * esta pantalla se visita de vez en cuando.
+ */
+
+import { useMemo, useState } from 'react';
+import {
+  Bar, BarChart, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from 'recharts';
+import { useStore } from '../store/store.tsx';
+import { formatMonto } from '@shared/money';
+import { claveMes, porCategoria, porPersona, resumir, transaccionesDelMes } from '@shared/domain';
+import { moverMes, nombreMes } from '../lib/utils.ts';
+import { Icono, Tarjeta, Vacio } from '../components/ui/base.tsx';
+import { decimalesDe } from '@shared/money';
+
+/**
+ * Recharts entrega el valor como number | string | array, asi que se
+ * normaliza antes de formatear en vez de asumir que siempre es un numero.
+ */
+const formatearEje = (v: unknown, moneda: string, decimales: number): string => {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? formatMonto(Math.round(n * 10 ** decimales), moneda) : '';
+};
+
+export function Analisis() {
+  const { transactions, categories, members, household } = useStore();
+  const moneda = household?.currency ?? 'USD';
+  const decimales = decimalesDe(moneda);
+
+  const [mes, setMes] = useState(() => claveMes(Date.now()));
+
+  const delMes = useMemo(() => transaccionesDelMes(transactions, mes), [transactions, mes]);
+  const resumen = useMemo(() => resumir(delMes), [delMes]);
+
+  const torta = useMemo(
+    () => porCategoria(delMes, categories, 'gasto')
+      .filter((x) => x.totalMinor > 0)
+      .map((x) => ({
+        nombre: x.category?.name ?? 'Sin categoria',
+        valor: x.totalMinor / 10 ** decimales,
+        minor: x.totalMinor,
+        color: x.category?.color ?? '#64748b',
+      })),
+    [delMes, categories, decimales],
+  );
+
+  /** Ultimos 6 meses de ingresos contra gastos. */
+  const tendencia = useMemo(() => {
+    const meses: string[] = [];
+    for (let i = 5; i >= 0; i--) meses.push(moverMes(mes, -i));
+
+    return meses.map((m) => {
+      const r = resumir(transaccionesDelMes(transactions, m));
+      return {
+        mes: new Date(`${m}-02`).toLocaleDateString('es', { month: 'short' }),
+        Ingresos: r.ingresoMinor / 10 ** decimales,
+        Gastos: r.gastoMinor / 10 ** decimales,
+      };
+    });
+  }, [transactions, mes, decimales]);
+
+  const personas = useMemo(() => porPersona(delMes, members), [delMes, members]);
+
+  const hayDatos = delMes.length > 0;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => setMes(moverMes(mes, -1))}
+          aria-label="Mes anterior"
+          className="w-10 h-10 rounded-xl superficie-2 flex items-center justify-center txt-2"
+        >
+          <Icono nombre="chevron-left" size={19} />
+        </button>
+        <h1 className="font-semibold txt capitalize">{nombreMes(mes)}</h1>
+        <button
+          onClick={() => setMes(moverMes(mes, 1))}
+          disabled={mes === claveMes(Date.now())}
+          aria-label="Mes siguiente"
+          className="w-10 h-10 rounded-xl superficie-2 flex items-center justify-center txt-2 disabled:opacity-30"
+        >
+          <Icono nombre="chevron-right" size={19} />
+        </button>
+      </div>
+
+      {!hayDatos ? (
+        <Tarjeta>
+          <Vacio
+            icono="chart-pie"
+            titulo="Sin datos este mes"
+            texto="Cuando registren movimientos vas a ver aca en que se va la plata y como evoluciona mes a mes."
+          />
+        </Tarjeta>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <Tarjeta className="p-4">
+              <p className="text-xs txt-2 mb-1">Entro</p>
+              <p className="text-lg font-semibold tabular text-marca-600 dark:text-marca-500">
+                {formatMonto(resumen.ingresoMinor, moneda, { compacto: true })}
+              </p>
+            </Tarjeta>
+            <Tarjeta className="p-4">
+              <p className="text-xs txt-2 mb-1">Salio</p>
+              <p className="text-lg font-semibold tabular text-red-500">
+                {formatMonto(resumen.gastoMinor, moneda, { compacto: true })}
+              </p>
+            </Tarjeta>
+          </div>
+
+          {torta.length > 0 && (
+            <Tarjeta>
+              <h2 className="font-semibold txt mb-3">Gastos por categoria</h2>
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={torta}
+                      dataKey="valor"
+                      nameKey="nombre"
+                      innerRadius="52%"
+                      outerRadius="80%"
+                      paddingAngle={2}
+                      strokeWidth={0}
+                    >
+                      {torta.map((d) => <Cell key={d.nombre} fill={d.color} />)}
+                    </Pie>
+                    <Tooltip
+                      formatter={(v) => formatearEje(v, moneda, decimales)}
+                      contentStyle={{
+                        background: 'var(--superficie)',
+                        border: '1px solid var(--borde)',
+                        borderRadius: 12,
+                        color: 'var(--texto)',
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="space-y-2 mt-2">
+                {torta.slice(0, 6).map((d) => (
+                  <div key={d.nombre} className="flex items-center gap-2.5 text-sm">
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
+                    <span className="flex-1 txt-2 truncate">{d.nombre}</span>
+                    <span className="tabular txt shrink-0">{formatMonto(d.minor, moneda)}</span>
+                    <span className="tabular txt-3 text-xs w-10 text-right shrink-0">
+                      {resumen.gastoMinor > 0 ? Math.round((d.minor / resumen.gastoMinor) * 100) : 0}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Tarjeta>
+          )}
+
+          <Tarjeta>
+            <h2 className="font-semibold txt mb-3">Ultimos 6 meses</h2>
+            <div className="h-52">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={tendencia} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
+                  <XAxis
+                    dataKey="mes"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 11, fill: 'var(--texto-3)' }}
+                  />
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fontSize: 10, fill: 'var(--texto-3)' }}
+                    tickFormatter={(v: number) =>
+                      new Intl.NumberFormat('en-US', { notation: 'compact' }).format(v)}
+                  />
+                  <Tooltip
+                    formatter={(v) => formatearEje(v, moneda, decimales)}
+                    contentStyle={{
+                      background: 'var(--superficie)',
+                      border: '1px solid var(--borde)',
+                      borderRadius: 12,
+                      color: 'var(--texto)',
+                    }}
+                    cursor={{ fill: 'var(--superficie-2)' }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="Ingresos" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={28} />
+                  <Bar dataKey="Gastos" fill="#ef4444" radius={[6, 6, 0, 0]} maxBarSize={28} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Tarjeta>
+
+          {members.length > 1 && (
+            <Tarjeta>
+              <h2 className="font-semibold txt mb-3">Comparativa</h2>
+              <div className="space-y-3">
+                {personas.map(({ member, resumen: r }) => (
+                  <div key={member.id} className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: member.color }} />
+                      <span className="txt truncate">{member.displayName}</span>
+                    </div>
+                    <div className="flex gap-4 shrink-0 tabular">
+                      <span className="text-marca-600 dark:text-marca-500">
+                        +{formatMonto(r.ingresoMinor, moneda, { compacto: true })}
+                      </span>
+                      <span className="text-red-500">
+                        -{formatMonto(r.gastoMinor, moneda, { compacto: true })}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Tarjeta>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

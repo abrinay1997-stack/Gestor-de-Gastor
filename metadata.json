@@ -1,6 +1,0 @@
-{
-  "name": "Finanzas Familiares",
-  "description": "Una app colaborativa para finanzas en pareja, integrada con Google Sheets y AI.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

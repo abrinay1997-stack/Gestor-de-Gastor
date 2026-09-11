@@ -1,0 +1,353 @@
+/**
+ * Cuentas, categorias, jarras y presupuestos.
+ */
+
+import type { Sesion } from '../auth.ts';
+import {
+  aBudget, aCategory, cuentaPorId, listarCategorias, listarCuentas,
+  listarJarras, listarPresupuestos, snapshot,
+} from '../db.ts';
+import type { Env } from '../env.ts';
+import {
+  ahora, booleano, color, cuerpo, difundir, entero, error, idOpcional,
+  json, nuevoId, periodo, texto, unoDe,
+} from '../http.ts';
+import { AccountCategory, type Jar } from '../../shared/types.ts';
+import { validarJarras } from '../../shared/domain.ts';
+
+const CATEGORIAS_CUENTA = Object.values(AccountCategory);
+
+// --- snapshot ------------------------------------------------------------
+
+export async function traerTodo(_req: Request, env: Env, sesion: Sesion): Promise<Response> {
+  const snap = await snapshot(env, sesion.householdId, sesion.memberId);
+  if (!snap) return error('No se encontro el hogar', 404);
+  return json(snap);
+}
+
+// --- cuentas -------------------------------------------------------------
+
+export async function crearCuenta(req: Request, env: Env, sesion: Sesion): Promise<Response> {
+  const body = await cuerpo(req);
+
+  const name = texto(body.name, 'name', { max: 60, min: 1 });
+  const category = unoDe(body.category, CATEGORIAS_CUENTA, 'category');
+  const currency = texto(body.currency ?? 'USD', 'currency', { max: 3, min: 3 }).toUpperCase();
+  const initialBalanceMinor = entero(body.initialBalanceMinor ?? 0, 'initialBalanceMinor', {
+    min: -999_999_999_999, max: 999_999_999_999,
+  });
+  const owner = texto(body.owner ?? 'compartida', 'owner', { max: 64, min: 1 });
+
+  // El dueño es 'compartida' o una persona real del hogar.
+  if (owner !== 'compartida') {
+    const m = await env.DB.prepare('SELECT id FROM member WHERE id = ?1 AND household_id = ?2')
+      .bind(owner, sesion.householdId).first();
+    if (!m) return error('El dueño de la cuenta no pertenece al hogar', 400);
+  }
+
+  const t = ahora();
+  const id = idOpcional(body.id, 'id') ?? nuevoId();
+
+  await env.DB.prepare(
+    `INSERT INTO account (id, household_id, name, category, currency, initial_balance_minor,
+                          color, icon, owner, archived, display_order, created_at, updated_at)
+     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,0,?10,?11,?11)`,
+  ).bind(
+    id, sesion.householdId, name, category, currency, initialBalanceMinor,
+    color(body.color, '#10b981'), texto(body.icon ?? 'wallet', 'icon', { max: 40 }),
+    owner, entero(body.displayOrder ?? 0, 'displayOrder', { min: 0, max: 9999 }), t,
+  ).run();
+
+  const account = await cuentaPorId(env, sesion.householdId, id);
+  if (!account) return error('No se pudo crear la cuenta', 500);
+
+  await difundir(env, sesion.householdId, { kind: 'account:upsert', account, by: sesion.memberId });
+  return json({ account }, { status: 201 });
+}
+
+export async function editarCuenta(
+  req: Request, env: Env, sesion: Sesion, id: string,
+): Promise<Response> {
+  const existente = await cuentaPorId(env, sesion.householdId, id);
+  if (!existente) return error('La cuenta no existe', 404);
+
+  const body = await cuerpo(req);
+
+  const name = texto(body.name ?? existente.name, 'name', { max: 60, min: 1 });
+  const category = unoDe(body.category ?? existente.category, CATEGORIAS_CUENTA, 'category');
+  const initialBalanceMinor = entero(
+    body.initialBalanceMinor ?? existente.initialBalanceMinor, 'initialBalanceMinor',
+    { min: -999_999_999_999, max: 999_999_999_999 },
+  );
+  const owner = texto(body.owner ?? existente.owner, 'owner', { max: 64, min: 1 });
+
+  if (owner !== 'compartida') {
+    const m = await env.DB.prepare('SELECT id FROM member WHERE id = ?1 AND household_id = ?2')
+      .bind(owner, sesion.householdId).first();
+    if (!m) return error('El dueño de la cuenta no pertenece al hogar', 400);
+  }
+
+  await env.DB.prepare(
+    `UPDATE account SET name=?1, category=?2, initial_balance_minor=?3, color=?4,
+                        icon=?5, owner=?6, archived=?7, display_order=?8, updated_at=?9
+     WHERE id=?10 AND household_id=?11`,
+  ).bind(
+    name, category, initialBalanceMinor, color(body.color, existente.color),
+    texto(body.icon ?? existente.icon, 'icon', { max: 40 }), owner,
+    booleano(body.archived ?? existente.archived) ? 1 : 0,
+    entero(body.displayOrder ?? existente.displayOrder, 'displayOrder', { min: 0, max: 9999 }),
+    ahora(), id, sesion.householdId,
+  ).run();
+
+  const account = await cuentaPorId(env, sesion.householdId, id);
+  if (!account) return error('No se pudo actualizar la cuenta', 500);
+
+  await difundir(env, sesion.householdId, { kind: 'account:upsert', account, by: sesion.memberId });
+  return json({ account });
+}
+
+/**
+ * Borrar una cuenta se lleva sus movimientos por delante (ON DELETE CASCADE).
+ * Por eso hay que pedirlo explicitamente: por defecto se archiva, que conserva
+ * el historial y la saca de las pantallas.
+ */
+export async function borrarCuenta(
+  req: Request, env: Env, sesion: Sesion, id: string,
+): Promise<Response> {
+  const url = new URL(req.url);
+  const definitivo = url.searchParams.get('purge') === '1';
+
+  const cuenta = await cuentaPorId(env, sesion.householdId, id);
+  if (!cuenta) return error('La cuenta no existe', 404);
+
+  if (!definitivo) {
+    await env.DB.prepare('UPDATE account SET archived = 1, updated_at = ?1 WHERE id = ?2 AND household_id = ?3')
+      .bind(ahora(), id, sesion.householdId).run();
+
+    const account = await cuentaPorId(env, sesion.householdId, id);
+    if (account) {
+      await difundir(env, sesion.householdId, { kind: 'account:upsert', account, by: sesion.memberId });
+    }
+    return json({ ok: true, archivada: true, account });
+  }
+
+  const { total } = await env.DB.prepare(
+    'SELECT COUNT(*) AS total FROM tx WHERE account_id = ?1 OR dest_account_id = ?1',
+  ).bind(id).first<{ total: number }>() ?? { total: 0 };
+
+  await env.DB.prepare('DELETE FROM account WHERE id = ?1 AND household_id = ?2')
+    .bind(id, sesion.householdId).run();
+
+  await difundir(env, sesion.householdId, { kind: 'account:delete', id, by: sesion.memberId });
+  return json({ ok: true, archivada: false, movimientosBorrados: total });
+}
+
+// --- categorias ----------------------------------------------------------
+
+export async function crearCategoria(req: Request, env: Env, sesion: Sesion): Promise<Response> {
+  const body = await cuerpo(req);
+
+  const name = texto(body.name, 'name', { max: 60, min: 1 });
+  const type = unoDe(body.type, ['ingreso', 'gasto'] as const, 'type');
+  const parentId = idOpcional(body.parentId, 'parentId');
+
+  if (parentId) {
+    const padre = await env.DB.prepare(
+      'SELECT id, type, parent_id FROM category WHERE id = ?1 AND household_id = ?2',
+    ).bind(parentId, sesion.householdId).first<{ type: string; parent_id: string | null }>();
+
+    if (!padre) return error('La categoria padre no existe', 404);
+    if (padre.type !== type) return error('La subcategoria debe ser del mismo tipo que su padre', 400);
+    // Dos niveles y nada mas, como ezBookkeeping. Sin esto se arma un arbol
+    // que ninguna pantalla sabe dibujar.
+    if (padre.parent_id) return error('Solo se admiten dos niveles de categoria', 400);
+  }
+
+  const t = ahora();
+  const id = idOpcional(body.id, 'id') ?? nuevoId();
+
+  await env.DB.prepare(
+    `INSERT INTO category (id, household_id, name, type, parent_id, icon, color, archived, display_order, created_at)
+     VALUES (?1,?2,?3,?4,?5,?6,?7,0,?8,?9)`,
+  ).bind(
+    id, sesion.householdId, name, type, parentId,
+    texto(body.icon ?? 'tag', 'icon', { max: 40 }), color(body.color, '#64748b'),
+    entero(body.displayOrder ?? 0, 'displayOrder', { min: 0, max: 9999 }), t,
+  ).run();
+
+  const fila = await env.DB.prepare('SELECT * FROM category WHERE id = ?1').bind(id)
+    .first<Record<string, unknown>>();
+  if (!fila) return error('No se pudo crear la categoria', 500);
+
+  const category = aCategory(fila);
+  await difundir(env, sesion.householdId, { kind: 'category:upsert', category, by: sesion.memberId });
+  return json({ category }, { status: 201 });
+}
+
+export async function editarCategoria(
+  req: Request, env: Env, sesion: Sesion, id: string,
+): Promise<Response> {
+  const fila0 = await env.DB.prepare('SELECT * FROM category WHERE id = ?1 AND household_id = ?2')
+    .bind(id, sesion.householdId).first<Record<string, unknown>>();
+  if (!fila0) return error('La categoria no existe', 404);
+
+  const actual = aCategory(fila0);
+  const body = await cuerpo(req);
+
+  await env.DB.prepare(
+    `UPDATE category SET name=?1, icon=?2, color=?3, archived=?4, display_order=?5
+     WHERE id=?6 AND household_id=?7`,
+  ).bind(
+    texto(body.name ?? actual.name, 'name', { max: 60, min: 1 }),
+    texto(body.icon ?? actual.icon, 'icon', { max: 40 }),
+    color(body.color, actual.color),
+    booleano(body.archived ?? actual.archived) ? 1 : 0,
+    entero(body.displayOrder ?? actual.displayOrder, 'displayOrder', { min: 0, max: 9999 }),
+    id, sesion.householdId,
+  ).run();
+
+  const fila = await env.DB.prepare('SELECT * FROM category WHERE id = ?1').bind(id)
+    .first<Record<string, unknown>>();
+  if (!fila) return error('No se pudo actualizar', 500);
+
+  const category = aCategory(fila);
+  await difundir(env, sesion.householdId, { kind: 'category:upsert', category, by: sesion.memberId });
+  return json({ category });
+}
+
+// --- jarras --------------------------------------------------------------
+
+/**
+ * Las jarras se guardan todas juntas, no de a una.
+ *
+ * El motivo es que los porcentajes tienen que sumar 100% para que el reparto
+ * de un ingreso tenga sentido. Si se pudieran editar sueltas, entre una
+ * escritura y otra el hogar quedaria con un reparto invalido. Mandando el
+ * conjunto entero se valida una vez y se escribe en una transaccion.
+ */
+export async function guardarJarras(req: Request, env: Env, sesion: Sesion): Promise<Response> {
+  const body = await cuerpo(req);
+  const items = Array.isArray(body.jars) ? body.jars : null;
+  if (!items) return error('Se esperaba la lista completa de jarras', 400);
+  if (items.length > 20) return error('Como maximo 20 jarras', 400);
+
+  const jarras: Jar[] = [];
+  const t = ahora();
+
+  for (const [i, item] of items.entries()) {
+    if (typeof item !== 'object' || item === null) return error(`La jarra ${i + 1} es invalida`, 400);
+    const o = item as Record<string, unknown>;
+
+    jarras.push({
+      id: idOpcional(o.id, 'id') ?? nuevoId(),
+      householdId: sesion.householdId,
+      name: texto(o.name, 'name', { max: 60, min: 1 }),
+      percentageBp: entero(o.percentageBp, 'percentageBp', { min: 0, max: 10_000 }),
+      color: color(o.color, '#10b981'),
+      icon: texto(o.icon ?? 'piggy-bank', 'icon', { max: 40 }),
+      displayOrder: i,
+      createdAt: t,
+      balanceMinor: 0,
+    });
+  }
+
+  if (jarras.length > 0) {
+    const { ok, sumaBp } = validarJarras(jarras);
+    if (!ok) {
+      return error(
+        `Los porcentajes deben sumar 100%. Ahora suman ${(sumaBp / 100).toFixed(2)}%.`,
+        400,
+      );
+    }
+  }
+
+  // Se borran las que ya no estan y se reescriben las demas, todo en un batch.
+  // Los movimientos que apuntaban a una jarra borrada quedan con jar_id NULL
+  // (ON DELETE SET NULL): se pierde la imputacion, no el movimiento.
+  const ids = jarras.map((j) => j.id);
+  const marcadores = ids.map((_, i) => `?${i + 2}`).join(',');
+
+  const sentencias = [
+    ids.length > 0
+      ? env.DB.prepare(`DELETE FROM jar WHERE household_id = ?1 AND id NOT IN (${marcadores})`)
+        .bind(sesion.householdId, ...ids)
+      : env.DB.prepare('DELETE FROM jar WHERE household_id = ?1').bind(sesion.householdId),
+    ...jarras.map((j) =>
+      env.DB.prepare(
+        `INSERT INTO jar (id, household_id, name, percentage_bp, color, icon, display_order, created_at)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8)
+         ON CONFLICT(id) DO UPDATE SET
+           name=excluded.name, percentage_bp=excluded.percentage_bp,
+           color=excluded.color, icon=excluded.icon, display_order=excluded.display_order`,
+      ).bind(j.id, sesion.householdId, j.name, j.percentageBp, j.color, j.icon, j.displayOrder, j.createdAt),
+    ),
+  ];
+
+  await env.DB.batch(sentencias);
+
+  const jars = await listarJarras(env, sesion.householdId);
+  for (const jar of jars) {
+    await difundir(env, sesion.householdId, { kind: 'jar:upsert', jar, by: sesion.memberId });
+  }
+  return json({ jars });
+}
+
+// --- presupuestos --------------------------------------------------------
+
+export async function guardarPresupuesto(req: Request, env: Env, sesion: Sesion): Promise<Response> {
+  const body = await cuerpo(req);
+
+  const categoryId = idOpcional(body.categoryId, 'categoryId');
+  const amountMinor = entero(body.amountMinor, 'amountMinor', { min: 0, max: 999_999_999_999 });
+  const period = periodo(body.period, 'period');
+
+  if (categoryId) {
+    const cat = await env.DB.prepare('SELECT id FROM category WHERE id = ?1 AND household_id = ?2')
+      .bind(categoryId, sesion.householdId).first();
+    if (!cat) return error('La categoria no existe', 404);
+  }
+
+  const t = ahora();
+  const id = idOpcional(body.id, 'id') ?? nuevoId();
+
+  // El indice unico (hogar, periodo, categoria) hace que volver a guardar el
+  // mismo presupuesto lo actualice en lugar de duplicarlo.
+  await env.DB.prepare(
+    `INSERT INTO budget (id, household_id, category_id, amount_minor, period, created_at, updated_at)
+     VALUES (?1,?2,?3,?4,?5,?6,?6)
+     ON CONFLICT(household_id, period, IFNULL(category_id, '')) DO UPDATE SET
+       amount_minor = excluded.amount_minor, updated_at = excluded.updated_at`,
+  ).bind(id, sesion.householdId, categoryId, amountMinor, period, t).run();
+
+  const fila = await env.DB.prepare(
+    `SELECT * FROM budget WHERE household_id = ?1 AND period = ?2 AND IFNULL(category_id,'') = ?3`,
+  ).bind(sesion.householdId, period, categoryId ?? '').first<Record<string, unknown>>();
+  if (!fila) return error('No se pudo guardar el presupuesto', 500);
+
+  const budget = aBudget(fila);
+  await difundir(env, sesion.householdId, { kind: 'budget:upsert', budget, by: sesion.memberId });
+  return json({ budget });
+}
+
+export async function borrarPresupuesto(
+  _req: Request, env: Env, sesion: Sesion, id: string,
+): Promise<Response> {
+  const { meta } = await env.DB.prepare('DELETE FROM budget WHERE id = ?1 AND household_id = ?2')
+    .bind(id, sesion.householdId).run();
+  if (!meta.changes) return error('El presupuesto no existe', 404);
+  return json({ ok: true });
+}
+
+// --- listados sueltos ----------------------------------------------------
+
+export const listarCuentasRuta = async (_r: Request, env: Env, s: Sesion) =>
+  json({ accounts: await listarCuentas(env, s.householdId) });
+
+export const listarCategoriasRuta = async (_r: Request, env: Env, s: Sesion) =>
+  json({ categories: await listarCategorias(env, s.householdId) });
+
+export const listarJarrasRuta = async (_r: Request, env: Env, s: Sesion) =>
+  json({ jars: await listarJarras(env, s.householdId) });
+
+export const listarPresupuestosRuta = async (_r: Request, env: Env, s: Sesion) =>
+  json({ budgets: await listarPresupuestos(env, s.householdId) });

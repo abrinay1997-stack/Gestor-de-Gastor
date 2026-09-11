@@ -1,0 +1,29 @@
+name = "gestor-de-gastos"
+main = "worker/index.ts"
+compatibility_date = "2025-01-15"
+compatibility_flags = ["nodejs_compat"]
+
+# El frontend compilado se sirve desde el mismo Worker.
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+# Base de datos SQLite en el borde.
+[[d1_databases]]
+binding = "DB"
+database_name = "gastos-db"
+database_id = "REEMPLAZAR_CON_TU_DATABASE_ID"
+
+# Un Durable Object por hogar: mantiene los WebSockets y reparte
+# cada cambio a los dos telefonos al instante.
+[[durable_objects.bindings]]
+name = "HUB"
+class_name = "HouseholdHub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["HouseholdHub"]
+
+[observability]
+enabled = true
