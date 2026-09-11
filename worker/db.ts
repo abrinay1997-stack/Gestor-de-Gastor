@@ -16,8 +16,10 @@
  */
 
 import type {
-  Account, Budget, Category, Household, Jar, Member, Snapshot, Transaction,
+  Account, Budget, Category, Household, Jar, Member, Recurring, SeccionInicio,
+  Snapshot, Transaction,
 } from '../shared/types.ts';
+import { SECCIONES_INICIO } from '../shared/types.ts';
 import type { AccountCategory, TxType } from '../shared/types.ts';
 import { calcularJarras } from '../shared/domain.ts';
 import type { Env } from './env.ts';
@@ -90,6 +92,8 @@ export const aTransaction = (f: Fila): Transaction => ({
   notes: strOpt(f.notes),
   date: int(f.date),
   createdBy: str(f.created_by),
+  paidBy: strOpt(f.paid_by),
+  recurringId: strOpt(f.recurring_id),
   createdAt: int(f.created_at),
   updatedAt: int(f.updated_at),
 });
@@ -110,7 +114,51 @@ export const aMember = (f: Fila): Member => ({
   email: str(f.email),
   displayName: str(f.display_name),
   color: str(f.color),
+  emoji: str(f.emoji),
+  homeLayout: aSecciones(f.home_layout),
   createdAt: int(f.created_at),
+});
+
+/**
+ * El orden del Inicio se guarda como JSON en una columna de texto.
+ *
+ * Se filtra contra la lista conocida en vez de confiar en lo guardado: si
+ * algun dia se renombra o se quita una seccion, los ordenes viejos siguen
+ * siendo utiles en lugar de romper la pantalla con una seccion fantasma.
+ */
+function aSecciones(v: unknown): SeccionInicio[] {
+  if (typeof v !== 'string' || v === '') return [];
+  try {
+    const datos = JSON.parse(v);
+    if (!Array.isArray(datos)) return [];
+    return datos.filter((x): x is SeccionInicio =>
+      typeof x === 'string' && (SECCIONES_INICIO as readonly string[]).includes(x));
+  } catch {
+    return [];
+  }
+}
+
+export const aRecurring = (f: Fila): Recurring => ({
+  id: str(f.id),
+  householdId: str(f.household_id),
+  name: str(f.name),
+  type: int(f.type) as TxType,
+  amountMinor: int(f.amount_minor),
+  accountId: str(f.account_id),
+  categoryId: strOpt(f.category_id),
+  jarId: strOpt(f.jar_id),
+  paidBy: strOpt(f.paid_by),
+  frequency: (['semanal', 'mensual', 'anual'] as const).includes(f.frequency as 'mensual')
+    ? (f.frequency as 'semanal' | 'mensual' | 'anual')
+    : 'mensual',
+  dayOfMonth: f.day_of_month === null || f.day_of_month === undefined ? null : int(f.day_of_month),
+  dayOfWeek: f.day_of_week === null || f.day_of_week === undefined ? null : int(f.day_of_week),
+  monthOfYear: f.month_of_year === null || f.month_of_year === undefined ? null : int(f.month_of_year),
+  active: bool(f.active),
+  nextRun: int(f.next_run),
+  lastRun: f.last_run === null || f.last_run === undefined ? null : int(f.last_run),
+  createdAt: int(f.created_at),
+  updatedAt: int(f.updated_at),
 });
 
 export const aHousehold = (f: Fila): Household => ({
@@ -171,6 +219,21 @@ export async function listarCategorias(env: Env, householdId: string): Promise<C
       ORDER BY archived ASC, type ASC, display_order ASC, created_at ASC`,
   ).bind(householdId).all<Fila>();
   return results.map(aCategory);
+}
+
+export async function listarRecurrentes(env: Env, householdId: string): Promise<Recurring[]> {
+  const { results } = await env.DB.prepare(
+    'SELECT * FROM recurring WHERE household_id = ?1 ORDER BY active DESC, next_run ASC',
+  ).bind(householdId).all<Fila>();
+  return results.map(aRecurring);
+}
+
+export async function recurrentePorId(
+  env: Env, householdId: string, id: string,
+): Promise<Recurring | null> {
+  const fila = await env.DB.prepare('SELECT * FROM recurring WHERE household_id = ?1 AND id = ?2')
+    .bind(householdId, id).first<Fila>();
+  return fila ? aRecurring(fila) : null;
 }
 
 export async function listarPresupuestos(env: Env, householdId: string): Promise<Budget[]> {
@@ -251,12 +314,13 @@ export async function snapshot(
     .bind(householdId).first<Fila>();
   if (!filaHogar) return null;
 
-  const [accounts, categories, budgets, members, transactions] = await Promise.all([
+  const [accounts, categories, budgets, members, transactions, recurring] = await Promise.all([
     listarCuentas(env, householdId),
     listarCategorias(env, householdId),
     listarPresupuestos(env, householdId),
     listarMiembros(env, householdId),
     listarMovimientos(env, householdId),
+    listarRecurrentes(env, householdId),
   ]);
 
   // Se reusan los movimientos ya traidos en vez de volver a consultarlos.
@@ -267,6 +331,6 @@ export async function snapshot(
 
   return {
     household: aHousehold(filaHogar),
-    members, me, accounts, categories, jars, budgets, transactions,
+    members, me, accounts, categories, jars, budgets, transactions, recurring,
   };
 }

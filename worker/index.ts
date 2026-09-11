@@ -12,7 +12,9 @@ import type { Env } from './env.ts';
 import { ErrorValidacion, error, json } from './http.ts';
 import * as auth from './routes/auth.ts';
 import * as data from './routes/data.ts';
+import * as recurring from './routes/recurring.ts';
 import * as tx from './routes/transactions.ts';
+import { correrPagosHabituales } from './cron.ts';
 
 export { HouseholdHub } from './hub.ts';
 
@@ -31,6 +33,8 @@ const RUTAS: Record<string, Partial<Record<string, Handler>>> = {
   '/api/budgets': { GET: data.listarPresupuestosRuta, PUT: data.guardarPresupuesto },
   '/api/transactions': { GET: tx.listar, POST: tx.crear },
   '/api/transactions/batch': { POST: tx.crearLote },
+  '/api/profile': { PUT: data.editarPerfil },
+  '/api/recurring': { GET: recurring.listar, POST: recurring.crear },
 };
 
 /** Rutas con un id al final: /api/algo/:id */
@@ -39,9 +43,29 @@ const RUTAS_CON_ID: { prefijo: string; metodos: Partial<Record<string, HandlerCo
   { prefijo: '/api/accounts/', metodos: { PUT: data.editarCuenta, DELETE: data.borrarCuenta } },
   { prefijo: '/api/categories/', metodos: { PUT: data.editarCategoria } },
   { prefijo: '/api/budgets/', metodos: { DELETE: data.borrarPresupuesto } },
+  { prefijo: '/api/recurring/', metodos: { PUT: recurring.editar, DELETE: recurring.borrar } },
 ];
 
 export default {
+  /**
+   * Disparador programado: carga los pagos habituales que vencieron.
+   *
+   * Corre una vez por dia (ver [triggers] en wrangler.toml). No depende de que
+   * alguien abra la app, y es idempotente: si corre dos veces el mismo dia, la
+   * segunda no encuentra nada vencido.
+   */
+  async scheduled(_evento: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(
+      correrPagosHabituales(env)
+        .then(({ creados, hogares }) => {
+          if (creados > 0) {
+            console.log(`Pagos habituales: ${creados} movimiento(s) en ${hogares.length} hogar(es)`);
+          }
+        })
+        .catch((e) => console.error('Fallo el disparador de pagos habituales', e)),
+    );
+  },
+
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
 

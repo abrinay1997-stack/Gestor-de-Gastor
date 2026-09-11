@@ -38,5 +38,11 @@ class_name = "HouseholdHub"
 tag = "v1"
 new_sqlite_classes = ["HouseholdHub"]
 
+# Disparador programado de los pagos habituales.
+# Todos los dias a las 09:00 UTC, que en Argentina son las 06:00: los
+# movimientos del dia ya estan cuando cualquiera de los dos abre la app.
+[triggers]
+crons = ["0 9 * * *"]
+
 [observability]
 enabled = true

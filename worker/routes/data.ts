@@ -4,7 +4,7 @@
 
 import type { Sesion } from '../auth.ts';
 import {
-  aBudget, aCategory, cuentaPorId, listarCategorias, listarCuentas,
+  aBudget, aCategory, aMember, cuentaPorId, listarCategorias, listarCuentas,
   listarJarras, listarPresupuestos, snapshot,
 } from '../db.ts';
 import type { Env } from '../env.ts';
@@ -12,7 +12,7 @@ import {
   ahora, booleano, color, cuerpo, difundir, entero, error, idOpcional,
   json, nuevoId, periodo, texto, unoDe,
 } from '../http.ts';
-import { AccountCategory, type Jar } from '../../shared/types.ts';
+import { AccountCategory, SECCIONES_INICIO, type Jar } from '../../shared/types.ts';
 import { validarJarras } from '../../shared/domain.ts';
 
 const CATEGORIAS_CUENTA = Object.values(AccountCategory);
@@ -335,7 +335,60 @@ export async function borrarPresupuesto(
   const { meta } = await env.DB.prepare('DELETE FROM budget WHERE id = ?1 AND household_id = ?2')
     .bind(id, sesion.householdId).run();
   if (!meta.changes) return error('El presupuesto no existe', 404);
+
+  await difundir(env, sesion.householdId, { kind: 'budget:delete', id, by: sesion.memberId });
   return json({ ok: true });
+}
+
+// --- perfil de la persona ------------------------------------------------
+
+/**
+ * Cada quien edita SU perfil, nunca el del otro: el id sale de la sesion, no
+ * del cuerpo de la peticion. Asi no hace falta comprobar permisos.
+ */
+export async function editarPerfil(req: Request, env: Env, sesion: Sesion): Promise<Response> {
+  const body = await cuerpo(req);
+
+  const fila0 = await env.DB.prepare('SELECT * FROM member WHERE id = ?1')
+    .bind(sesion.memberId).first<Record<string, unknown>>();
+  if (!fila0) return error('No encontrado', 404);
+  const actual = aMember(fila0);
+
+  const displayName = texto(body.displayName ?? actual.displayName, 'displayName', { max: 60, min: 1 });
+  const nuevoColor = color(body.color, actual.color);
+
+  // Un emoji puede ocupar varios caracteres (una bandera son dos, y los que
+  // llevan tono de piel o genero mas todavia), asi que el limite va en bytes
+  // generoso y no en longitud de cadena.
+  const emoji = body.emoji === undefined
+    ? actual.emoji
+    : texto(body.emoji ?? '', 'emoji', { max: 24 });
+
+  // El orden del Inicio se guarda filtrado contra las secciones que existen,
+  // para que un cliente viejo o manipulado no meta nombres inventados.
+  let homeLayout = actual.homeLayout;
+  if (body.homeLayout !== undefined) {
+    if (!Array.isArray(body.homeLayout)) return error('homeLayout debe ser una lista', 400);
+    const validas = new Set<string>(SECCIONES_INICIO);
+    homeLayout = [...new Set(body.homeLayout.filter((x): x is string =>
+      typeof x === 'string' && validas.has(x)))] as typeof actual.homeLayout;
+  }
+
+  await env.DB.prepare(
+    'UPDATE member SET display_name = ?1, color = ?2, emoji = ?3, home_layout = ?4 WHERE id = ?5',
+  ).bind(
+    displayName, nuevoColor, emoji,
+    homeLayout.length > 0 ? JSON.stringify(homeLayout) : '',
+    sesion.memberId,
+  ).run();
+
+  const fila = await env.DB.prepare('SELECT * FROM member WHERE id = ?1')
+    .bind(sesion.memberId).first<Record<string, unknown>>();
+  if (!fila) return error('No se pudo actualizar', 500);
+
+  const member = aMember(fila);
+  await difundir(env, sesion.householdId, { kind: 'member:upsert', member, by: sesion.memberId });
+  return json({ member });
 }
 
 // --- listados sueltos ----------------------------------------------------

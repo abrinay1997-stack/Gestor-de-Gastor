@@ -32,6 +32,7 @@ interface Validado {
   description: string;
   notes: string | null;
   date: number;
+  paidBy: string | null;
 }
 
 async function validar(
@@ -92,9 +93,17 @@ async function validar(
 
   const date = entero(body.date, 'date', { min: 0, max: 4_102_444_800_000 });
 
+  // Quien hizo el gasto, que puede no ser quien lo esta cargando.
+  const paidBy = idOpcional(body.paidBy, 'paidBy');
+  if (paidBy) {
+    const m = await env.DB.prepare('SELECT id FROM member WHERE id = ?1 AND household_id = ?2')
+      .bind(paidBy, householdId).first();
+    if (!m) return error('Esa persona no pertenece al hogar', 400);
+  }
+
   return {
     type, amountMinor, accountId, destAccountId, destAmountMinor, categoryId,
-    jarId, distributeToJars,
+    jarId, distributeToJars, paidBy,
     description: texto(body.description ?? '', 'description', { max: 200 }),
     notes: textoOpcional(body.notes, 'notes', 2000),
     date,
@@ -125,12 +134,12 @@ export async function crear(req: Request, env: Env, sesion: Sesion): Promise<Res
   await env.DB.prepare(
     `INSERT INTO tx (id, household_id, type, amount_minor, account_id, dest_account_id,
                      dest_amount_minor, category_id, jar_id, distribute_to_jars,
-                     description, notes, date, created_by, created_at, updated_at)
-     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?15)`,
+                     description, notes, date, created_by, paid_by, created_at, updated_at)
+     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?16)`,
   ).bind(
     id, sesion.householdId, v.type, v.amountMinor, v.accountId, v.destAccountId,
     v.destAmountMinor, v.categoryId, v.jarId, v.distributeToJars ? 1 : 0,
-    v.description, v.notes, v.date, sesion.memberId, t,
+    v.description, v.notes, v.date, sesion.memberId, v.paidBy, t,
   ).run();
 
   const tx = await movimientoPorId(env, sesion.householdId, id);
@@ -153,12 +162,12 @@ export async function editar(
   await env.DB.prepare(
     `UPDATE tx SET type=?1, amount_minor=?2, account_id=?3, dest_account_id=?4,
                    dest_amount_minor=?5, category_id=?6, jar_id=?7, distribute_to_jars=?8,
-                   description=?9, notes=?10, date=?11, updated_at=?12
-     WHERE id=?13 AND household_id=?14`,
+                   description=?9, notes=?10, date=?11, paid_by=?12, updated_at=?13
+     WHERE id=?14 AND household_id=?15`,
   ).bind(
     v.type, v.amountMinor, v.accountId, v.destAccountId, v.destAmountMinor,
     v.categoryId, v.jarId, v.distributeToJars ? 1 : 0, v.description, v.notes,
-    v.date, ahora(), id, sesion.householdId,
+    v.date, v.paidBy, ahora(), id, sesion.householdId,
   ).run();
 
   const tx = await movimientoPorId(env, sesion.householdId, id);
@@ -226,12 +235,12 @@ export async function crearLote(req: Request, env: Env, sesion: Sesion): Promise
     await env.DB.prepare(
       `INSERT OR IGNORE INTO tx (id, household_id, type, amount_minor, account_id, dest_account_id,
                       dest_amount_minor, category_id, jar_id, distribute_to_jars,
-                      description, notes, date, created_by, created_at, updated_at)
-       VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?15)`,
+                      description, notes, date, created_by, paid_by, created_at, updated_at)
+       VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?16)`,
     ).bind(
       id, sesion.householdId, v.type, v.amountMinor, v.accountId, v.destAccountId,
       v.destAmountMinor, v.categoryId, v.jarId, v.distributeToJars ? 1 : 0,
-      v.description, v.notes, v.date, sesion.memberId, t,
+      v.description, v.notes, v.date, sesion.memberId, v.paidBy, t,
     ).run();
 
     const fila = await env.DB.prepare('SELECT * FROM tx WHERE id = ?1').bind(id).first<Record<string, unknown>>();

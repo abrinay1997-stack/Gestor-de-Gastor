@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { formatMonto, parseMonto, repartir } from './money.ts';
 import {
-  balanceDePareja, calcularJarras, calcularPatrimonio, calcularSaldos,
-  efectoEnCuenta, resumir, validarJarras,
+  autorDe, balancePorMes, calcularJarras, calcularPatrimonio, calcularSaldos,
+  efectoEnCuenta, porPersona, resumir, validarJarras,
 } from './domain.ts';
 import { leer } from './parser.ts';
 import {
@@ -16,7 +16,8 @@ const tx = (p: Partial<Transaction>): Transaction => ({
   id: crypto.randomUUID(), householdId: 'h', type: TxType.GASTO, amountMinor: 0,
   accountId: 'a1', destAccountId: null, destAmountMinor: null, categoryId: null,
   jarId: null, distributeToJars: false, description: '', notes: null,
-  date: Date.now(), createdBy: 'u1', createdAt: 0, updatedAt: 0, ...p,
+  date: Date.now(), createdBy: 'u1', paidBy: null, recurringId: null,
+  createdAt: 0, updatedAt: 0, ...p,
 });
 
 const cuenta = (p: Partial<Account>): Account => ({
@@ -264,34 +265,49 @@ describe('resumir', () => {
   });
 });
 
-describe('balanceDePareja', () => {
-  const ana: Member = { id: 'u1', householdId: 'h', email: 'a@a', displayName: 'Ana', color: '#f00', createdAt: 0 };
-  const beto: Member = { id: 'u2', householdId: 'h', email: 'b@b', displayName: 'Beto', color: '#00f', createdAt: 0 };
-  const compartida = [cuenta({ id: 'a1', owner: 'compartida' })];
-
-  it('calcula quien le debe a quien', () => {
-    const movs = [
-      tx({ type: TxType.GASTO, amountMinor: 100_00, createdBy: 'u1' }),
-      tx({ type: TxType.GASTO, amountMinor: 60_00, createdBy: 'u2' }),
-    ];
-    // Ana puso 100, Beto 60. Cada uno deberia poner 80 -> Beto le debe 20.
-    expect(balanceDePareja(movs, compartida, [ana, beto])).toEqual({
-      deudor: beto, acreedor: ana, montoMinor: 20_00,
-    });
+describe('autorDe', () => {
+  it('usa quien lo cargo si no se dijo quien gasto', () => {
+    expect(autorDe(tx({ createdBy: 'u1', paidBy: null }))).toBe('u1');
   });
 
-  it('devuelve null si estan a mano', () => {
-    const movs = [
-      tx({ type: TxType.GASTO, amountMinor: 50_00, createdBy: 'u1' }),
-      tx({ type: TxType.GASTO, amountMinor: 50_00, createdBy: 'u2' }),
-    ];
-    expect(balanceDePareja(movs, compartida, [ana, beto])).toBeNull();
+  it('quien gasto le gana a quien lo cargo', () => {
+    // Uno anota la compra que hizo el otro: cuenta para el que gasto.
+    expect(autorDe(tx({ createdBy: 'u1', paidBy: 'u2' }))).toBe('u2');
   });
+});
 
-  it('ignora gastos en cuentas personales', () => {
-    const cuentas = [cuenta({ id: 'a1', owner: 'u1' })];
-    const movs = [tx({ type: TxType.GASTO, amountMinor: 100_00, createdBy: 'u1' })];
-    expect(balanceDePareja(movs, cuentas, [ana, beto])).toBeNull();
+describe('porPersona', () => {
+  const ana: Member = { id: 'u1', householdId: 'h', email: 'a@a', displayName: 'Ana', color: '#f00', emoji: '', homeLayout: [], createdAt: 0 };
+  const beto: Member = { id: 'u2', householdId: 'h', email: 'b@b', displayName: 'Beto', color: '#00f', emoji: '', homeLayout: [], createdAt: 0 };
+
+  it('atribuye a quien gasto, no a quien cargo', () => {
+    const movs = [
+      // Ana carga un gasto que hizo Beto.
+      tx({ type: TxType.GASTO, amountMinor: 10_000, createdBy: 'u1', paidBy: 'u2' }),
+      tx({ type: TxType.GASTO, amountMinor: 4_000, createdBy: 'u1', paidBy: null }),
+    ];
+    const r = porPersona(movs, [ana, beto]);
+    const deAna = r.find((x) => x.member.id === 'u1')!;
+    const deBeto = r.find((x) => x.member.id === 'u2')!;
+    expect(deBeto.resumen.gastoMinor).toBe(10_000);
+    expect(deAna.resumen.gastoMinor).toBe(4_000);
+  });
+});
+
+describe('balancePorMes', () => {
+  it('acumula el flujo mes a mes', () => {
+    const enero = new Date(2026, 0, 15, 12).getTime();
+    const febrero = new Date(2026, 1, 15, 12).getTime();
+    const movs = [
+      tx({ type: TxType.INGRESO, amountMinor: 100_000, date: enero }),
+      tx({ type: TxType.GASTO, amountMinor: 30_000, date: enero }),
+      tx({ type: TxType.GASTO, amountMinor: 50_000, date: febrero }),
+    ];
+    const r = balancePorMes(movs, ['2026-01', '2026-02']);
+    expect(r[0].resumen.flujoMinor).toBe(70_000);
+    expect(r[0].acumuladoMinor).toBe(70_000);
+    expect(r[1].resumen.flujoMinor).toBe(-50_000);
+    expect(r[1].acumuladoMinor).toBe(20_000);
   });
 });
 

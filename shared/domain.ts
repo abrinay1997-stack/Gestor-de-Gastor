@@ -216,8 +216,17 @@ export function porCategoria(
 }
 
 /**
+ * A quien se le atribuye un movimiento.
+ *
+ * Vale quien lo hizo; si no se dijo, quien lo cargo. La distincion importa
+ * porque uno puede anotar la compra que hizo el otro, y para las estadisticas
+ * lo que cuenta es quien gasto, no quien tuvo el telefono en la mano.
+ */
+export const autorDe = (tx: Transaction): string => tx.paidBy ?? tx.createdBy;
+
+/**
  * Quien gasto cuanto. Esta es la vista individual que pedia el planteo:
- * el libro es compartido, pero cada movimiento sabe quien lo cargo.
+ * el libro es compartido, pero cada movimiento sabe de quien fue.
  */
 export function porPersona(
   transactions: Transaction[],
@@ -226,48 +235,22 @@ export function porPersona(
   return members
     .map((member) => ({
       member,
-      resumen: resumir(transactions.filter((t) => t.createdBy === member.id)),
+      resumen: resumir(transactions.filter((t) => autorDe(t) === member.id)),
     }))
     .sort((a, b) => b.resumen.gastoMinor - a.resumen.gastoMinor);
 }
 
-/**
- * Balance de la pareja: cuanto puso cada uno de los gastos compartidos y quien
- * le debe a quien para emparejar. Solo mira gastos en cuentas compartidas.
- */
-export function balanceDePareja(
+/** Balance de cada mes de un rango, para el grafico de evolucion. */
+export function balancePorMes(
   transactions: Transaction[],
-  accounts: Account[],
-  members: Member[],
-): { deudor: Member; acreedor: Member; montoMinor: number } | null {
-  if (members.length !== 2) return null;
-
-  const compartidas = new Set(
-    accounts.filter((a) => a.owner === 'compartida').map((a) => a.id),
-  );
-
-  const puesto = new Map<string, number>(members.map((m) => [m.id, 0]));
-  for (const t of transactions) {
-    if (t.type !== TxType.GASTO || !compartidas.has(t.accountId)) continue;
-    if (!puesto.has(t.createdBy)) continue;
-    puesto.set(t.createdBy, puesto.get(t.createdBy)! + t.amountMinor);
-  }
-
-  const [a, b] = members;
-  const ta = puesto.get(a.id) ?? 0;
-  const tb = puesto.get(b.id) ?? 0;
-
-  // La mitad de la diferencia: si uno puso 100 y el otro 60, el segundo le
-  // debe 20 al primero para que ambos terminen habiendo puesto 80.
-  const diff = ta - tb;
-  if (diff === 0) return null;
-
-  const montoMinor = Math.trunc(Math.abs(diff) / 2);
-  if (montoMinor === 0) return null;
-
-  return diff > 0
-    ? { deudor: b, acreedor: a, montoMinor }
-    : { deudor: a, acreedor: b, montoMinor };
+  periodos: string[],
+): { periodo: string; resumen: Resumen; acumuladoMinor: number }[] {
+  let acumuladoMinor = 0;
+  return periodos.map((periodo) => {
+    const resumen = resumir(transaccionesDelMes(transactions, periodo));
+    acumuladoMinor += resumen.flujoMinor;
+    return { periodo, resumen, acumuladoMinor };
+  });
 }
 
 /** Estado de cada presupuesto del mes. */

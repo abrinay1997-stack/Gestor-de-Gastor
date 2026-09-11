@@ -60,8 +60,19 @@ export interface Transaction {
   notes: string | null;
   /** Epoch en milisegundos, UTC. */
   date: number;
-  /** Quien lo cargo. Esta es la columna que hace posible la vista individual. */
+  /**
+   * Quien lo cargo en la app. Se asigna solo y no se edita nunca: es el
+   * rastro de quien estuvo usando la aplicacion.
+   */
   createdBy: string;
+  /**
+   * Quien hizo el gasto de verdad, que no siempre es quien lo cargo: uno
+   * puede anotar la compra que hizo el otro. null significa "el mismo que lo
+   * cargo". Es este el que cuenta para las estadisticas por persona.
+   */
+  paidBy: string | null;
+  /** Si nacio de un pago habitual, cual. */
+  recurringId: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -201,6 +212,33 @@ export interface Budget {
 }
 
 // ---------------------------------------------------------------------------
+// Pagos habituales
+// ---------------------------------------------------------------------------
+
+export interface Recurring {
+  id: string;
+  householdId: string;
+  name: string;
+  /** Solo INGRESO o GASTO: no tiene sentido una transferencia automatica. */
+  type: TxType;
+  amountMinor: number;
+  accountId: string;
+  categoryId: string | null;
+  jarId: string | null;
+  paidBy: string | null;
+  frequency: 'semanal' | 'mensual' | 'anual';
+  dayOfMonth: number | null;
+  dayOfWeek: number | null;
+  monthOfYear: number | null;
+  active: boolean;
+  /** Cuando toca el proximo. Avanzar esto es lo que evita duplicados. */
+  nextRun: number;
+  lastRun: number | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+// ---------------------------------------------------------------------------
 // Personas y hogar
 // ---------------------------------------------------------------------------
 
@@ -211,8 +249,32 @@ export interface Member {
   displayName: string;
   /** Color con el que se lo identifica en la app. */
   color: string;
+  /** Emoji del avatar. Vacio = se muestran las iniciales. */
+  emoji: string;
+  /**
+   * Orden de las secciones del Inicio. Vacio = el orden por defecto.
+   * Es por persona: cada uno acomoda su pantalla como quiere.
+   */
+  homeLayout: SeccionInicio[];
   createdAt: number;
 }
+
+/** Secciones que se pueden ordenar y ocultar en el Inicio. */
+export const SECCIONES_INICIO = [
+  'resumen', 'patrimonio', 'quien-gasto', 'presupuestos',
+  'por-categoria', 'pagos-habituales', 'ultimos',
+] as const;
+export type SeccionInicio = (typeof SECCIONES_INICIO)[number];
+
+export const SECCION_LABEL: Record<SeccionInicio, string> = {
+  'resumen': 'Balance del mes',
+  'patrimonio': 'Patrimonio total',
+  'quien-gasto': 'Quién gastó',
+  'presupuestos': 'Presupuestos',
+  'por-categoria': 'En qué se fue',
+  'pagos-habituales': 'Pagos habituales',
+  'ultimos': 'Últimos movimientos',
+};
 
 export interface Household {
   id: string;
@@ -231,6 +293,7 @@ export interface Snapshot {
   jars: Jar[];
   budgets: Budget[];
   transactions: Transaction[];
+  recurring: Recurring[];
 }
 
 // ---------------------------------------------------------------------------
@@ -245,5 +308,14 @@ export type LiveEvent =
   | { kind: 'category:upsert'; category: Category; by: string }
   | { kind: 'jar:upsert'; jar: Jar; by: string }
   | { kind: 'budget:upsert'; budget: Budget; by: string }
+  | { kind: 'budget:delete'; id: string; by: string }
+  | { kind: 'member:upsert'; member: Member; by: string }
+  | { kind: 'recurring:upsert'; recurring: Recurring; by: string }
+  | { kind: 'recurring:delete'; id: string; by: string }
+  /**
+   * Algo cambio por fuera de la app (el disparador de pagos habituales) y
+   * conviene recargar. Trae los saldos ya recalculados.
+   */
+  | { kind: 'recargar'; accounts: Account[]; jars: Jar[] }
   | { kind: 'presence'; online: string[] }
   | { kind: 'hello'; online: string[] };
