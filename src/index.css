@@ -132,6 +132,25 @@
   .borde-luz {
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55);
   }
+  /* Pildora flotante movil: vidrio + borde + sombra de flote. */
+  .barra-flotante {
+    background: var(--superficie);
+    background: color-mix(in srgb, var(--superficie) 72%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(1.8);
+    backdrop-filter: blur(20px) saturate(1.8);
+    border: 1px solid var(--borde);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), var(--shadow-flotante);
+  }
+  /* Barrita de luz superior del destino activo (LimelightNav). */
+  .luz-activa {
+    position: absolute;
+    top: 2px;
+    height: 3px;
+    width: 2rem;
+    border-radius: 9999px;
+    background: var(--color-marca-500);
+    box-shadow: 0 0 8px var(--color-marca-500);
+  }
   /* Chip de color con contraste garantizado. El color vivo va en --c. */
   .ficha {
     background: color-mix(in srgb, var(--c) var(--alfa-tinta), var(--superficie));
@@ -159,5 +178,19 @@
     .borde-luz {
       box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
     }
+    .barra-flotante {
+      box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), var(--shadow-flotante);
+    }
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .barra-flotante {
+    background: var(--superficie);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .luz-activa {
+    box-shadow: none;
   }
 }

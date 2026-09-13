@@ -93,7 +93,7 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
       </aside>
 
       {/* Contenido */}
-      <main className="flex-1 w-full max-w-3xl mx-auto px-4 pt-4 pb-28 md:pb-8 md:px-8 md:pt-8">
+      <main className="flex-1 w-full max-w-3xl mx-auto px-4 pt-4 pb-36 md:pb-8 md:px-8 md:pt-8">
         {/* Encabezado movil */}
         <div className="md:hidden flex items-center justify-between mb-4 safe-top">
           <EstadoConexion estado={estadoLive} pareja={pareja?.displayName} enLinea={parejaEnLinea} />
@@ -117,27 +117,33 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
       <button
         onClick={alAgregar}
         aria-label="Registrar movimiento"
-        className="md:hidden fixed right-4 bottom-24 w-14 h-14 rounded-full bg-marca-600 text-white border border-white/20 shadow-xl shadow-marca-600/35 flex items-center justify-center active:scale-[0.97] transition-all duration-100 z-30"
+        className="md:hidden fixed right-4 bottom-32 w-14 h-14 rounded-full bg-marca-600 text-white border border-white/20 shadow-xl shadow-marca-600/35 flex items-center justify-center active:scale-[0.97] transition-all duration-100 z-30"
       >
         <Plus size={26} />
       </button>
 
-      {/* Barra inferior, solo en celular */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 barra-vidrio borde-luz borde border-t flex safe-bottom z-30">
-        {enBarra.map((d) => (
-          <button
-            key={d.id}
-            onClick={() => alCambiar(d.id)}
-            aria-current={solapa === d.id ? 'page' : undefined}
-            className={cn(
-              'flex-1 flex flex-col items-center justify-center gap-0.5 min-h-14 pt-1.5 transition-colors duration-100 active:scale-[0.97]',
-              solapa === d.id ? 'text-marca-700 dark:text-marca-100 font-semibold' : 'txt-3',
-            )}
-          >
-            <Icono nombre={d.icono} size={21} />
-            <span className="text-[10px] font-medium">{d.etiqueta}</span>
-          </button>
-        ))}
+      {/* Barra inferior flotante, solo en celular */}
+      <nav className="md:hidden fixed inset-x-0 flex justify-center px-4 pointer-events-none z-30" style={{ bottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}>
+        <div className="barra-flotante pointer-events-auto flex w-full max-w-md rounded-[26px] px-2 py-1.5">
+          {enBarra.map((d) => (
+            <button
+              key={d.id}
+              onClick={() => alCambiar(d.id)}
+              aria-current={solapa === d.id ? 'page' : undefined}
+              className={cn(
+                'relative flex-1 flex flex-col items-center justify-center min-h-11 min-w-11 rounded-2xl py-2 transition-colors duration-100 active:scale-[0.97]',
+                solapa === d.id ? 'text-marca-600 dark:text-marca-500' : 'txt-3',
+              )}
+            >
+              {solapa === d.id && <span aria-hidden="true" className="luz-activa" />}
+              {solapa === d.id && (
+                <span aria-hidden="true" className="absolute top-1 h-9 w-9 rounded-full bg-marca-500/20 blur-md dark:bg-marca-500/25" />
+              )}
+              <Icono nombre={d.icono} size={21} />
+              <span className="text-[10px] font-medium">{d.etiqueta}</span>
+            </button>
+          ))}
+        </div>
       </nav>
     </div>
   );
