@@ -1,36 +1,48 @@
 @import 'tailwindcss';
 
 @theme {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
   --color-marca-50: #ecfdf5;
   --color-marca-100: #d1fae5;
   --color-marca-500: #10b981;
-  --color-marca-600: #059669;
+  --color-marca-600: #067a57;
   --color-marca-700: #047857;
+  /* Sombras amplias y difusas: flotan sin bordes duros. */
+  --shadow-tarjeta: 0 1px 2px rgb(0 0 0 / 0.05), 0 10px 30px -14px rgb(0 0 0 / 0.18);
+  --shadow-flotante: 0 2px 6px rgb(0 0 0 / 0.08), 0 20px 50px -12px rgb(0 0 0 / 0.28);
 }
 
 @layer base {
   :root {
     color-scheme: light dark;
-    /* Paleta clara. La oscura solo redefine estos tokens, mas abajo. */
-    --fondo: #fafaf9;
+    /* Grises neutros del sistema: la pagina hunde, las tarjetas flotan. */
+    --fondo: #f2f2f7;
     --superficie: #ffffff;
-    --superficie-2: #f5f5f4;
-    --borde: #e7e5e4;
-    --texto: #1c1917;
-    --texto-2: #78716c;
-    --texto-3: #a8a29e;
+    --superficie-2: #e9e9ee;
+    --borde: #e2e2e7;
+    --texto: #1c1c1e;
+    --texto-2: #515154;
+    --texto-3: #636366;
+    /* Mezcla de los chips de color: glifo 70% color + 30% tinta oscura
+       sobre fondo 14% color, verificado ≥3:1 en los 24 colores. */
+    --alfa-tinta: 14%;
+    --peso-glifo: 70%;
+    --tinte-tinta: #1c1c1e;
   }
 
   @media (prefers-color-scheme: dark) {
     :root {
-      --fondo: #0c0a09;
-      --superficie: #1c1917;
-      --superficie-2: #292524;
-      --borde: #292524;
-      --texto: #fafaf9;
-      --texto-2: #a8a29e;
-      --texto-3: #78716c;
+      --fondo: #000000;
+      --superficie: #1c1c1e;
+      --superficie-2: #2c2c2e;
+      --borde: #38383a;
+      --texto: #f5f5f7;
+      --texto-2: #aeaeb2;
+      --texto-3: #98989f;
+      /* En oscuro el glifo se aclara (82% color + 18% blanco) sobre 15%. */
+      --alfa-tinta: 15%;
+      --peso-glifo: 82%;
+      --tinte-tinta: #ffffff;
     }
   }
 
@@ -43,9 +55,27 @@
     background: var(--fondo);
     color: var(--texto);
     font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
     /* Cancela el rebote elastico que en iOS deja ver el fondo del navegador. */
     overscroll-behavior-y: none;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Titulares compactos como en el sistema: -0.02em y sin viudas. */
+  h1, h2 {
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--color-marca-500) 25%, transparent);
+  }
+
+  /* Anillo de foco solo con teclado, del color de la marca. */
+  button:focus-visible, a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--color-marca-500);
+    outline-offset: 2px;
   }
 
   /* Respeta la preferencia de sistema de quien marea con las animaciones. */
@@ -53,6 +83,26 @@
     *, *::before, *::after {
       animation-duration: 0.01ms !important;
       transition-duration: 0.01ms !important;
+    }
+  }
+
+  /* Sin transparencias si el sistema lo pide: todo solido. */
+  @media (prefers-reduced-transparency: reduce) {
+    .barra-vidrio {
+      background: var(--superficie);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+    .borde-luz {
+      box-shadow: none;
+    }
+    .hoja-scrim {
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      background: rgb(0 0 0 / 0.5);
+    }
+    .ficha {
+      background: var(--superficie-2);
     }
   }
 
@@ -71,7 +121,43 @@
   .txt { color: var(--texto); }
   .txt-2 { color: var(--texto-2); }
   .txt-3 { color: var(--texto-3); }
+  /* Barra y cabeceras translucidas con blur y saturacion, como el sistema. */
+  .barra-vidrio {
+    background: var(--superficie);
+    background: color-mix(in srgb, var(--superficie) 72%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(1.8);
+    backdrop-filter: blur(20px) saturate(1.8);
+  }
+  /* Filete de luz en el borde superior de las barras flotantes. */
+  .borde-luz {
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55);
+  }
+  /* Chip de color con contraste garantizado. El color vivo va en --c. */
+  .ficha {
+    background: color-mix(in srgb, var(--c) var(--alfa-tinta), var(--superficie));
+    color: color-mix(in srgb, var(--c) var(--peso-glifo), var(--tinte-tinta));
+  }
+  @supports not (color: color-mix(in srgb, red 50%, blue)) {
+    .ficha {
+      background: var(--superficie-2);
+      color: var(--c);
+    }
+  }
+  /* Velo oscuro detras de hojas y dialogos, con blur suave. */
+  .hoja-scrim {
+    background: rgb(0 0 0 / 0.32);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
   /* Oculta la barra de scroll sin perder el scroll. */
   .sin-barra { scrollbar-width: none; }
   .sin-barra::-webkit-scrollbar { display: none; }
+}
+
+@media (prefers-color-scheme: dark) {
+  @layer utilities {
+    .borde-luz {
+      box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
+    }
+  }
 }

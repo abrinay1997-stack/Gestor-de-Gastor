@@ -43,12 +43,12 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
   return (
     <div className="min-h-dvh flex flex-col md:flex-row">
       {/* Barra lateral, solo en pantalla grande */}
-      <aside className="hidden md:flex flex-col w-60 superficie borde border-r p-5 sticky top-0 h-dvh shrink-0">
+      <aside className="hidden md:flex flex-col w-60 barra-vidrio borde border-r p-5 sticky top-0 h-dvh shrink-0 z-30">
         <div className="flex items-center gap-2.5 mb-8">
-          <div className="w-9 h-9 bg-marca-500 text-white rounded-xl flex items-center justify-center">
+          <div className="w-9 h-9 bg-marca-600 text-white border border-white/15 rounded-xl flex items-center justify-center shadow-md shadow-marca-600/25">
             <Icono nombre="wallet" size={18} />
           </div>
-          <span className="font-semibold txt">Nuestros gastos</span>
+          <span className="font-semibold txt tracking-tight">Nuestros gastos</span>
         </div>
 
         <nav className="flex-1 space-y-1">
@@ -57,8 +57,8 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
               key={d.id}
               onClick={() => alCambiar(d.id)}
               className={cn(
-                'w-full flex items-center gap-3 px-3 min-h-11 rounded-xl text-sm font-medium transition-colors',
-                solapa === d.id ? 'bg-marca-50 text-marca-700 dark:bg-marca-500/15 dark:text-marca-500' : 'txt-2 hover:superficie-2',
+                'w-full flex items-center gap-3 px-3 min-h-11 rounded-xl text-sm font-medium transition-all duration-100',
+                solapa === d.id ? 'bg-marca-600/12 text-marca-700 dark:bg-marca-500/15 dark:text-marca-100 font-semibold shadow-sm' : 'txt-2 hover:superficie-2 active:superficie-2',
               )}
             >
               <Icono nombre={d.icono} size={18} />
@@ -69,7 +69,7 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
 
         <button
           onClick={alAgregar}
-          className="mt-6 bg-marca-600 hover:bg-marca-700 text-white min-h-12 rounded-2xl font-medium flex items-center justify-center gap-2 transition-colors"
+          className="mt-6 bg-marca-600 hover:brightness-110 active:brightness-100 active:scale-[0.97] text-white border border-white/15 min-h-12 rounded-2xl font-semibold flex items-center justify-center gap-2 shadow-md shadow-marca-600/30 transition-all duration-100"
         >
           <Plus size={18} /> Registrar
         </button>
@@ -117,21 +117,21 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
       <button
         onClick={alAgregar}
         aria-label="Registrar movimiento"
-        className="md:hidden fixed right-4 bottom-24 w-14 h-14 rounded-2xl bg-marca-600 text-white shadow-lg shadow-marca-600/30 flex items-center justify-center active:scale-95 transition-transform z-30"
+        className="md:hidden fixed right-4 bottom-24 w-14 h-14 rounded-full bg-marca-600 text-white border border-white/20 shadow-xl shadow-marca-600/35 flex items-center justify-center active:scale-[0.97] transition-all duration-100 z-30"
       >
         <Plus size={26} />
       </button>
 
       {/* Barra inferior, solo en celular */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 superficie borde border-t flex safe-bottom z-30">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 barra-vidrio borde-luz borde border-t flex safe-bottom z-30">
         {enBarra.map((d) => (
           <button
             key={d.id}
             onClick={() => alCambiar(d.id)}
             aria-current={solapa === d.id ? 'page' : undefined}
             className={cn(
-              'flex-1 flex flex-col items-center justify-center gap-0.5 min-h-14 pt-1.5 transition-colors',
-              solapa === d.id ? 'text-marca-600 dark:text-marca-500' : 'txt-3',
+              'flex-1 flex flex-col items-center justify-center gap-0.5 min-h-14 pt-1.5 transition-colors duration-100 active:scale-[0.97]',
+              solapa === d.id ? 'text-marca-700 dark:text-marca-100 font-semibold' : 'txt-3',
             )}
           >
             <Icono nombre={d.icono} size={21} />

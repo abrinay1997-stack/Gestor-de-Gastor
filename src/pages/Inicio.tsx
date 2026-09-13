@@ -51,7 +51,7 @@ export function Inicio({ alVerMovimiento, alAgregar }: {
     'resumen': (
       <Tarjeta className="bg-linear-to-br from-marca-600 to-marca-700 border-transparent text-white">
         <p className="text-sm opacity-80 mb-1">Balance del mes</p>
-        <p className="text-4xl font-bold tabular mb-5">{formatMonto(resumen.flujoMinor, moneda)}</p>
+        <p className="text-4xl font-bold tabular tracking-tight mb-5">{formatMonto(resumen.flujoMinor, moneda)}</p>
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-white/15 rounded-2xl p-3">
             <div className="flex items-center gap-1.5 text-xs opacity-80 mb-1">
@@ -73,7 +73,7 @@ export function Inicio({ alVerMovimiento, alAgregar }: {
       <Tarjeta className="flex items-center justify-between">
         <div>
           <p className="text-xs txt-2 mb-0.5">Patrimonio total</p>
-          <p className="text-2xl font-semibold tabular txt">{formatMonto(patrimonio, moneda)}</p>
+          <p className="text-2xl font-semibold tabular tracking-tight txt">{formatMonto(patrimonio, moneda)}</p>
         </div>
         <Ficha color="#10b981" icono="landmark" size={44} />
       </Tarjeta>
@@ -218,7 +218,7 @@ export function Inicio({ alVerMovimiento, alAgregar }: {
         >
           <Icono nombre="chevron-left" size={19} />
         </button>
-        <h1 className="font-semibold txt">{nombreMes(mes)}</h1>
+        <h1 className="font-semibold txt tracking-tight">{nombreMes(mes)}</h1>
         <button
           onClick={() => setMes(moverMes(mes, 1))}
           disabled={esMesActual}

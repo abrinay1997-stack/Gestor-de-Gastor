@@ -58,7 +58,7 @@ export function Cuentas() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold txt">Cuentas</h1>
+        <h1 className="text-xl font-semibold txt tracking-tight">Cuentas</h1>
         <Boton onClick={abrirNueva} className="px-3">
           <Icono nombre="plus" size={17} /> Nueva
         </Boton>
@@ -77,7 +77,7 @@ export function Cuentas() {
         <>
           <Tarjeta>
             <p className="text-xs txt-2 mb-1">Patrimonio neto</p>
-            <p className="text-3xl font-bold tabular txt mb-4">{formatMonto(patrimonio, moneda)}</p>
+            <p className="text-3xl font-bold tabular tracking-tight txt mb-4">{formatMonto(patrimonio, moneda)}</p>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
                 <p className="text-xs txt-3 mb-0.5">Tenés</p>
