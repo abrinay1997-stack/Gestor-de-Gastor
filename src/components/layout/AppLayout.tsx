@@ -11,7 +11,7 @@
  *   otra persona esta mirando la app en este momento.
  */
 
-import { type ReactNode } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { LogOut, Plus } from 'lucide-react';
 import { useStore } from '../../store/store.tsx';
 import { cn } from '../../lib/utils.ts';
@@ -39,6 +39,41 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
   const pareja = members.find((m) => m.id !== me?.id);
   const parejaEnLinea = pareja ? online.includes(pareja.id) : false;
   const enBarra = DESTINOS.filter((d) => d.enBarra);
+
+  // Auto-compactado de la pildora al hacer scroll: baja >10px compacta,
+  // sube >8px expande. Sin movimiento reducido: siempre expandida.
+  const [compacto, setCompacto] = useState(false);
+  const ultimoY = useRef(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setCompacto(false);
+      return;
+    }
+    ultimoY.current = window.scrollY;
+    let turno = 0;
+    const alDesplazar = () => {
+      cancelAnimationFrame(turno);
+      turno = requestAnimationFrame(() => {
+        const y = window.scrollY;
+        const delta = y - ultimoY.current;
+        ultimoY.current = y;
+        if (delta > 10) setCompacto(true);
+        else if (delta < -8) setCompacto(false);
+      });
+    };
+    window.addEventListener('scroll', alDesplazar, { passive: true });
+    return () => {
+      cancelAnimationFrame(turno);
+      window.removeEventListener('scroll', alDesplazar);
+    };
+  }, []);
+
+  const irA = (s: Solapa) => {
+    setCompacto(false);
+    alCambiar(s);
+  };
 
   return (
     <div className="min-h-dvh flex flex-col md:flex-row">
@@ -123,15 +158,15 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
       </button>
 
       {/* Barra inferior flotante, solo en celular */}
-      <nav className="md:hidden fixed inset-x-0 flex justify-center px-4 pointer-events-none z-30" style={{ bottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}>
-        <div className="barra-flotante pointer-events-auto flex w-full max-w-md rounded-[26px] px-2 py-1.5">
+      <nav className="md:hidden fixed inset-x-0 flex justify-center px-4 pointer-events-none z-30" style={{ bottom: 'calc(0.875rem + env(safe-area-inset-bottom, 0px))' }}>
+        <div className={cn('barra-flotante pointer-events-auto flex w-full max-w-[400px] rounded-[28px] px-2 py-1.5', compacto && 'barra-compacta scale-[0.94] translate-y-2')}>
           {enBarra.map((d) => (
             <button
               key={d.id}
-              onClick={() => alCambiar(d.id)}
+              onClick={() => irA(d.id)}
               aria-current={solapa === d.id ? 'page' : undefined}
               className={cn(
-                'relative flex-1 flex flex-col items-center justify-center min-h-11 min-w-11 rounded-2xl py-2 transition-colors duration-100 active:scale-[0.97]',
+                'relative flex-1 flex flex-col items-center justify-center min-h-11 min-w-11 rounded-2xl py-2 transition-[transform,opacity] duration-[250ms] active:scale-[0.97]',
                 solapa === d.id ? 'text-marca-600 dark:text-marca-500' : 'txt-3',
               )}
             >
@@ -140,7 +175,7 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
                 <span aria-hidden="true" className="absolute top-1 h-9 w-9 rounded-full bg-marca-500/20 blur-md dark:bg-marca-500/25" />
               )}
               <Icono nombre={d.icono} size={21} />
-              <span className="text-[10px] font-medium">{d.etiqueta}</span>
+              <span className={cn('text-[10px] font-medium transition-[max-height,opacity] duration-[250ms]', compacto ? 'max-h-0 opacity-0 overflow-hidden' : 'max-h-5 opacity-100')}>{d.etiqueta}</span>
             </button>
           ))}
         </div>
