@@ -132,14 +132,24 @@
   .borde-luz {
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55);
   }
-  /* Pildora flotante movil: vidrio + borde + sombra de flote. */
+  /* Pildora flotante movil: vidrio estilo Instagram + borde + sombra de flote. */
   .barra-flotante {
     background: var(--superficie);
-    background: color-mix(in srgb, var(--superficie) 72%, transparent);
-    -webkit-backdrop-filter: blur(20px) saturate(1.8);
-    backdrop-filter: blur(20px) saturate(1.8);
-    border: 1px solid var(--borde);
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), var(--shadow-flotante);
+    background: color-mix(in srgb, var(--superficie) 64%, transparent);
+    -webkit-backdrop-filter: blur(26px) saturate(2) brightness(1.06);
+    backdrop-filter: blur(26px) saturate(2) brightness(1.06);
+    border: 1px solid color-mix(in srgb, var(--borde) 65%, transparent);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55), inset 0 0 0 0.5px rgb(255 255 255 / 0.12), var(--shadow-flotante);
+    transition: transform 0.25s ease, opacity 0.25s ease, background-color 0.25s ease;
+    will-change: transform, opacity;
+  }
+  /* Estado compacto al hacer scroll: la pildora se encoge y atenua.
+     El scale/translate/opacity lo aplican las clases del componente;
+     aqui solo el ajuste fino del vidrio compacto. */
+  .barra-compacta {
+    background: color-mix(in srgb, var(--superficie) 64%, transparent);
+    -webkit-backdrop-filter: blur(26px) saturate(2) brightness(1.06);
+    backdrop-filter: blur(26px) saturate(2) brightness(1.06);
   }
   /* Barrita de luz superior del destino activo (LimelightNav). */
   .luz-activa {
@@ -179,13 +189,14 @@
       box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
     }
     .barra-flotante {
-      box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), var(--shadow-flotante);
+      background: color-mix(in srgb, var(--superficie) 60%, transparent);
+      box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08), inset 0 0 0 0.5px rgb(255 255 255 / 0.06), var(--shadow-flotante);
     }
   }
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .barra-flotante {
+  .barra-flotante, .barra-compacta {
     background: var(--superficie);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
