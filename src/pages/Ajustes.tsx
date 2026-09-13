@@ -42,7 +42,7 @@ export function Ajustes() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold txt">Ajustes</h1>
+      <h1 className="text-xl font-semibold txt tracking-tight">Ajustes</h1>
 
       {/* Perfil y hogar */}
       <Tarjeta>

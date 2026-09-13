@@ -30,7 +30,7 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold txt">Jarras</h1>
+        <h1 className="text-xl font-semibold txt tracking-tight">Jarras</h1>
         {jars.length > 0 && (
           <Boton variante="secundario" onClick={() => setEditando(true)} className="px-3">
             <Icono nombre="settings-2" size={16} /> Ajustar
@@ -51,7 +51,7 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
         <>
           <Tarjeta>
             <p className="text-xs txt-2 mb-1">Total repartido</p>
-            <p className="text-3xl font-bold tabular txt">{formatMonto(total, moneda)}</p>
+            <p className="text-3xl font-bold tabular tracking-tight txt">{formatMonto(total, moneda)}</p>
           </Tarjeta>
 
           <div className="space-y-2.5">
@@ -161,7 +161,7 @@ function MovimientosDeJarra({ jarra, alCerrar, alVerMovimiento }: {
         <div className="flex flex-col items-center text-center pt-1">
           <Ficha color={jarra.color} icono={jarra.icon} size={52} />
           <p className={cn(
-            'text-3xl font-bold tabular mt-3',
+            'text-3xl font-bold tabular tracking-tight mt-3',
             jarra.balanceMinor < 0 ? 'text-red-500' : 'txt',
           )}>
             {formatMonto(jarra.balanceMinor, moneda)}

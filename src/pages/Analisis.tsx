@@ -101,7 +101,7 @@ export function Analisis() {
         >
           <Icono nombre="chevron-left" size={19} />
         </button>
-        <h1 className="font-semibold txt">{nombreMes(mes)}</h1>
+        <h1 className="font-semibold txt tracking-tight">{nombreMes(mes)}</h1>
         <button
           onClick={() => setMes(moverMes(mes, 1))}
           disabled={mes === claveMes(Date.now())}

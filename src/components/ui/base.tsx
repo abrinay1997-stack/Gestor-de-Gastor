@@ -30,19 +30,19 @@ export function Boton({
   variante = 'primario', className, children, ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variante?: VarianteBoton }) {
   const estilos: Record<VarianteBoton, string> = {
-    primario: 'bg-marca-600 text-white hover:bg-marca-700 active:bg-marca-700 shadow-sm',
-    secundario: 'superficie-2 txt borde border hover:opacity-80',
+    primario: 'bg-marca-600 text-white border border-white/15 shadow-md shadow-marca-600/30 hover:brightness-110 active:bg-marca-700 active:brightness-100',
+    secundario: 'superficie-2 txt borde border shadow-sm hover:brightness-95 dark:hover:brightness-125 active:brightness-95',
     fantasma: 'txt-2 hover:superficie-2',
-    peligro: 'bg-red-600 text-white hover:bg-red-700',
+    peligro: 'bg-red-600 text-white border border-white/15 shadow-md shadow-red-600/25 hover:brightness-110 active:bg-red-700 active:brightness-100',
   };
 
   return (
     <button
       {...props}
       className={cn(
-        'min-h-11 px-4 rounded-2xl font-medium text-sm transition-all',
-        'active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none',
-        'flex items-center justify-center gap-2',
+        'min-h-11 px-4 rounded-2xl font-semibold text-sm transition-all duration-100',
+        'active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none',
+        'flex items-center justify-center gap-2 select-none touch-manipulation',
         estilos[variante],
         className,
       )}
@@ -63,10 +63,10 @@ export function Campo({
       <input
         {...props}
         className={cn(
-          'w-full min-h-11 px-3.5 rounded-xl superficie-2 borde border txt',
+          'w-full min-h-11 px-3.5 rounded-2xl superficie-2 borde border txt shadow-[inset_0_1px_2px_rgb(0_0_0/0.05)]',
           // 16px es el minimo que evita que iOS haga zoom al enfocar.
-          'text-base outline-none transition-colors',
-          'focus:border-marca-500 focus:ring-2 focus:ring-marca-500/20',
+          'text-base outline-none transition-all duration-100',
+          'focus:border-marca-500 focus:ring-4 focus:ring-marca-500/15',
           'placeholder:txt-3',
           error && 'border-red-500 focus:border-red-500 focus:ring-red-500/20',
           className,
@@ -86,8 +86,8 @@ export function Selector({
       <select
         {...props}
         className={cn(
-          'w-full min-h-11 px-3.5 rounded-xl superficie-2 borde border txt text-base',
-          'outline-none focus:border-marca-500 focus:ring-2 focus:ring-marca-500/20',
+          'w-full min-h-11 px-3.5 rounded-2xl superficie-2 borde border txt text-base shadow-[inset_0_1px_2px_rgb(0_0_0/0.05)]',
+          'outline-none transition-all duration-100 focus:border-marca-500 focus:ring-4 focus:ring-marca-500/15',
           className,
         )}
       >
@@ -103,7 +103,7 @@ export function Tarjeta({ className, children, onClick }: {
   className?: string; children: ReactNode; onClick?: () => void;
 }) {
   return (
-    <div className={cn('superficie borde border rounded-3xl p-5', className)} onClick={onClick}>
+    <div className={cn('superficie borde border rounded-3xl p-5 shadow-[var(--shadow-tarjeta)]', className)} onClick={onClick}>
       {children}
     </div>
   );
@@ -114,11 +114,11 @@ export function Vacio({ icono, titulo, texto, accion }: {
 }) {
   return (
     <div className="flex flex-col items-center justify-center text-center py-14 px-6">
-      <div className="w-16 h-16 rounded-3xl superficie-2 flex items-center justify-center mb-4">
+      <div className="w-16 h-16 rounded-3xl superficie-2 flex items-center justify-center mb-4 shadow-sm ring-1 ring-black/5 dark:ring-white/10">
         <Icono nombre={icono} size={28} className="txt-3" />
       </div>
-      <h3 className="font-semibold txt mb-1.5">{titulo}</h3>
-      <p className="text-sm txt-2 max-w-xs leading-relaxed mb-5">{texto}</p>
+      <h3 className="font-semibold txt tracking-tight text-balance mb-1.5">{titulo}</h3>
+      <p className="text-sm txt-2 max-w-xs leading-relaxed text-balance mb-5">{texto}</p>
       {accion}
     </div>
   );
@@ -157,10 +157,10 @@ export function Barra({ ratio, color = '#10b981', alerta = false }: {
   }
 
   return (
-    <div className="h-2 rounded-full superficie-2 overflow-hidden">
+    <div className="h-2 rounded-full superficie-2 overflow-hidden shadow-[inset_0_1px_2px_rgb(0_0_0/0.08)]">
       <div
         className="h-full rounded-full transition-all duration-500"
-        style={{ width: `${pct}%`, background: fondo }}
+        style={{ width: `${pct}%`, background: fondo, boxShadow: 'inset 0 1px 0 rgb(255 255 255 / 0.35)' }}
       />
     </div>
   );
@@ -175,12 +175,13 @@ function mezclar(a: string, b: string, t: number): string {
   return `#${[m(r1, r2), m(g1, g2), m(b1, b2)].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
 
-/** Cuadrito de color con un icono adentro. */
+/** Cuadrito de color con un icono adentro. Usa .ficha: el glifo se oscurece en
+    claro y se aclara en oscuro para mantener ≥3:1 en los 24 colores. */
 export function Ficha({ color, icono, size = 40 }: { color: string; icono: string; size?: number }) {
   return (
     <div
-      className="rounded-2xl flex items-center justify-center shrink-0"
-      style={{ width: size, height: size, background: `${color}1a`, color }}
+      className="ficha rounded-2xl flex items-center justify-center shrink-0 shadow-sm"
+      style={{ width: size, height: size, ['--c' as string]: color }}
     >
       <Icono nombre={icono} size={size * 0.5} />
     </div>
@@ -195,10 +196,10 @@ export function Avatar({ nombre, color, emoji, size = 32 }: {
   const ini = nombre.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
   return (
     <div
-      className="rounded-full flex items-center justify-center font-semibold shrink-0 select-none"
+      className="ficha rounded-full flex items-center justify-center font-semibold shrink-0 select-none"
       style={{
         width: size, height: size,
-        background: `${color}26`, color,
+        ['--c' as string]: color,
         fontSize: emoji ? size * 0.55 : size * 0.38,
         lineHeight: 1,
       }}
@@ -234,10 +235,16 @@ export function SelectorIcono({ valor, alElegir, color }: {
                 onClick={() => alElegir(n)}
                 aria-label={`Icono ${n}`}
                 className={cn(
-                  'aspect-square rounded-xl flex items-center justify-center transition-transform active:scale-90',
-                  valor === n ? '' : 'superficie-2 txt-2',
+                  'aspect-square rounded-xl flex items-center justify-center transition-all duration-100 active:scale-[0.97]',
+                  valor === n ? 'shadow-sm' : 'superficie-2 txt-2',
                 )}
-                style={valor === n ? { background: `${color}26`, color, boxShadow: `0 0 0 2px ${color}` } : undefined}
+                style={valor === n
+                  ? {
+                    background: `color-mix(in srgb, ${color} 14%, var(--superficie))`,
+                    color: `color-mix(in srgb, ${color} 70%, #1c1c1e)`,
+                    boxShadow: `0 0 0 2px ${color}`,
+                  }
+                  : undefined}
               >
                 <Icono nombre={n} size={17} />
               </button>
@@ -278,10 +285,10 @@ export function SelectorColor({ valor, alElegir }: {
           key={c}
           onClick={() => alElegir(c)}
           aria-label={`Color ${c}`}
-          className="w-9 h-9 rounded-xl transition-transform active:scale-90 flex items-center justify-center"
-          style={{ background: `${c}26`, outline: valor === c ? `2px solid ${c}` : 'none' }}
+          className="w-9 h-9 rounded-xl transition-all duration-100 active:scale-[0.97] flex items-center justify-center shadow-sm"
+          style={{ background: `color-mix(in srgb, ${c} 15%, var(--superficie))`, outline: valor === c ? `2px solid ${c}` : 'none' }}
         >
-          <span className="w-4.5 h-4.5 rounded-lg" style={{ background: c }} />
+          <span className="w-4.5 h-4.5 rounded-lg shadow-sm" style={{ background: c }} />
         </button>
       ))}
     </div>
@@ -297,7 +304,7 @@ export function Hoja({ abierta, alCerrar, titulo, children }: {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center">
       <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-[2px]"
+        className="hoja-scrim absolute inset-0"
         onClick={alCerrar}
         aria-hidden
       />
@@ -306,20 +313,21 @@ export function Hoja({ abierta, alCerrar, titulo, children }: {
         aria-modal="true"
         aria-label={titulo}
         className={cn(
-          'relative w-full sm:max-w-lg superficie rounded-t-3xl sm:rounded-3xl',
-          'max-h-[92vh] overflow-y-auto sin-barra safe-bottom',
+          'relative w-full sm:max-w-lg superficie borde border rounded-t-3xl sm:rounded-3xl',
+          'max-h-[92vh] overflow-y-auto sin-barra safe-bottom shadow-[var(--shadow-flotante)]',
           'animate-[subir_.22s_cubic-bezier(.32,.72,0,1)]',
         )}
       >
         {/* Agarradera: indica que se puede arrastrar para cerrar. */}
         <div className="sticky top-0 superficie pt-2.5 pb-3 px-5 z-10 rounded-t-3xl">
-          <div className="w-9 h-1 rounded-full superficie-2 mx-auto mb-3 sm:hidden" />
+          <div className="w-9 h-1 rounded-full bg-black/15 dark:bg-white/20 mx-auto mb-3 sm:hidden" />
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-lg txt">{titulo}</h2>
+            <h2 className="font-semibold text-lg txt tracking-tight">{titulo}</h2>
             <button
               onClick={alCerrar}
               aria-label="Cerrar"
-              className="w-9 h-9 rounded-full superficie-2 flex items-center justify-center txt-2"
+              className="w-9 h-9 rounded-full superficie-2 text-base flex items-center justify-center txt-2 active:scale-[0.97] active:brightness-95 transition-all duration-100"
+              style={{ fontSize: 16 }}
             >
               <X size={18} />
             </button>

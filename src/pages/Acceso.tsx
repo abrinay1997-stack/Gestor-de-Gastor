@@ -20,10 +20,10 @@ function Marco({ titulo, subtitulo, children }: {
     <div className="min-h-dvh flex flex-col items-center justify-center p-6 safe-top safe-bottom">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center text-center mb-8">
-          <div className="w-16 h-16 bg-marca-500 text-white rounded-3xl flex items-center justify-center mb-5 shadow-lg shadow-marca-500/25">
+          <div className="w-16 h-16 bg-marca-600 text-white border border-white/15 rounded-3xl flex items-center justify-center mb-5 shadow-xl shadow-marca-600/30">
             <Icono nombre="wallet" size={30} />
           </div>
-          <h1 className="text-2xl font-bold txt mb-2">{titulo}</h1>
+          <h1 className="text-2xl font-semibold txt tracking-tight text-balance mb-2">{titulo}</h1>
           <p className="text-sm txt-2 leading-relaxed">{subtitulo}</p>
         </div>
         {children}
