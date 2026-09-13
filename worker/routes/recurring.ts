@@ -32,6 +32,7 @@ interface Validado {
   accountId: string;
   categoryId: string | null;
   jarId: string | null;
+  distributeToJars: boolean;
   paidBy: string | null;
   frequency: Frecuencia;
   dayOfMonth: number | null;
@@ -65,6 +66,13 @@ async function validar(
     const jar = await env.DB.prepare('SELECT id FROM jar WHERE id = ?1 AND household_id = ?2')
       .bind(jarId, householdId).first();
     if (!jar) return error('La jarra no existe', 404);
+  }
+
+  // Repartir y mandar a una jarra son excluyentes: si no, el mismo ingreso
+  // entraria dos veces.
+  const distributeToJars = type === TxType.INGRESO && booleano(body.distributeToJars ?? false);
+  if (distributeToJars && jarId) {
+    return error('Un ingreso se reparte entre todas las jarras o va a una sola, no las dos', 400);
   }
 
   const paidBy = idOpcional(body.paidBy, 'paidBy');
@@ -104,7 +112,7 @@ async function validar(
   }
 
   return {
-    name, type, amountMinor, accountId, categoryId, jarId, paidBy,
+    name, type, amountMinor, accountId, categoryId, jarId, distributeToJars, paidBy,
     frequency, dayOfMonth, dayOfMonth2, dayOfWeek, monthOfYear,
     active: booleano(body.active ?? true),
   };
@@ -127,14 +135,15 @@ export async function crear(req: Request, env: Env, sesion: Sesion): Promise<Res
 
   await env.DB.prepare(
     `INSERT INTO recurring (id, household_id, name, type, amount_minor, account_id,
-                            category_id, jar_id, paid_by, frequency, day_of_month,
-                            day_of_month_2, day_of_week, month_of_year, active,
-                            next_run, last_run, created_at, updated_at)
-     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,NULL,?17,?17)`,
+                            category_id, jar_id, distribute_to_jars, paid_by, frequency,
+                            day_of_month, day_of_month_2, day_of_week, month_of_year,
+                            active, next_run, last_run, created_at, updated_at)
+     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,NULL,?18,?18)`,
   ).bind(
     id, sesion.householdId, v.name, v.type, v.amountMinor, v.accountId,
-    v.categoryId, v.jarId, v.paidBy, v.frequency, v.dayOfMonth, v.dayOfMonth2,
-    v.dayOfWeek, v.monthOfYear, v.active ? 1 : 0, nextRun, t,
+    v.categoryId, v.jarId, v.distributeToJars ? 1 : 0, v.paidBy, v.frequency,
+    v.dayOfMonth, v.dayOfMonth2, v.dayOfWeek, v.monthOfYear, v.active ? 1 : 0,
+    nextRun, t,
   ).run();
 
   const recurrente = await recurrentePorId(env, sesion.householdId, id);
@@ -169,14 +178,15 @@ export async function editar(
 
   await env.DB.prepare(
     `UPDATE recurring SET name=?1, type=?2, amount_minor=?3, account_id=?4,
-                          category_id=?5, jar_id=?6, paid_by=?7, frequency=?8,
-                          day_of_month=?9, day_of_month_2=?10, day_of_week=?11,
-                          month_of_year=?12, active=?13, next_run=?14, updated_at=?15
-     WHERE id=?16 AND household_id=?17`,
+                          category_id=?5, jar_id=?6, distribute_to_jars=?7, paid_by=?8,
+                          frequency=?9, day_of_month=?10, day_of_month_2=?11,
+                          day_of_week=?12, month_of_year=?13, active=?14,
+                          next_run=?15, updated_at=?16
+     WHERE id=?17 AND household_id=?18`,
   ).bind(
-    v.name, v.type, v.amountMinor, v.accountId, v.categoryId, v.jarId, v.paidBy,
-    v.frequency, v.dayOfMonth, v.dayOfMonth2, v.dayOfWeek, v.monthOfYear,
-    v.active ? 1 : 0, nextRun, ahora(), id, sesion.householdId,
+    v.name, v.type, v.amountMinor, v.accountId, v.categoryId, v.jarId,
+    v.distributeToJars ? 1 : 0, v.paidBy, v.frequency, v.dayOfMonth, v.dayOfMonth2,
+    v.dayOfWeek, v.monthOfYear, v.active ? 1 : 0, nextRun, ahora(), id, sesion.householdId,
   ).run();
 
   const recurrente = await recurrentePorId(env, sesion.householdId, id);

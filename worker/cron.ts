@@ -11,7 +11,8 @@
  * cientos de golpe.
  */
 
-import { aRecurring, listarCuentas, listarJarras, listarMovimientos } from './db.ts';
+import { aRecurring, listarCuentas, listarImputaciones, listarJarras } from './db.ts';
+import { jarrasParaRepartir, sentenciasImputacion } from './jarras.ts';
 import type { Env } from './env.ts';
 import { fechasVencidas, reglaDe, siguienteFecha } from '../shared/recurrencia.ts';
 
@@ -52,21 +53,38 @@ export async function correrPagosHabituales(env: Env): Promise<{ creados: number
 
     const proxima = siguienteFecha(reglaDe(r), fechas[fechas.length - 1]);
 
-    // Todo junto: los movimientos y el avance de la fecha. Si algo falla, no
-    // queda ni un movimiento creado con la fecha sin avanzar (que al proximo
-    // barrido lo duplicaria).
+    // Las jarras del hogar, para congelar el reparto de cada movimiento que se
+    // cree. Antes esta consulta no existia y el INSERT escribia
+    // distribute_to_jars = 0 a mano: un sueldo que entraba por aca no podia
+    // llegar a ninguna jarra por mas que se configurara.
+    const jars = r.distributeToJars ? await jarrasParaRepartir(env, r.householdId) : [];
+
+    // Todo junto: los movimientos, sus imputaciones y el avance de la fecha. Si
+    // algo falla, no queda ni un movimiento creado con la fecha sin avanzar
+    // (que al proximo barrido lo duplicaria).
     const sentencias = [
-      ...fechas.map((fecha) =>
-        env.DB.prepare(
-          `INSERT INTO tx (id, household_id, type, amount_minor, account_id, dest_account_id,
-                           dest_amount_minor, category_id, jar_id, distribute_to_jars,
-                           description, notes, date, created_by, paid_by, recurring_id,
-                           created_at, updated_at)
-           VALUES (?1,?2,?3,?4,?5,NULL,NULL,?6,?7,0,?8,NULL,?9,?10,?11,?12,?13,?13)`,
-        ).bind(
-          crypto.randomUUID(), r.householdId, r.type, r.amountMinor, r.accountId,
-          r.categoryId, r.jarId, r.name, fecha, autor, r.paidBy, r.id, ahora,
-        )),
+      ...fechas.flatMap((fecha) => {
+        const txId = crypto.randomUUID();
+        return [
+          env.DB.prepare(
+            `INSERT INTO tx (id, household_id, type, amount_minor, account_id, dest_account_id,
+                             dest_amount_minor, category_id, jar_id, distribute_to_jars,
+                             description, notes, date, created_by, paid_by, recurring_id,
+                             created_at, updated_at)
+             VALUES (?1,?2,?3,?4,?5,NULL,NULL,?6,?7,?8,?9,NULL,?10,?11,?12,?13,?14,?14)`,
+          ).bind(
+            txId, r.householdId, r.type, r.amountMinor, r.accountId,
+            r.categoryId, r.jarId, r.distributeToJars ? 1 : 0, r.name, fecha,
+            autor, r.paidBy, r.id, ahora,
+          ),
+          ...sentenciasImputacion(env, r.householdId, txId, {
+            type: r.type,
+            amountMinor: r.amountMinor,
+            distributeToJars: r.distributeToJars,
+            jarId: r.jarId,
+          }, jars, ahora),
+        ];
+      }),
       env.DB.prepare('UPDATE recurring SET next_run = ?1, last_run = ?2, updated_at = ?2 WHERE id = ?3')
         .bind(proxima, ahora, r.id),
     ];
@@ -80,16 +98,16 @@ export async function correrPagosHabituales(env: Env): Promise<{ creados: number
   // de un evento por movimiento: son pocos hogares y evita una tormenta.
   for (const householdId of hogares) {
     try {
-      const movs = await listarMovimientos(env, householdId);
+      const imputaciones = await listarImputaciones(env, householdId);
       const [accounts, jars] = await Promise.all([
         listarCuentas(env, householdId),
-        listarJarras(env, householdId, movs),
+        listarJarras(env, householdId, imputaciones),
       ]);
       const hub = env.HUB.get(env.HUB.idFromName(householdId));
       await hub.fetch('https://hub/broadcast', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind: 'recargar', accounts, jars }),
+        body: JSON.stringify({ kind: 'recargar', accounts, jars, imputaciones }),
       });
     } catch (e) {
       console.error('No se pudo avisar al hogar', householdId, e);

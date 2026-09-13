@@ -82,9 +82,11 @@ function sentenciasSemilla(env: Env, householdId: string, t: number) {
   for (const [i, j] of JARRAS_INICIALES.entries()) {
     out.push(
       env.DB.prepare(
-        `INSERT INTO jar (id, household_id, name, percentage_bp, color, icon, display_order, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
-      ).bind(nuevoId(), householdId, j.name, j.percentageBp, j.color, j.icon, i, t),
+        `INSERT INTO jar (id, household_id, name, percentage_bp, color, icon,
+                          display_order, acumula, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+      ).bind(nuevoId(), householdId, j.name, j.percentageBp, j.color, j.icon, i,
+             j.acumula ? 1 : 0, t),
     );
   }
 

@@ -19,8 +19,8 @@ import { api, ApiError } from '../api/client.ts';
 import { live, type EstadoLive } from '../api/live.ts';
 import { calcularJarras, calcularSaldos } from '@shared/domain';
 import type {
-  Account, Budget, Category, Jar, LiveEvent, Member, Recurring, SeccionInicio,
-  Snapshot, Transaction, TransactionInput,
+  Account, Budget, Category, Jar, JarImputacion, JarTransfer, LiveEvent, Member,
+  Recurring, SeccionInicio, Snapshot, Transaction, TransactionInput,
 } from '@shared/types';
 
 const CLAVE_COLA = 'gg_cola_v1';
@@ -38,6 +38,9 @@ interface Estado {
   budgets: Budget[];
   transactions: Transaction[];
   recurring: Recurring[];
+  /** Lo que cada movimiento le hizo a cada jarra, congelado al guardarlo. */
+  imputaciones: JarImputacion[];
+  jarTransfers: JarTransfer[];
   /** Ids con una escritura en vuelo: la UI los muestra atenuados. */
   enVuelo: Set<string>;
   /** Movimientos cargados sin conexion, esperando para subir. */
@@ -50,7 +53,8 @@ interface Estado {
 const inicial: Estado = {
   cargando: true, autenticado: false, instalado: true, me: null, members: [],
   household: null, accounts: [], categories: [], jars: [], budgets: [],
-  transactions: [], recurring: [], enVuelo: new Set(), cola: [], online: [],
+  transactions: [], recurring: [], imputaciones: [], jarTransfers: [],
+  enVuelo: new Set(), cola: [], online: [],
   estadoLive: 'desconectado', aviso: null,
 };
 
@@ -66,12 +70,16 @@ type Accion =
   | { t: 'account:delete'; id: string }
   | { t: 'category:upsert'; category: Category }
   | { t: 'jars'; jars: Jar[] }
+  | { t: 'jar:upsert'; jar: Jar }
   | { t: 'budget:upsert'; budget: Budget }
   | { t: 'budget:delete'; id: string }
   | { t: 'members'; members: Member[] }
   | { t: 'member:upsert'; member: Member }
   | { t: 'recurring:upsert'; recurring: Recurring }
   | { t: 'recurring:delete'; id: string }
+  | { t: 'imputaciones'; txId: string; imputaciones: JarImputacion[] }
+  | { t: 'jarTransfer:upsert'; transfer: JarTransfer }
+  | { t: 'jarTransfer:delete'; id: string }
   | { t: 'vuelo:add'; id: string }
   | { t: 'vuelo:del'; id: string }
   | { t: 'cola'; cola: TransactionInput[] }
@@ -98,6 +106,7 @@ function reducer(s: Estado, a: Accion): Estado {
         accounts: a.snap.accounts, categories: a.snap.categories,
         jars: a.snap.jars, budgets: a.snap.budgets, recurring: a.snap.recurring,
         transactions: ordenar(a.snap.transactions),
+        imputaciones: a.snap.imputaciones, jarTransfers: a.snap.jarTransfers,
       };
 
     case 'salir':
@@ -108,8 +117,27 @@ function reducer(s: Estado, a: Accion): Estado {
       return { ...s, transactions: ordenar([...resto, a.tx]) };
     }
 
+    case 'imputaciones': {
+      const resto = s.imputaciones.filter((i) => i.txId !== a.txId);
+      return { ...s, imputaciones: [...resto, ...a.imputaciones] };
+    }
+
+    case 'jarTransfer:upsert': {
+      const resto = s.jarTransfers.filter((t) => t.id !== a.transfer.id);
+      return { ...s, jarTransfers: [a.transfer, ...resto] };
+    }
+
+    case 'jarTransfer:delete':
+      return { ...s, jarTransfers: s.jarTransfers.filter((t) => t.id !== a.id) };
+
     case 'tx:delete':
-      return { ...s, transactions: s.transactions.filter((t) => t.id !== a.id) };
+      // Sus imputaciones tambien: en la base se van por ON DELETE CASCADE, y
+      // si el cliente las conservara, la jarra quedaria con plata fantasma.
+      return {
+        ...s,
+        transactions: s.transactions.filter((t) => t.id !== a.id),
+        imputaciones: s.imputaciones.filter((i) => i.txId !== a.id),
+      };
 
     case 'saldos':
       return { ...s, accounts: a.accounts, jars: a.jars };
@@ -145,6 +173,11 @@ function reducer(s: Estado, a: Accion): Estado {
 
     case 'jars':
       return { ...s, jars: a.jars };
+
+    case 'jar:upsert': {
+      const resto = s.jars.filter((j) => j.id !== a.jar.id);
+      return { ...s, jars: [...resto, a.jar].sort((x, y) => x.displayOrder - y.displayOrder) };
+    }
 
     case 'budget:upsert': {
       const resto = s.budgets.filter((b) => b.id !== a.budget.id);
@@ -243,6 +276,11 @@ interface Acciones {
   ajustarSaldo: (id: string, saldoMinor: number, nota?: string) => Promise<void>;
   guardarCategoria: (c: Partial<Category>, id?: string) => Promise<void>;
   guardarJarras: (jars: Partial<Jar>[]) => Promise<void>;
+  traspasarEntreJarras: (d: {
+    fromJarId: string; toJarId: string; amountMinor: number; note?: string;
+  }) => Promise<void>;
+  borrarTraspaso: (id: string) => Promise<void>;
+  ponerJarrasAlDia: () => Promise<number>;
   guardarPresupuesto: (b: { categoryId: string | null; amountMinor: number; period: string }) => Promise<void>;
   borrarPresupuesto: (id: string) => Promise<void>;
   guardarPerfil: (d: { displayName?: string; color?: string; emoji?: string; homeLayout?: SeccionInicio[] }) => Promise<void>;
@@ -338,7 +376,17 @@ export function Store({ children }: { children: ReactNode }) {
         case 'member:upsert': dispatch({ t: 'member:upsert', member: ev.member }); break;
         case 'recurring:upsert': dispatch({ t: 'recurring:upsert', recurring: ev.recurring }); break;
         case 'recurring:delete': dispatch({ t: 'recurring:delete', id: ev.id }); break;
-        case 'jar:upsert': break; // los saldos llegan recalculados aparte
+        // Antes esto era un `break` a secas y el otro telefono no veia ningun
+        // cambio de jarra hasta recargar: ni un porcentaje, ni un nombre.
+        case 'jar:upsert': dispatch({ t: 'jar:upsert', jar: ev.jar }); break;
+        case 'jars': dispatch({ t: 'jars', jars: ev.jars }); break;
+        case 'imputaciones':
+          dispatch({ t: 'imputaciones', txId: ev.txId, imputaciones: ev.imputaciones });
+          break;
+        case 'jarTransfer:upsert':
+          dispatch({ t: 'jarTransfer:upsert', transfer: ev.transfer });
+          break;
+        case 'jarTransfer:delete': dispatch({ t: 'jarTransfer:delete', id: ev.id }); break;
         case 'recargar':
           // El disparador de pagos habituales creo movimientos por fuera de la
           // app. Se recarga entero en vez de parchear evento por evento.
@@ -372,10 +420,13 @@ export function Store({ children }: { children: ReactNode }) {
     return estado.accounts.map((c) => ({ ...c, balanceMinor: saldos.get(c.id) ?? c.balanceMinor }));
   }, [estado.accounts, estado.transactions]);
 
+  // El saldo de una jarra sale de sus imputaciones congeladas, no de volver a
+  // repartir el historial con los porcentajes de hoy. Es lo que hace que
+  // cambiar un porcentaje no mueva el pasado.
   const jarrasConSaldo = useMemo(() => {
-    const saldos = calcularJarras(estado.jars, estado.transactions);
+    const saldos = calcularJarras(estado.jars, estado.imputaciones, estado.jarTransfers);
     return estado.jars.map((j) => ({ ...j, balanceMinor: saldos.get(j.id) ?? 0 }));
-  }, [estado.jars, estado.transactions]);
+  }, [estado.jars, estado.imputaciones, estado.jarTransfers]);
 
   const acciones = useMemo<Acciones>(() => ({
     avisar,
@@ -422,6 +473,7 @@ export function Store({ children }: { children: ReactNode }) {
           : await api.editarTx(id, entrada);
 
         dispatch({ t: 'tx:upsert', tx: r.transaction });
+        dispatch({ t: 'imputaciones', txId: r.transaction.id, imputaciones: r.imputaciones });
         dispatch({ t: 'saldos', accounts: r.accounts, jars: r.jars });
       } catch (e) {
         if (e instanceof ApiError && e.esDeRed && esNuevo) {
@@ -478,6 +530,24 @@ export function Store({ children }: { children: ReactNode }) {
     guardarJarras: async (jars) => {
       const r = await api.guardarJarras(jars);
       dispatch({ t: 'jars', jars: r.jars });
+    },
+
+    traspasarEntreJarras: async (d) => {
+      const r = await api.traspasarEntreJarras(d);
+      dispatch({ t: 'jarTransfer:upsert', transfer: r.transfer });
+    },
+
+    borrarTraspaso: async (id) => {
+      await api.borrarTraspaso(id);
+      dispatch({ t: 'jarTransfer:delete', id });
+    },
+
+    ponerJarrasAlDia: async () => {
+      const r = await api.ponerJarrasAlDia();
+      // Cambiaron varios movimientos de golpe: se recarga entero en vez de
+      // parchear uno por uno. Pasa una sola vez.
+      if (r.repartidos > 0) await cargar();
+      return r.repartidos;
     },
 
     guardarPresupuesto: async (b) => {

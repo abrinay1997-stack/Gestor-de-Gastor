@@ -4,8 +4,8 @@
 
 import { derivarClave } from '@shared/kdf';
 import type {
-  Account, Adjustment, Budget, Category, Jar, Member, Recurring, SeccionInicio,
-  Snapshot, Transaction, TransactionInput,
+  Account, Adjustment, Budget, Category, Jar, JarImputacion, JarTransfer, Member,
+  Recurring, SeccionInicio, Snapshot, Transaction, TransactionInput,
 } from '@shared/types';
 
 export class ApiError extends Error {
@@ -67,6 +67,11 @@ interface ConSaldos {
   jars: Jar[];
 }
 
+/** Las imputaciones del movimiento tocado, para que el cliente parche solo esas. */
+interface ConImputaciones {
+  imputaciones: JarImputacion[];
+}
+
 /**
  * Todo lo que toca contraseñas pasa antes por derivarClave.
  *
@@ -114,10 +119,10 @@ export const api = {
   snapshot: () => get<Snapshot>('/api/snapshot'),
 
   crearTx: (t: TransactionInput) =>
-    post<{ transaction: Transaction } & ConSaldos>('/api/transactions', t),
+    post<{ transaction: Transaction } & ConSaldos & ConImputaciones>('/api/transactions', t),
 
   editarTx: (id: string, t: TransactionInput) =>
-    put<{ transaction: Transaction } & ConSaldos>(`/api/transactions/${id}`, t),
+    put<{ transaction: Transaction } & ConSaldos & ConImputaciones>(`/api/transactions/${id}`, t),
 
   borrarTx: (id: string) =>
     del<{ ok: true } & ConSaldos>(`/api/transactions/${id}`),
@@ -153,6 +158,21 @@ export const api = {
     put<{ category: Category }>(`/api/categories/${id}`, c),
 
   guardarJarras: (jars: Partial<Jar>[]) => put<{ jars: Jar[] }>('/api/jars', { jars }),
+
+  /**
+   * Mover plata de una jarra a otra. No toca ninguna cuenta: es lo unico que
+   * permite sacar del rojo a una jarra en la que se gasto de mas.
+   */
+  traspasarEntreJarras: (d: {
+    fromJarId: string; toJarId: string; amountMinor: number; note?: string;
+  }) => post<{ transfer: JarTransfer; jars: Jar[] }>('/api/jar-transfers', d),
+
+  borrarTraspaso: (id: string) =>
+    del<{ ok: true; jars: Jar[] }>(`/api/jar-transfers/${id}`),
+
+  /** Reparte los ingresos viejos que nunca llegaron a ninguna jarra. */
+  ponerJarrasAlDia: () =>
+    post<{ repartidos: number; jars: Jar[] }>('/api/jars/poner-al-dia', {}),
 
   guardarPresupuesto: (b: { categoryId: string | null; amountMinor: number; period: string }) =>
     put<{ budget: Budget }>('/api/budgets', b),

@@ -13,6 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../store/store.tsx';
 import { leer } from '@shared/parser';
 import { formatMonto, montoPlano, parseMonto } from '@shared/money';
+import { imputacionJarras } from '@shared/domain';
 import { TxType, type Transaction, type TransactionInput } from '@shared/types';
 import { aInputDate, deInputDate, vibrar } from '../../lib/utils.ts';
 import { Avatar, Boton, Campo, Ficha, Hoja, Icono, Selector } from '../ui/base.tsx';
@@ -128,6 +129,31 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
     accountId !== '' &&
     (!esTransferencia || (destAccountId !== '' && destAccountId !== accountId)) &&
     !guardando;
+
+  /** A donde iria a parar el ingreso si se guarda asi. */
+  const vistaPrevia = useMemo(() => {
+    if (!repartir || tipo !== TxType.INGRESO || montoMinor === null || montoMinor <= 0) return [];
+    const partes = imputacionJarras(
+      { type: TxType.INGRESO, amountMinor: montoMinor, distributeToJars: true, jarId: null },
+      jars,
+    );
+    return jars
+      .map((jarra) => ({ jarra, monto: partes.get(jarra.id) ?? 0 }))
+      .filter((x) => x.monto !== 0);
+  }, [repartir, tipo, montoMinor, jars]);
+
+  /** Si este gasto deja la jarra en rojo, cuanto queda. */
+  const sobregiro = useMemo(() => {
+    if (tipo !== TxType.GASTO || !jarId || montoMinor === null || montoMinor <= 0) return null;
+    const jarra = jars.find((j) => j.id === jarId);
+    if (!jarra) return null;
+    // Al editar, el efecto viejo ya esta contado en el saldo: se descuenta
+    // para no avisar de un sobregiro que en realidad no cambia.
+    const yaContado = editando?.jarId === jarId && editando.type === TxType.GASTO
+      ? editando.amountMinor : 0;
+    const queda = jarra.balanceMinor + yaContado - montoMinor;
+    return queda < 0 ? { jarra, queda } : null;
+  }, [tipo, jarId, montoMinor, jars, editando]);
 
   async function guardar() {
     if (!puedeGuardar || montoMinor === null) return;
@@ -291,6 +317,37 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
               </option>
             ))}
           </Selector>
+        )}
+
+        {/* Gastar de una jarra vacia es la senal que un sistema de sobres
+            existe para dar. No lo impide (a veces te pasaste y ya esta), pero
+            lo dice ANTES de guardar, no despues en otra pantalla. */}
+        {sobregiro && (
+          <div className="-mt-2 rounded-2xl p-3 border"
+            style={{ borderColor: '#f59e0b66', background: '#f59e0b14' }}>
+            <p className="text-xs txt-2 leading-relaxed">
+              <span className="font-semibold txt">{sobregiro.jarra.name}</span> queda en{' '}
+              <span className="font-semibold tabular text-red-500">
+                {formatMonto(sobregiro.queda, moneda)}
+              </span>.
+              {' '}Se guarda igual; después podés moverle plata desde otra jarra.
+            </p>
+          </div>
+        )}
+
+        {/* El reparto, calculado en vivo. Hasta ahora habia que guardar para
+            enterarse de a donde iba a parar la plata. */}
+        {repartir && montoMinor !== null && montoMinor > 0 && vistaPrevia.length > 0 && (
+          <div className="-mt-2 rounded-2xl superficie-2 borde border p-3 space-y-1">
+            {vistaPrevia.map(({ jarra, monto }) => (
+              <div key={jarra.id} className="flex items-center justify-between gap-2 text-xs">
+                <span className="txt-2 truncate">{jarra.name}</span>
+                <span className="tabular font-medium txt shrink-0">
+                  {formatMonto(monto, moneda)}
+                </span>
+              </div>
+            ))}
+          </div>
         )}
 
         {tipo === TxType.INGRESO && jars.length > 0 && (

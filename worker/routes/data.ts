@@ -247,6 +247,7 @@ export async function guardarJarras(req: Request, env: Env, sesion: Sesion): Pro
       icon: texto(o.icon ?? 'piggy-bank', 'icon', { max: 40 }),
       displayOrder: i,
       createdAt: t,
+      acumula: booleano(o.acumula ?? false),
       balanceMinor: 0,
     });
   }
@@ -274,21 +275,25 @@ export async function guardarJarras(req: Request, env: Env, sesion: Sesion): Pro
       : env.DB.prepare('DELETE FROM jar WHERE household_id = ?1').bind(sesion.householdId),
     ...jarras.map((j) =>
       env.DB.prepare(
-        `INSERT INTO jar (id, household_id, name, percentage_bp, color, icon, display_order, created_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8)
+        `INSERT INTO jar (id, household_id, name, percentage_bp, color, icon,
+                          display_order, acumula, created_at)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
          ON CONFLICT(id) DO UPDATE SET
            name=excluded.name, percentage_bp=excluded.percentage_bp,
-           color=excluded.color, icon=excluded.icon, display_order=excluded.display_order`,
-      ).bind(j.id, sesion.householdId, j.name, j.percentageBp, j.color, j.icon, j.displayOrder, j.createdAt),
+           color=excluded.color, icon=excluded.icon,
+           display_order=excluded.display_order, acumula=excluded.acumula`,
+      ).bind(j.id, sesion.householdId, j.name, j.percentageBp, j.color, j.icon,
+             j.displayOrder, j.acumula ? 1 : 0, j.createdAt),
     ),
   ];
 
   await env.DB.batch(sentencias);
 
   const jars = await listarJarras(env, sesion.householdId);
-  for (const jar of jars) {
-    await difundir(env, sesion.householdId, { kind: 'jar:upsert', jar, by: sesion.memberId });
-  }
+  // Un solo evento con la lista completa. Antes se mandaba una jarra por
+  // evento y el cliente los descartaba, asi que el otro telefono no veia el
+  // cambio hasta recargar.
+  await difundir(env, sesion.householdId, { kind: 'jars', jars, by: sesion.memberId });
   return json({ jars });
 }
 

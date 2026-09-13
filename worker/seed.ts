@@ -28,13 +28,19 @@ export const CATEGORIAS_INICIALES: {
   { name: 'Otros ingresos', type: 'ingreso', icon: 'circle-plus', color: '#64748b' },
 ];
 
+/**
+ * `acumula` decide que numero es el protagonista: el del mes o el de toda la
+ * vida. "Ahorro largo plazo" leido de a un mes no significa nada, y
+ * "Diversion" acumulada desde siempre tampoco. Lo que sobra de un mes no se
+ * tira en ningun caso: se queda en la jarra.
+ */
 export const JARRAS_INICIALES: {
-  name: string; percentageBp: number; icon: string; color: string;
+  name: string; percentageBp: number; icon: string; color: string; acumula: boolean;
 }[] = [
-  { name: 'Necesidades', percentageBp: 5500, icon: 'house', color: '#3b82f6' },
-  { name: 'Ahorro largo plazo', percentageBp: 1000, icon: 'piggy-bank', color: '#10b981' },
-  { name: 'Educación', percentageBp: 1000, icon: 'graduation-cap', color: '#8b5cf6' },
-  { name: 'Diversión', percentageBp: 1000, icon: 'party-popper', color: '#ec4899' },
-  { name: 'Libertad financiera', percentageBp: 1000, icon: 'trending-up', color: '#f59e0b' },
-  { name: 'Donaciones', percentageBp: 500, icon: 'heart-handshake', color: '#f43f5e' },
+  { name: 'Necesidades', percentageBp: 5500, icon: 'house', color: '#3b82f6', acumula: false },
+  { name: 'Ahorro largo plazo', percentageBp: 1000, icon: 'piggy-bank', color: '#10b981', acumula: true },
+  { name: 'Educación', percentageBp: 1000, icon: 'graduation-cap', color: '#8b5cf6', acumula: false },
+  { name: 'Diversión', percentageBp: 1000, icon: 'party-popper', color: '#ec4899', acumula: false },
+  { name: 'Libertad financiera', percentageBp: 1000, icon: 'trending-up', color: '#f59e0b', acumula: true },
+  { name: 'Donaciones', percentageBp: 500, icon: 'heart-handshake', color: '#f43f5e', acumula: false },
 ];

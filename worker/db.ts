@@ -16,7 +16,8 @@
  */
 
 import type {
-  Account, Adjustment, Budget, Category, Household, Jar, Member, Recurring, SeccionInicio,
+  Account, Adjustment, Budget, Category, Household, Jar, JarImputacion, JarTransfer,
+  Member, Recurring, SeccionInicio,
   Snapshot, Transaction,
 } from '../shared/types.ts';
 import { SECCIONES_INICIO } from '../shared/types.ts';
@@ -73,7 +74,29 @@ export const aJar = (f: Fila): Jar => ({
   icon: str(f.icon),
   displayOrder: int(f.display_order),
   createdAt: int(f.created_at),
+  acumula: bool(f.acumula),
   balanceMinor: 0, // se completa despues con calcularJarras
+});
+
+export const aJarImputacion = (f: Fila): JarImputacion => ({
+  id: str(f.id),
+  householdId: str(f.household_id),
+  txId: str(f.tx_id),
+  jarId: str(f.jar_id),
+  amountMinor: int(f.amount_minor),
+  createdAt: int(f.created_at),
+});
+
+export const aJarTransfer = (f: Fila): JarTransfer => ({
+  id: str(f.id),
+  householdId: str(f.household_id),
+  fromJarId: str(f.from_jar_id),
+  toJarId: str(f.to_jar_id),
+  amountMinor: int(f.amount_minor),
+  note: strOpt(f.note),
+  date: int(f.date),
+  createdBy: str(f.created_by),
+  createdAt: int(f.created_at),
 });
 
 export const aTransaction = (f: Fila): Transaction => ({
@@ -148,6 +171,7 @@ export const aRecurring = (f: Fila): Recurring => ({
   accountId: str(f.account_id),
   categoryId: strOpt(f.category_id),
   jarId: strOpt(f.jar_id),
+  distributeToJars: bool(f.distribute_to_jars),
   paidBy: strOpt(f.paid_by),
   frequency: (['semanal', 'quincenal', 'mensual', 'anual'] as const).includes(f.frequency as 'mensual')
     ? (f.frequency as 'semanal' | 'quincenal' | 'mensual' | 'anual')
@@ -313,8 +337,35 @@ export async function movimientoPorId(
  * tocan los centavos sobrantes. Se usa la MISMA funcion que el cliente
  * (shared/domain.ts), asi que los dos llegan siempre al mismo numero.
  */
+export async function listarImputaciones(
+  env: Env, householdId: string,
+): Promise<JarImputacion[]> {
+  const { results } = await env.DB.prepare(
+    'SELECT * FROM jar_imputacion WHERE household_id = ?1',
+  ).bind(householdId).all<Fila>();
+  return results.map(aJarImputacion);
+}
+
+export async function listarTraspasos(
+  env: Env, householdId: string,
+): Promise<JarTransfer[]> {
+  const { results } = await env.DB.prepare(
+    'SELECT * FROM jar_transfer WHERE household_id = ?1 ORDER BY date DESC, created_at DESC',
+  ).bind(householdId).all<Fila>();
+  return results.map(aJarTransfer);
+}
+
+/**
+ * Jarras con su saldo de toda la vida.
+ *
+ * El saldo sale de las imputaciones congeladas, no de recalcular el historial
+ * con los porcentajes de hoy. Ese es el punto de la migracion 0004.
+ */
 export async function listarJarras(
-  env: Env, householdId: string, movimientos?: Transaction[],
+  env: Env,
+  householdId: string,
+  imputaciones?: JarImputacion[],
+  transfers?: JarTransfer[],
 ): Promise<Jar[]> {
   const { results } = await env.DB.prepare(
     'SELECT * FROM jar WHERE household_id = ?1 ORDER BY display_order ASC, created_at ASC',
@@ -323,8 +374,11 @@ export async function listarJarras(
   const jarras = results.map(aJar);
   if (jarras.length === 0) return jarras;
 
-  const movs = movimientos ?? (await listarMovimientos(env, householdId));
-  const saldos = calcularJarras(jarras, movs);
+  const [imp, tra] = await Promise.all([
+    imputaciones ?? listarImputaciones(env, householdId),
+    transfers ?? listarTraspasos(env, householdId),
+  ]);
+  const saldos = calcularJarras(jarras, imp, tra);
 
   return jarras.map((j) => ({ ...j, balanceMinor: saldos.get(j.id) ?? 0 }));
 }
@@ -337,17 +391,20 @@ export async function snapshot(
     .bind(householdId).first<Fila>();
   if (!filaHogar) return null;
 
-  const [accounts, categories, budgets, members, transactions, recurring] = await Promise.all([
+  const [accounts, categories, budgets, members, transactions, recurring,
+         imputaciones, jarTransfers] = await Promise.all([
     listarCuentas(env, householdId),
     listarCategorias(env, householdId),
     listarPresupuestos(env, householdId),
     listarMiembros(env, householdId),
     listarMovimientos(env, householdId),
     listarRecurrentes(env, householdId),
+    listarImputaciones(env, householdId),
+    listarTraspasos(env, householdId),
   ]);
 
-  // Se reusan los movimientos ya traidos en vez de volver a consultarlos.
-  const jars = await listarJarras(env, householdId, transactions);
+  // Se reusa lo ya traido en vez de volver a consultarlo.
+  const jars = await listarJarras(env, householdId, imputaciones, jarTransfers);
 
   const me = members.find((m) => m.id === memberId);
   if (!me) return null;
@@ -355,5 +412,6 @@ export async function snapshot(
   return {
     household: aHousehold(filaHogar),
     members, me, accounts, categories, jars, budgets, transactions, recurring,
+    imputaciones, jarTransfers,
   };
 }

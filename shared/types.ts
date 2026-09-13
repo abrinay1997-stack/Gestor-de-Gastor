@@ -183,6 +183,13 @@ export interface Jar {
   householdId: string;
   name: string;
   /**
+   * Si acumula, el numero grande es el de toda la vida (Ahorro largo plazo).
+   * Si no, el del periodo elegido (Necesidades, Diversion).
+   *
+   * Es solo como se lee: lo que sobra de un mes NO se tira, se queda adentro.
+   */
+  acumula: boolean;
+  /**
    * Porcentaje en puntos base: 2,5% se guarda como 250, no como 0.025.
    * Entero otra vez, por el mismo motivo que los montos.
    */
@@ -193,6 +200,39 @@ export interface Jar {
   createdAt: number;
   /** Derivado de las imputaciones, igual que el saldo de cuenta. */
   balanceMinor: number;
+}
+
+/**
+ * Lo que un movimiento le hizo a una jarra, escrito en el momento.
+ *
+ * Antes el saldo se recalculaba en cada lectura con los porcentajes vigentes,
+ * asi que cambiar un porcentaje reescribia el pasado. Congelar la imputacion
+ * es lo que hace que el historial se quede quieto.
+ */
+export interface JarImputacion {
+  id: string;
+  householdId: string;
+  txId: string;
+  jarId: string;
+  /** Positivo entra, negativo sale. */
+  amountMinor: number;
+  createdAt: number;
+}
+
+/**
+ * Mover plata de una jarra a otra. No toca ninguna cuenta: no es un
+ * movimiento de dinero, es un cambio de plan.
+ */
+export interface JarTransfer {
+  id: string;
+  householdId: string;
+  fromJarId: string;
+  toJarId: string;
+  amountMinor: number;
+  note: string | null;
+  date: number;
+  createdBy: string;
+  createdAt: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -251,6 +291,12 @@ export interface Recurring {
   accountId: string;
   categoryId: string | null;
   jarId: string | null;
+  /**
+   * Repartir el ingreso entre las jarras al crearlo. Sin esto, un sueldo que
+   * entra por un pago habitual no puede llegar a ninguna jarra: el disparador
+   * lo insertaba con el reparto apagado a mano.
+   */
+  distributeToJars: boolean;
   paidBy: string | null;
   frequency: 'semanal' | 'quincenal' | 'mensual' | 'anual';
   dayOfMonth: number | null;
@@ -322,6 +368,9 @@ export interface Snapshot {
   budgets: Budget[];
   transactions: Transaction[];
   recurring: Recurring[];
+  /** Lo que cada movimiento le hizo a cada jarra, congelado. */
+  imputaciones: JarImputacion[];
+  jarTransfers: JarTransfer[];
 }
 
 // ---------------------------------------------------------------------------
@@ -335,6 +384,20 @@ export type LiveEvent =
   | { kind: 'account:delete'; id: string; by: string }
   | { kind: 'category:upsert'; category: Category; by: string }
   | { kind: 'jar:upsert'; jar: Jar; by: string }
+  /**
+   * Las jarras cambiaron enteras (porcentajes, nombres, altas y bajas). Se
+   * mandan todas juntas porque se guardan juntas: un reparto a medio aplicar
+   * no seria valido.
+   */
+  | { kind: 'jars'; jars: Jar[]; by: string }
+  | { kind: 'jarTransfer:upsert'; transfer: JarTransfer; by: string }
+  | { kind: 'jarTransfer:delete'; id: string; by: string }
+  /**
+   * Las imputaciones de un movimiento. Van con el evento del movimiento y no
+   * dentro de el porque tambien cambian solas cuando se reparte un ingreso
+   * viejo desde la puesta al dia.
+   */
+  | { kind: 'imputaciones'; txId: string; imputaciones: JarImputacion[]; by: string }
   | { kind: 'budget:upsert'; budget: Budget; by: string }
   | { kind: 'budget:delete'; id: string; by: string }
   | { kind: 'member:upsert'; member: Member; by: string }
@@ -344,6 +407,11 @@ export type LiveEvent =
    * Algo cambio por fuera de la app (el disparador de pagos habituales) y
    * conviene recargar. Trae los saldos ya recalculados.
    */
-  | { kind: 'recargar'; accounts: Account[]; jars: Jar[] }
+  | {
+      kind: 'recargar';
+      accounts: Account[];
+      jars: Jar[];
+      imputaciones?: JarImputacion[];
+    }
   | { kind: 'presence'; online: string[] }
   | { kind: 'hello'; online: string[] };

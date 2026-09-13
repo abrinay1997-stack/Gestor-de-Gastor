@@ -5,10 +5,11 @@
  */
 
 import {
-  type Account, type Budget, type Category, type Jar, type Member,
-  type Transaction, TxType,
+  type Account, type Budget, type Category, type Jar, type JarImputacion,
+  type JarTransfer, type Member, type Transaction, TxType,
 } from './types.ts';
 import { repartir, sumarMinor } from './money.ts';
+import { dentroDe, type Periodo } from './periodo.ts';
 
 // ---------------------------------------------------------------------------
 // Saldos de cuenta
@@ -93,13 +94,22 @@ export function calcularPatrimonio(accounts: Account[]): number {
 // ---------------------------------------------------------------------------
 
 /**
- * Como se imputa una transaccion a las jarras.
- * Devuelve un mapa jarraId -> centavos (positivos o negativos).
+ * Como se reparte un ingreso entre las jarras, o a que jarra va un movimiento.
+ * Devuelve un mapa jarraId -> centavos (positivos entran, negativos salen).
+ *
+ * Esto se calcula UNA sola vez, al guardar el movimiento, y el resultado queda
+ * escrito en jar_imputacion. Antes se recalculaba en cada lectura con los
+ * porcentajes vigentes, asi que subir el ahorro del 10% al 20% reescribia el
+ * sueldo de enero. Ahora cambiar un porcentaje solo afecta lo que venga
+ * despues.
  *
  * Usa `repartir`, que garantiza que la suma de las partes sea exactamente el
  * total. Ver la explicacion del metodo del mayor resto en money.ts.
  */
-export function imputacionJarras(tx: Transaction, jars: Jar[]): Map<string, number> {
+export function imputacionJarras(
+  tx: Pick<Transaction, 'type' | 'amountMinor' | 'distributeToJars' | 'jarId'>,
+  jars: Jar[],
+): Map<string, number> {
   const out = new Map<string, number>();
 
   if (tx.type === TxType.INGRESO && tx.distributeToJars) {
@@ -119,16 +129,107 @@ export function imputacionJarras(tx: Transaction, jars: Jar[]): Map<string, numb
   return out;
 }
 
-/** Saldo acumulado de cada jarra. */
-export function calcularJarras(jars: Jar[], transactions: Transaction[]): Map<string, number> {
+/**
+ * Saldo de cada jarra: la suma de sus imputaciones mas los traspasos.
+ *
+ * `periodo` acota que se cuenta. Sin periodo es el saldo de toda la vida, que
+ * es el que cuadra contra las cuentas y el que decide si una jarra esta en
+ * rojo. Con periodo es la lectura del mes.
+ *
+ * Ojo con la diferencia: leer por mes NO borra lo que sobro del mes anterior.
+ * La plata sigue en la jarra; lo unico que cambia es que numero se mira.
+ */
+export function calcularJarras(
+  jars: Jar[],
+  imputaciones: JarImputacion[],
+  transfers: JarTransfer[],
+  fechaDe?: (txId: string) => number | undefined,
+  periodo?: Periodo,
+): Map<string, number> {
   const saldos = new Map<string, number>(jars.map((j) => [j.id, 0]));
+  const suma = (jarId: string, delta: number) => {
+    const actual = saldos.get(jarId);
+    if (actual !== undefined) saldos.set(jarId, actual + delta);
+  };
 
-  for (const tx of transactions) {
-    for (const [jarId, delta] of imputacionJarras(tx, jars)) {
-      if (saldos.has(jarId)) saldos.set(jarId, saldos.get(jarId)! + delta);
+  for (const i of imputaciones) {
+    if (periodo) {
+      const fecha = fechaDe?.(i.txId);
+      // Una imputacion sin movimiento a la vista no se puede ubicar en el
+      // tiempo: se deja afuera del periodo en vez de contarla en el mes que no
+      // es. En el saldo de toda la vida si entra.
+      if (fecha === undefined || !dentroDe(fecha, periodo)) continue;
     }
+    suma(i.jarId, i.amountMinor);
   }
+
+  for (const t of transfers) {
+    if (periodo && !dentroDe(t.date, periodo)) continue;
+    suma(t.fromJarId, -t.amountMinor);
+    suma(t.toJarId, t.amountMinor);
+  }
+
   return saldos;
+}
+
+/** Cuanto entro y cuanto salio de una jarra, para leer el mes. */
+export interface FlujoJarra {
+  entroMinor: number;
+  salioMinor: number;
+}
+
+export function flujoDeJarras(
+  jars: Jar[],
+  imputaciones: JarImputacion[],
+  transfers: JarTransfer[],
+  fechaDe?: (txId: string) => number | undefined,
+  periodo?: Periodo,
+): Map<string, FlujoJarra> {
+  const out = new Map<string, FlujoJarra>(jars.map((j) => [j.id, { entroMinor: 0, salioMinor: 0 }]));
+  const anotar = (jarId: string, delta: number) => {
+    const f = out.get(jarId);
+    if (!f) return;
+    if (delta >= 0) f.entroMinor += delta;
+    else f.salioMinor += -delta;
+  };
+
+  for (const i of imputaciones) {
+    if (periodo) {
+      const fecha = fechaDe?.(i.txId);
+      if (fecha === undefined || !dentroDe(fecha, periodo)) continue;
+    }
+    anotar(i.jarId, i.amountMinor);
+  }
+  for (const t of transfers) {
+    if (periodo && !dentroDe(t.date, periodo)) continue;
+    anotar(t.fromJarId, -t.amountMinor);
+    anotar(t.toJarId, t.amountMinor);
+  }
+  return out;
+}
+
+/**
+ * La plata que existe y todavia no tiene trabajo asignado.
+ *
+ * No es una tabla ni un saldo guardado: es una resta, calculada al leer, igual
+ * que el saldo de una cuenta. Por ser una resta no puede desincronizarse.
+ *
+ * Con esto las jarras y las cuentas dejan de ser dos libros paralelos:
+ *
+ *     jarras + sin asignar = la plata que hay de verdad
+ *
+ * Un ingreso repartido sube las jarras y no lo mueve. Uno sin repartir lo
+ * sube. Un gasto sin jarra lo baja. Si queda negativo, asignaron mas de lo que
+ * tienen, y eso merece un aviso.
+ *
+ * Las cuentas archivadas quedan afuera, igual que en el patrimonio: si no
+ * cuentan como plata disponible, tampoco pueden respaldar una jarra.
+ */
+export function sinAsignar(accounts: Account[], saldosJarras: Map<string, number>): number {
+  const enCuentas = accounts.reduce((t, a) => (a.archived ? t : t + a.balanceMinor), 0);
+  let enJarras = 0;
+  for (const saldo of saldosJarras.values()) enJarras += saldo;
+  return enCuentas - enJarras;
 }
 
 /** Los porcentajes de las jarras deben sumar 100%. */

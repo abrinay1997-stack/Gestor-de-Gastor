@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { formatMonto, parseMonto, repartir } from './money.ts';
 import {
   autorDe, balancePorMes, calcularJarras, calcularPatrimonio, calcularSaldos,
-  efectoEnCuenta, porPersona, resumir, validarJarras,
+  efectoEnCuenta, flujoDeJarras, imputacionJarras, porPersona, resumir,
+  sinAsignar, validarJarras,
 } from './domain.ts';
+import { periodoMes } from './periodo.ts';
 import { leer } from './parser.ts';
 import {
-  AccountCategory, type Account, type Category, type Jar, type Member,
-  type Transaction, TxType,
+  AccountCategory, type Account, type Category, type Jar, type JarImputacion,
+  type JarTransfer, type Member, type Transaction, TxType,
 } from './types.ts';
 
 // --- helpers -------------------------------------------------------------
@@ -27,9 +29,30 @@ const cuenta = (p: Partial<Account>): Account => ({
   createdAt: 0, updatedAt: 0, ...p,
 });
 
-const jarra = (id: string, bp: number, orden: number): Jar => ({
+const jarra = (id: string, bp: number, orden: number, acumula = false): Jar => ({
   id, householdId: 'h', name: id, percentageBp: bp, color: '#000', icon: 'jar',
-  displayOrder: orden, createdAt: 0, balanceMinor: 0,
+  displayOrder: orden, createdAt: 0, balanceMinor: 0, acumula,
+});
+
+/**
+ * Congela las imputaciones de una tanda de movimientos, que es exactamente lo
+ * que hace el Worker al guardarlos. Los tests trabajan sobre el resultado
+ * congelado, no sobre el recalculo, igual que la app.
+ */
+const imputar = (movs: Transaction[], jars: Jar[]): JarImputacion[] =>
+  movs.flatMap((m) =>
+    [...imputacionJarras(m, jars)].map(([jarId, amountMinor]) => ({
+      id: `${m.id}:${jarId}`, householdId: 'h', txId: m.id, jarId, amountMinor, createdAt: 0,
+    })));
+
+const fechasDe = (movs: Transaction[]) => {
+  const mapa = new Map(movs.map((m) => [m.id, m.date]));
+  return (txId: string) => mapa.get(txId);
+};
+
+const traspaso = (p: Partial<JarTransfer>): JarTransfer => ({
+  id: crypto.randomUUID(), householdId: 'h', fromJarId: 'j1', toJarId: 'j2',
+  amountMinor: 0, note: null, date: Date.now(), createdBy: 'u1', createdAt: 0, ...p,
 });
 
 // --- dinero --------------------------------------------------------------
@@ -208,29 +231,162 @@ describe('calcularJarras', () => {
     jarra('j1', 5500, 0), jarra('j2', 1000, 1), jarra('j3', 1000, 2),
     jarra('j4', 1000, 3), jarra('j5', 1000, 4), jarra('j6', 250, 5), jarra('j7', 250, 6),
   ];
+  const saldos = (movs: Transaction[], transfers: JarTransfer[] = []) =>
+    calcularJarras(jarras, imputar(movs, jarras), transfers);
 
   it('reparte un ingreso sin perder ni un centavo', () => {
     const movs = [tx({ type: TxType.INGRESO, amountMinor: 333_333, distributeToJars: true })];
-    const saldos = calcularJarras(jarras, movs);
-    const suma = [...saldos.values()].reduce((a, b) => a + b, 0);
+    const suma = [...saldos(movs).values()].reduce((a, b) => a + b, 0);
     expect(suma).toBe(333_333);
   });
 
   it('imputa un gasto a su jarra', () => {
     const movs = [tx({ type: TxType.GASTO, amountMinor: 10_000, jarId: 'j1' })];
-    expect(calcularJarras(jarras, movs).get('j1')).toBe(-10_000);
+    expect(saldos(movs).get('j1')).toBe(-10_000);
   });
 
   it('no imputa nada si el gasto no tiene jarra', () => {
     const movs = [tx({ type: TxType.GASTO, amountMinor: 10_000 })];
-    expect([...calcularJarras(jarras, movs).values()].every((v) => v === 0)).toBe(true);
+    expect([...saldos(movs).values()].every((v) => v === 0)).toBe(true);
   });
 
   it('el total de las jarras sigue al total de ingresos tras muchos meses', () => {
     const movs = Array.from({ length: 24 }, () =>
       tx({ type: TxType.INGRESO, amountMinor: 123_457, distributeToJars: true }));
-    const suma = [...calcularJarras(jarras, movs).values()].reduce((a, b) => a + b, 0);
+    const suma = [...saldos(movs).values()].reduce((a, b) => a + b, 0);
     expect(suma).toBe(24 * 123_457);
+  });
+
+  it('CAMBIAR UN PORCENTAJE NO REESCRIBE EL PASADO', () => {
+    // El bug que arreglan las imputaciones congeladas. Antes, subir el ahorro
+    // del 10% al 20% volvia a partir el sueldo de enero con la receta nueva y
+    // el saldo se movia sin que nadie cargara nada.
+    const enero = [tx({ type: TxType.INGRESO, amountMinor: 100_000, distributeToJars: true })];
+    const congeladas = imputar(enero, jarras);
+    const antes = calcularJarras(jarras, congeladas, []).get('j2');
+
+    const nuevoReparto = [
+      jarra('j1', 4500, 0), jarra('j2', 2000, 1), jarra('j3', 1000, 2),
+      jarra('j4', 1000, 3), jarra('j5', 1000, 4), jarra('j6', 250, 5), jarra('j7', 250, 6),
+    ];
+    const despues = calcularJarras(nuevoReparto, congeladas, []).get('j2');
+
+    expect(antes).toBe(10_000);
+    expect(despues).toBe(antes);
+  });
+
+  it('un traspaso mueve plata de una jarra a la otra sin crear ni destruir', () => {
+    const movs = [tx({ type: TxType.INGRESO, amountMinor: 100_000, distributeToJars: true })];
+    const antes = saldos(movs);
+    const t = [traspaso({ fromJarId: 'j1', toJarId: 'j4', amountMinor: 3_000 })];
+    const despues = saldos(movs, t);
+
+    expect(despues.get('j1')).toBe(antes.get('j1')! - 3_000);
+    expect(despues.get('j4')).toBe(antes.get('j4')! + 3_000);
+    const total = (m: Map<string, number>) => [...m.values()].reduce((a, b) => a + b, 0);
+    expect(total(despues)).toBe(total(antes));
+  });
+
+  it('una imputacion a una jarra que ya no existe no rompe ni se cuela', () => {
+    const huerfana: JarImputacion = {
+      id: 'x', householdId: 'h', txId: 't', jarId: 'borrada', amountMinor: 5_000, createdAt: 0,
+    };
+    const r = calcularJarras(jarras, [huerfana], []);
+    expect(r.has('borrada')).toBe(false);
+    expect([...r.values()].every((v) => v === 0)).toBe(true);
+  });
+
+  describe('leer por periodo', () => {
+    const enero = new Date(2026, 0, 15, 12).getTime();
+    const febrero = new Date(2026, 1, 15, 12).getTime();
+    const movs = [
+      tx({ id: 'e', type: TxType.INGRESO, amountMinor: 100_000, distributeToJars: true, date: enero }),
+      tx({ id: 'f', type: TxType.INGRESO, amountMinor: 200_000, distributeToJars: true, date: febrero }),
+      tx({ id: 'g', type: TxType.GASTO, amountMinor: 5_000, jarId: 'j1', date: febrero }),
+    ];
+    const imp = imputar(movs, jarras);
+    const fechas = fechasDe(movs);
+
+    it('el saldo de toda la vida suma los dos meses', () => {
+      const r = calcularJarras(jarras, imp, [], fechas);
+      expect([...r.values()].reduce((a, b) => a + b, 0)).toBe(300_000 - 5_000);
+    });
+
+    it('el mes solo cuenta lo suyo', () => {
+      const r = calcularJarras(jarras, imp, [], fechas, periodoMes(febrero));
+      expect([...r.values()].reduce((a, b) => a + b, 0)).toBe(200_000 - 5_000);
+    });
+
+    it('lo que sobra del mes anterior NO se tira: sigue en el acumulado', () => {
+      // Leer por mes es una forma de mirar, no un borron.
+      const mes = calcularJarras(jarras, imp, [], fechas, periodoMes(febrero)).get('j1')!;
+      const vida = calcularJarras(jarras, imp, [], fechas).get('j1')!;
+      expect(vida).toBeGreaterThan(mes);
+    });
+
+    it('separa lo que entro de lo que salio', () => {
+      const f = flujoDeJarras(jarras, imp, [], fechas, periodoMes(febrero)).get('j1')!;
+      expect(f.entroMinor).toBe(110_000);
+      expect(f.salioMinor).toBe(5_000);
+    });
+  });
+});
+
+describe('sinAsignar', () => {
+  const jarras = [jarra('j1', 5000, 0), jarra('j2', 5000, 1)];
+
+  it('es la plata que existe menos la que ya tiene trabajo', () => {
+    const cuentas = [cuenta({ id: 'a1', balanceMinor: 100_000 })];
+    const movs = [tx({ type: TxType.INGRESO, amountMinor: 40_000, distributeToJars: true })];
+    const s = calcularJarras(jarras, imputar(movs, jarras), []);
+    expect(sinAsignar(cuentas, s)).toBe(60_000);
+  });
+
+  it('jarras mas sin asignar da SIEMPRE la plata real, pase lo que pase', () => {
+    // La invariante que hace que los dos libros dejen de ser paralelos.
+    const cuentas = [cuenta({ id: 'a1', balanceMinor: 74_555 })];
+    const casos: Transaction[][] = [
+      [],
+      [tx({ type: TxType.INGRESO, amountMinor: 30_000, distributeToJars: true })],
+      [tx({ type: TxType.INGRESO, amountMinor: 30_000, jarId: 'j1' })],
+      [tx({ type: TxType.GASTO, amountMinor: 7_000, jarId: 'j2' })],
+      [tx({ type: TxType.GASTO, amountMinor: 7_000 })],
+      [tx({ type: TxType.TRANSFERENCIA, amountMinor: 5_000 })],
+      [tx({ type: TxType.AJUSTE, amountMinor: 1_234 })],
+      [
+        tx({ type: TxType.INGRESO, amountMinor: 33_333, distributeToJars: true }),
+        tx({ type: TxType.GASTO, amountMinor: 1_111, jarId: 'j1' }),
+        tx({ type: TxType.GASTO, amountMinor: 999 }),
+      ],
+    ];
+    for (const movs of casos) {
+      const s = calcularJarras(jarras, imputar(movs, jarras), []);
+      const enJarras = [...s.values()].reduce((a, b) => a + b, 0);
+      expect(enJarras + sinAsignar(cuentas, s)).toBe(74_555);
+    }
+  });
+
+  it('un traspaso no lo mueve: la plata no salio de las jarras', () => {
+    const cuentas = [cuenta({ id: 'a1', balanceMinor: 100_000 })];
+    const movs = [tx({ type: TxType.INGRESO, amountMinor: 40_000, distributeToJars: true })];
+    const imp = imputar(movs, jarras);
+    const antes = sinAsignar(cuentas, calcularJarras(jarras, imp, []));
+    const t = [traspaso({ fromJarId: 'j1', toJarId: 'j2', amountMinor: 8_000 })];
+    expect(sinAsignar(cuentas, calcularJarras(jarras, imp, t))).toBe(antes);
+  });
+
+  it('las cuentas archivadas no respaldan jarras', () => {
+    const cuentas = [
+      cuenta({ id: 'a1', balanceMinor: 100_000 }),
+      cuenta({ id: 'a2', balanceMinor: 50_000, archived: true }),
+    ];
+    expect(sinAsignar(cuentas, new Map())).toBe(100_000);
+  });
+
+  it('avisa cuando asignaron mas de lo que tienen', () => {
+    const cuentas = [cuenta({ id: 'a1', balanceMinor: 10_000 })];
+    const movs = [tx({ type: TxType.INGRESO, amountMinor: 40_000, distributeToJars: true })];
+    expect(sinAsignar(cuentas, calcularJarras(jarras, imputar(movs, jarras), []))).toBeLessThan(0);
   });
 });
 

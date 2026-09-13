@@ -9,32 +9,94 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store/store.tsx';
-import { formatBp, formatMonto } from '@shared/money';
-import { imputacionJarras, validarJarras } from '@shared/domain';
+import { formatBp, formatMonto, montoPlano, parseMonto } from '@shared/money';
+import { flujoDeJarras, sinAsignar, validarJarras } from '@shared/domain';
+import { describirPeriodo, periodoMes, type Periodo } from '@shared/periodo';
 import type { Jar, Transaction } from '@shared/types';
 import { FilaMovimiento } from './Inicio.tsx';
-import { Boton, Ficha, Hoja, Icono, Tarjeta, Vacio } from '../components/ui/base.tsx';
+import {
+  Barra, Boton, Campo, Ficha, Hoja, Icono, Selector, Tarjeta, Vacio,
+} from '../components/ui/base.tsx';
+import { SelectorPeriodo } from '../components/ui/periodo.tsx';
 import { cn } from '../lib/utils.ts';
+
 
 const COLORES = ['#3b82f6', '#10b981', '#8b5cf6', '#ec4899', '#f59e0b', '#f43f5e', '#06b6d4', '#64748b'];
 
 export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction) => void }) {
-  const { jars, household, guardarJarras, avisar } = useStore();
+  const {
+    jars, accounts, imputaciones, jarTransfers, transactions, household,
+    guardarJarras, ponerJarrasAlDia, avisar,
+  } = useStore();
   const moneda = household?.currency ?? 'USD';
 
   const [editando, setEditando] = useState(false);
   const [abierta, setAbierta] = useState<Jar | null>(null);
+  const [traspasando, setTraspasando] = useState(false);
+  const [periodo, setPeriodo] = useState<Periodo>(() => periodoMes(Date.now()));
+  const [poniendoAlDia, setPoniendoAlDia] = useState(false);
+
+  const fechaDe = useMemo(() => {
+    const mapa = new Map(transactions.map((t) => [t.id, t.date]));
+    return (txId: string) => mapa.get(txId);
+  }, [transactions]);
+
+  // Lo que entro y salio en el periodo elegido. El saldo grande sigue siendo
+  // el de toda la vida: es el que dice si se puede gastar.
+  const flujo = useMemo(
+    () => flujoDeJarras(jars, imputaciones, jarTransfers, fechaDe, periodo),
+    [jars, imputaciones, jarTransfers, fechaDe, periodo],
+  );
+  // La barra mide cuanto de lo que la jarra recibio EN TODA SU VIDA ya se
+  // gasto. Medirlo contra el mes daria la barra llena en cuanto el ingreso
+  // entre el mes anterior, aunque la jarra siga casi intacta.
+  const flujoVida = useMemo(
+    () => flujoDeJarras(jars, imputaciones, jarTransfers),
+    [jars, imputaciones, jarTransfers],
+  );
 
   const total = useMemo(() => jars.reduce((s, j) => s + j.balanceMinor, 0), [jars]);
+  const saldosVida = useMemo(
+    () => new Map(jars.map((j) => [j.id, j.balanceMinor])),
+    [jars],
+  );
+  const libre = useMemo(() => sinAsignar(accounts, saldosVida), [accounts, saldosVida]);
+  const enCuentas = total + libre;
+
+  // Ingresos que nunca llegaron a ninguna jarra. Hasta ahora repartir era un
+  // interruptor apagado por defecto y no se encendio nunca.
+  const huerfanos = useMemo(() => {
+    const conImputacion = new Set(imputaciones.map((i) => i.txId));
+    return transactions.filter(
+      (t) => t.type === 2 && !t.jarId && !t.distributeToJars && !conImputacion.has(t.id),
+    );
+  }, [transactions, imputaciones]);
+
+  async function alDia() {
+    setPoniendoAlDia(true);
+    try {
+      const n = await ponerJarrasAlDia();
+      avisar(n === 1 ? 'Se repartió 1 ingreso' : `Se repartieron ${n} ingresos`, 'ok');
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : 'No se pudo repartir');
+    } finally {
+      setPoniendoAlDia(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold txt tracking-tight">Jarras</h1>
         {jars.length > 0 && (
-          <Boton variante="secundario" onClick={() => setEditando(true)} className="px-3">
-            <Icono nombre="settings-2" size={16} /> Ajustar
-          </Boton>
+          <div className="flex gap-2">
+            <Boton variante="secundario" onClick={() => setTraspasando(true)} className="px-3">
+              <Icono nombre="arrow-left-right" size={16} /> Mover
+            </Boton>
+            <Boton variante="secundario" onClick={() => setEditando(true)} className="px-3">
+              <Icono nombre="settings-2" size={16} /> Ajustar
+            </Boton>
+          </div>
         )}
       </div>
 
@@ -49,15 +111,76 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
         </Tarjeta>
       ) : (
         <>
+          {/* La conciliacion: hasta ahora las jarras y las cuentas eran dos
+              libros que nadie podia cotejar. */}
           <Tarjeta>
-            <p className="text-xs txt-2 mb-1">Total repartido</p>
-            <p className="text-3xl font-bold tabular tracking-tight txt">{formatMonto(total, moneda)}</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs txt-2 mb-1">En jarras</p>
+                <p className="text-2xl font-bold tabular tracking-tight txt">
+                  {formatMonto(total, moneda)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs txt-2 mb-1">Sin asignar</p>
+                <p className={cn(
+                  'text-2xl font-bold tabular tracking-tight',
+                  libre < 0 ? 'text-red-500' : 'txt',
+                )}>
+                  {formatMonto(libre, moneda)}
+                </p>
+              </div>
+            </div>
+            <p className="text-xs txt-3 mt-3 leading-relaxed">
+              {libre < 0 ? (
+                <>
+                  Las jarras tienen asignado más de lo que hay en las cuentas
+                  ({formatMonto(enCuentas, moneda)}). Movés plata entre jarras o
+                  ajustás un saldo de cuenta.
+                </>
+              ) : (
+                <>
+                  Suman {formatMonto(enCuentas, moneda)}, que es exactamente lo que
+                  hay en las cuentas.
+                  {libre > 0 && ' Lo de la derecha todavía no tiene trabajo asignado.'}
+                </>
+              )}
+            </p>
           </Tarjeta>
+
+          {huerfanos.length > 0 && (
+            <Tarjeta className="border-marca-500/40">
+              <p className="text-sm font-medium txt mb-1">
+                {huerfanos.length === 1
+                  ? 'Hay 1 ingreso que nunca se repartió'
+                  : `Hay ${huerfanos.length} ingresos que nunca se repartieron`}
+              </p>
+              <p className="text-xs txt-3 leading-relaxed mb-3">
+                Suman {formatMonto(huerfanos.reduce((a, t) => a + t.amountMinor, 0), moneda)}.
+                Se reparten con los porcentajes de ahora. Los que ya tienen una jarra
+                puesta no se tocan.
+              </p>
+              <Boton onClick={() => void alDia()} disabled={poniendoAlDia} className="w-full">
+                {poniendoAlDia ? 'Repartiendo...' : 'Repartirlos ahora'}
+              </Boton>
+            </Tarjeta>
+          )}
+
+          <SelectorPeriodo periodo={periodo} alCambiar={setPeriodo} />
 
           <div className="space-y-2.5">
             {jars.map((j) => {
-              const proporcion = total > 0 ? j.balanceMinor / total : 0;
+              const f = flujo.get(j.id) ?? { entroMinor: 0, salioMinor: 0 };
+              const vida = flujoVida.get(j.id) ?? { entroMinor: 0, salioMinor: 0 };
               const enRojo = j.balanceMinor < 0;
+              // El numero grande es SIEMPRE lo que queda. Es el que se usa
+              // para decidir si se puede gastar, y el que cuadra contra las
+              // cuentas. Mostrar el neto del mes aca haria que una jarra con
+              // plata se leyera en negativo solo porque el ingreso entro el
+              // mes pasado.
+              const gastado = enRojo
+                ? 1
+                : vida.entroMinor > 0 ? vida.salioMinor / vida.entroMinor : 0;
 
               return (
                 <Tarjeta key={j.id} className="p-4 active:opacity-70 transition-opacity cursor-pointer"
@@ -66,7 +189,10 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
                     <Ficha color={j.color} icono={j.icon} size={42} />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium txt truncate">{j.name}</p>
-                      <p className="text-xs txt-3">{formatBp(j.percentageBp)} de cada ingreso</p>
+                      <p className="text-xs txt-3">
+                        {formatBp(j.percentageBp)} de cada ingreso
+                        {j.acumula && ' · acumula'}
+                      </p>
                     </div>
                     <p className={cn(
                       'font-semibold tabular shrink-0',
@@ -77,19 +203,26 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
                     <Icono nombre="chevron-right" size={16} className="txt-3 shrink-0 -mr-1" />
                   </div>
 
-                  <div className="h-1.5 rounded-full superficie-2 overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{
-                        width: `${Math.min(Math.max(proporcion, 0), 1) * 100}%`,
-                        background: enRojo ? '#ef4444' : j.color,
-                      }}
-                    />
-                  </div>
+                  {/* Cuanto de lo que entro en el periodo ya se gasto. */}
+                  <Barra ratio={gastado} color={j.color} alerta />
+
+                  <p className="text-[11px] txt-3 mt-2">
+                    {f.entroMinor === 0 && f.salioMinor === 0 ? (
+                      <>Sin movimientos en {describirPeriodo(periodo).toLowerCase()}</>
+                    ) : (
+                      <>
+                        {describirPeriodo(periodo).toLowerCase()}: entró{' '}
+                        <span className="tabular">{formatMonto(f.entroMinor, moneda)}</span>
+                        {', salió '}
+                        <span className="tabular">{formatMonto(f.salioMinor, moneda)}</span>
+                      </>
+                    )}
+                  </p>
 
                   {enRojo && (
                     <p className="text-xs text-red-500 mt-2">
-                      Gastaste más de lo que esta jarra tenía.
+                      Gastaste más de lo que esta jarra tuvo nunca. Movele plata
+                      desde otra con el botón de arriba.
                     </p>
                   )}
                 </Tarjeta>
@@ -99,7 +232,8 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
 
           <p className="text-xs txt-3 text-center px-4 leading-relaxed">
             Al registrar un ingreso, marcá "Repartir entre las jarras" y el
-            monto se divide según estos porcentajes, al centavo.
+            monto se divide según estos porcentajes, al centavo. Lo que sobra de
+            un mes no se pierde: se queda en la jarra.
           </p>
         </>
       )}
@@ -109,6 +243,8 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
         alCerrar={() => setAbierta(null)}
         alVerMovimiento={(tx) => { setAbierta(null); alVerMovimiento(tx); }}
       />
+
+      <HojaTraspaso abierta={traspasando} alCerrar={() => setTraspasando(false)} />
 
       <EditorJarras
         abierta={editando}
@@ -128,27 +264,142 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
 }
 
 /**
+ * Mover plata de una jarra a otra.
+ *
+ * No toca ninguna cuenta: la plata sigue donde estaba, lo que cambia es para
+ * que esta. Es lo unico que permite sacar del rojo a una jarra en la que se
+ * gasto de mas.
+ */
+function HojaTraspaso({ abierta, alCerrar, desde }: {
+  abierta: boolean; alCerrar: () => void; desde?: string;
+}) {
+  const { jars, household, traspasarEntreJarras, avisar } = useStore();
+  const moneda = household?.currency ?? 'USD';
+
+  const [origen, setOrigen] = useState('');
+  const [destino, setDestino] = useState('');
+  const [montoTexto, setMontoTexto] = useState('');
+  const [nota, setNota] = useState('');
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    if (!abierta) return;
+    // Por defecto, de la que mas tiene a la que esta en rojo: es el caso que
+    // trae a alguien a esta pantalla.
+    const enRojo = jars.find((j) => j.balanceMinor < 0);
+    const conMas = [...jars].sort((a, b) => b.balanceMinor - a.balanceMinor)[0];
+    setOrigen(desde ?? conMas?.id ?? '');
+    setDestino(enRojo && enRojo.id !== (desde ?? conMas?.id) ? enRojo.id : '');
+    setMontoTexto(enRojo ? montoPlano(-enRojo.balanceMinor, moneda) : '');
+    setNota('');
+  }, [abierta, desde, jars, moneda]);
+
+  const monto = parseMonto(montoTexto, moneda);
+  const jarraOrigen = jars.find((j) => j.id === origen);
+  const puede = origen !== '' && destino !== '' && origen !== destino
+    && monto !== null && monto > 0 && !guardando;
+
+  async function guardar() {
+    if (!puede || monto === null) return;
+    setGuardando(true);
+    try {
+      await traspasarEntreJarras({
+        fromJarId: origen, toJarId: destino, amountMinor: monto, note: nota.trim() || undefined,
+      });
+      alCerrar();
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : 'No se pudo mover');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  if (!abierta) return null;
+
+  return (
+    <Hoja abierta alCerrar={alCerrar} titulo="Mover entre jarras">
+      <div className="space-y-4">
+        <p className="text-xs txt-3 leading-relaxed">
+          No se mueve plata de ninguna cuenta. Solo cambia para qué está
+          guardada.
+        </p>
+
+        <Selector etiqueta="De" value={origen} onChange={(e) => setOrigen(e.target.value)}>
+          <option value="">Elegí una jarra</option>
+          {jars.map((j) => (
+            <option key={j.id} value={j.id}>
+              {j.name} · {formatMonto(j.balanceMinor, moneda)}
+            </option>
+          ))}
+        </Selector>
+
+        <Selector etiqueta="A" value={destino} onChange={(e) => setDestino(e.target.value)}>
+          <option value="">Elegí una jarra</option>
+          {jars.filter((j) => j.id !== origen).map((j) => (
+            <option key={j.id} value={j.id}>
+              {j.name} · {formatMonto(j.balanceMinor, moneda)}
+            </option>
+          ))}
+        </Selector>
+
+        <Campo
+          etiqueta="Monto"
+          value={montoTexto}
+          onChange={(e) => setMontoTexto(e.target.value)}
+          placeholder="0.00"
+          inputMode="decimal"
+        />
+
+        {/* No se bloquea: a veces la jarra de origen tambien esta en rojo y
+            aun asi conviene mover. Pero se dice. */}
+        {jarraOrigen && monto !== null && monto > jarraOrigen.balanceMinor && (
+          <p className="text-xs text-amber-600 dark:text-amber-500 px-1 -mt-2 leading-relaxed">
+            {jarraOrigen.name} queda en{' '}
+            {formatMonto(jarraOrigen.balanceMinor - monto, moneda)}.
+          </p>
+        )}
+
+        <Campo
+          etiqueta="Por qué (opcional)"
+          value={nota}
+          onChange={(e) => setNota(e.target.value)}
+          placeholder="Me pasé con la comida..."
+          maxLength={200}
+        />
+
+        <Boton onClick={() => void guardar()} disabled={!puede} className="w-full min-h-12">
+          {guardando ? 'Moviendo...' : 'Mover'}
+        </Boton>
+      </div>
+    </Hoja>
+  );
+}
+
+/**
  * Movimientos que tocaron una jarra.
  *
  * No alcanza con filtrar por jar_id: un ingreso repartido no apunta a ninguna
- * jarra en particular, pero le entro plata a todas. Se usa la misma funcion de
- * imputacion que calcula los saldos, asi lo que se lista y lo que suma el
- * saldo son siempre lo mismo.
+ * jarra en particular, pero le entro plata a todas. La lista sale de las
+ * mismas imputaciones congeladas que suman el saldo, asi que lo que se ve y
+ * lo que dice el numero de arriba son lo mismo por construccion.
  */
 function MovimientosDeJarra({ jarra, alCerrar, alVerMovimiento }: {
   jarra: Jar | null;
   alCerrar: () => void;
   alVerMovimiento: (tx: Transaction) => void;
 }) {
-  const { transactions, jars, household } = useStore();
+  const { transactions, imputaciones, household } = useStore();
   const moneda = household?.currency ?? 'USD';
 
   const movimientos = useMemo(() => {
     if (!jarra) return [];
-    return transactions
-      .map((tx) => ({ tx, delta: imputacionJarras(tx, jars).get(jarra.id) ?? 0 }))
-      .filter((x) => x.delta !== 0);
-  }, [jarra, transactions, jars]);
+    const porTx = new Map(transactions.map((t) => [t.id, t]));
+    return imputaciones
+      .filter((i) => i.jarId === jarra.id && i.amountMinor !== 0)
+      .map((i) => ({ tx: porTx.get(i.txId), delta: i.amountMinor }))
+      .filter((x): x is { tx: Transaction; delta: number } => x.tx !== undefined)
+      .sort((a, b) => b.tx.date - a.tx.date);
+  }, [jarra, transactions, imputaciones]);
 
   if (!jarra) return null;
 
@@ -223,6 +474,7 @@ interface Borrador {
   percentageBp: number;
   color: string;
   icon: string;
+  acumula: boolean;
 }
 
 function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
@@ -239,15 +491,16 @@ function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
     setBorradores(
       jarras.length > 0
         ? jarras.map((j) => ({
-          id: j.id, name: j.name, percentageBp: j.percentageBp, color: j.color, icon: j.icon,
+          id: j.id, name: j.name, percentageBp: j.percentageBp, color: j.color,
+          icon: j.icon, acumula: j.acumula,
         }))
         : [
-          { name: 'Necesidades', percentageBp: 5500, color: '#3b82f6', icon: 'house' },
-          { name: 'Ahorro', percentageBp: 1000, color: '#10b981', icon: 'piggy-bank' },
-          { name: 'Educacion', percentageBp: 1000, color: '#8b5cf6', icon: 'graduation-cap' },
-          { name: 'Diversion', percentageBp: 1000, color: '#ec4899', icon: 'party-popper' },
-          { name: 'Libertad financiera', percentageBp: 1000, color: '#f59e0b', icon: 'trending-up' },
-          { name: 'Donaciones', percentageBp: 500, color: '#f43f5e', icon: 'heart-handshake' },
+          { name: 'Necesidades', percentageBp: 5500, color: '#3b82f6', icon: 'house', acumula: false },
+          { name: 'Ahorro largo plazo', percentageBp: 1000, color: '#10b981', icon: 'piggy-bank', acumula: true },
+          { name: 'Educación', percentageBp: 1000, color: '#8b5cf6', icon: 'graduation-cap', acumula: false },
+          { name: 'Diversión', percentageBp: 1000, color: '#ec4899', icon: 'party-popper', acumula: false },
+          { name: 'Libertad financiera', percentageBp: 1000, color: '#f59e0b', icon: 'trending-up', acumula: true },
+          { name: 'Donaciones', percentageBp: 500, color: '#f43f5e', icon: 'heart-handshake', acumula: false },
         ],
     );
   }, [abierta, jarras]);
@@ -257,7 +510,7 @@ function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
     borradores.map((b) => ({ ...b, percentageBp: b.percentageBp } as Jar)),
   );
 
-  const cambiar = (i: number, campo: keyof Borrador, valor: string | number) => {
+  const cambiar = (i: number, campo: keyof Borrador, valor: string | number | boolean) => {
     setBorradores((prev) => prev.map((b, k) => (k === i ? { ...b, [campo]: valor } : b)));
   };
 
@@ -350,13 +603,36 @@ function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
                 />
               ))}
             </div>
+
+            {/* De por vida o del mes. "Ahorro largo plazo" leido de a un mes no
+                significa nada, y "Diversion" acumulada desde siempre tampoco. */}
+            <button
+              onClick={() => cambiar(i, 'acumula', !b.acumula)}
+              className="w-full flex items-center gap-2.5 text-left"
+            >
+              <div className={cn(
+                'w-10 h-6 rounded-full p-0.5 transition-colors shrink-0',
+                b.acumula ? 'bg-marca-500' : 'superficie borde border',
+              )}>
+                <div className={cn(
+                  'w-5 h-5 rounded-full bg-white shadow transition-transform',
+                  b.acumula && 'translate-x-4',
+                )} />
+              </div>
+              <span className="text-xs txt-2 leading-snug">
+                {b.acumula
+                  ? 'Acumula de por vida, como un ahorro'
+                  : 'Se lee por mes, como un gasto corriente'}
+              </span>
+            </button>
           </div>
         ))}
 
         <Boton
           variante="secundario"
           onClick={() => setBorradores((p) => [...p, {
-            name: 'Nueva jarra', percentageBp: 0, color: COLORES[p.length % COLORES.length], icon: 'piggy-bank',
+            name: 'Nueva jarra', percentageBp: 0, color: COLORES[p.length % COLORES.length],
+            icon: 'piggy-bank', acumula: false,
           }])}
           className="w-full"
         >

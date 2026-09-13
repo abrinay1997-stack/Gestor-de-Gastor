@@ -135,6 +135,7 @@ function FormularioPago({ abierto, alCerrar, editando }: {
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [jarId, setJarId] = useState('');
+  const [repartir, setRepartir] = useState(false);
   const [paidBy, setPaidBy] = useState('');
   const [frecuencia, setFrecuencia] = useState<Frecuencia>('mensual');
   const [diaMes, setDiaMes] = useState(1);
@@ -154,6 +155,7 @@ function FormularioPago({ abierto, alCerrar, editando }: {
       setAccountId(editando.accountId);
       setCategoryId(editando.categoryId ?? '');
       setJarId(editando.jarId ?? '');
+      setRepartir(editando.distributeToJars);
       setPaidBy(editando.paidBy ?? '');
       setFrecuencia(editando.frequency);
       setDiaMes(editando.dayOfMonth ?? 1);
@@ -168,6 +170,7 @@ function FormularioPago({ abierto, alCerrar, editando }: {
       setAccountId(activas[0]?.id ?? '');
       setCategoryId('');
       setJarId('');
+      setRepartir(false);
       setPaidBy('');
       setFrecuencia('mensual');
       setDiaMes(new Date().getDate());
@@ -229,7 +232,8 @@ function FormularioPago({ abierto, alCerrar, editando }: {
         amountMinor: montoMinor,
         accountId,
         categoryId: categoryId || null,
-        jarId: jarId || null,
+        jarId: repartir ? null : (jarId || null),
+        distributeToJars: tipo === TxType.INGRESO && repartir,
         paidBy: paidBy || null,
         frequency: frecuencia,
         dayOfMonth: frecuencia !== 'semanal' ? diaMes : null,
@@ -341,11 +345,39 @@ function FormularioPago({ abierto, alCerrar, editando }: {
           </Selector>
         )}
 
-        {jars.length > 0 && (
+        {jars.length > 0 && !repartir && (
           <Selector etiqueta="Jarra" value={jarId} onChange={(e) => setJarId(e.target.value)}>
             <option value="">Sin jarra</option>
             {jars.map((j) => <option key={j.id} value={j.id}>{j.name}</option>)}
           </Selector>
+        )}
+
+        {/* Sin esto, un sueldo que entra por aca no puede llegar a ninguna
+            jarra: el disparador insertaba los movimientos con el reparto
+            apagado a mano. Es el agujero mas grande para quien cobra por
+            quincena. */}
+        {tipo === TxType.INGRESO && jars.length > 0 && (
+          <button
+            onClick={() => { setRepartir(!repartir); if (!repartir) setJarId(''); }}
+            className={cn(
+              'w-full flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all',
+              repartir ? 'bg-marca-50 border-marca-500 dark:bg-marca-500/10' : 'superficie-2 borde',
+            )}
+          >
+            <Ficha color="#10b981" icono="split" size={38} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium txt">Repartir entre las jarras</p>
+              <p className="text-xs txt-3">
+                Cada vez que se cargue, según los porcentajes de cada jarra
+              </p>
+            </div>
+            <div className={cn(
+              'w-11 h-6 rounded-full p-0.5 transition-colors shrink-0',
+              repartir ? 'bg-marca-500' : 'superficie-2 borde border',
+            )}>
+              <div className={cn('w-5 h-5 rounded-full bg-white shadow transition-transform', repartir && 'translate-x-5')} />
+            </div>
+          </button>
         )}
 
         {members.length > 1 && (
