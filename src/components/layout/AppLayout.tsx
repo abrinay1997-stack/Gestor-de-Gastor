@@ -17,7 +17,8 @@ import { useStore } from '../../store/store.tsx';
 import { cn } from '../../lib/utils.ts';
 import { Avatar, Icono } from '../ui/base.tsx';
 
-export type Solapa = 'inicio' | 'cuentas' | 'jarras' | 'movimientos' | 'analisis' | 'ajustes';
+export type Solapa =
+  | 'inicio' | 'cuentas' | 'jarras' | 'movimientos' | 'analisis' | 'consejero' | 'ajustes';
 
 const DESTINOS: { id: Solapa; etiqueta: string; icono: string; enBarra: boolean }[] = [
   { id: 'inicio', etiqueta: 'Inicio', icono: 'house', enBarra: true },
@@ -25,6 +26,7 @@ const DESTINOS: { id: Solapa; etiqueta: string; icono: string; enBarra: boolean 
   { id: 'jarras', etiqueta: 'Jarras', icono: 'piggy-bank', enBarra: true },
   { id: 'cuentas', etiqueta: 'Cuentas', icono: 'wallet', enBarra: true },
   { id: 'analisis', etiqueta: 'Análisis', icono: 'chart-pie', enBarra: false },
+  { id: 'consejero', etiqueta: 'Consejero', icono: 'sparkles', enBarra: false },
   { id: 'ajustes', etiqueta: 'Ajustes', icono: 'settings', enBarra: true },
 ];
 

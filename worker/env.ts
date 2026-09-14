@@ -8,4 +8,19 @@ export interface Env {
    * encuentre la URL podria crear el hogar antes que vos.
    */
   SETUP_KEY?: string;
+  /**
+   * Clave de la API de Claude, para el consejero (ver worker/routes/consejo.ts).
+   * Se define con `wrangler secret put ANTHROPIC_API_KEY`, nunca en el codigo
+   * ni en wrangler.toml: los secretos de Cloudflare no se leen desde el
+   * navegador ni aparecen en el repositorio.
+   *
+   * Sin ella la app funciona igual; solo el consejero queda apagado.
+   */
+  ANTHROPIC_API_KEY?: string;
+  /**
+   * A donde apunta el cliente de Claude. Vacio = la API de Anthropic, que es
+   * lo normal. Existe para poder probar el consejero de punta a punta contra
+   * un servidor de mentira, sin gastar ni necesitar una clave de verdad.
+   */
+  ANTHROPIC_BASE_URL?: string;
 }

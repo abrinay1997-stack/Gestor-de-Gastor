@@ -250,10 +250,40 @@ funciones que dibujan la pantalla, así que no hay dos verdades.
 Pide sesión, como todo lo demás. Los movimientos uno por uno siguen estando en
 `GET /api/snapshot`.
 
+## El consejero
+
+La pestaña **Consejero** le pregunta a Claude sobre tu plata, en vivo. Lo que
+la hace útil no es el modelo: es que del otro lado el Worker le manda **tus
+números ya calculados** —los mismos de `/api/resumen`—, así que «¿me conviene
+invertir?» deja de ser un ensayo genérico y pasa a ser una respuesta con tus
+montos. Cuando una pregunta necesita el detalle, tiene una herramienta para
+buscar movimientos en la base; no inventa el detalle a partir de los totales.
+
+Para encenderlo hace falta una clave de la API de Claude, cargada **una sola
+vez** como secreto de Cloudflare:
+
+```bash
+wrangler secret put ANTHROPIC_API_KEY
+```
+
+La clave nunca llega al navegador: el navegador le habla al Worker, y el Worker
+le habla a Claude. Sin la clave la app funciona igual y la pestaña lo dice.
+
+Cuesta plata por pregunta —es la API de Anthropic, no una suscripción—, aunque
+poca: el contexto viaja marcado para caché, así que a partir del segundo turno
+de una conversación se cobra una fracción. La conversación no se guarda en
+ningún lado: vive mientras la pantalla esté abierta.
+
+Orienta con principios —colchón antes que inversión, deuda cara antes que
+inversión, los impuestos de un negocio son plata ajena— y no recomienda
+productos ni predice mercados. No es un asesor matriculado, y lo dice.
+
 ## Privacidad
 
 Los datos viven en tu propia base de D1, en tu cuenta de Cloudflare. No hay
-analítica, ni rastreadores, ni llamadas a servicios externos. La app no se
+analítica ni rastreadores. La única llamada a un servicio externo es la del
+consejero, y solo cuando le preguntás algo: ahí van tus números resumidos a la
+API de Anthropic. Si no cargás la clave, esa llamada no existe. La app no se
 puede indexar y no tiene registro público: las únicas dos cuentas son las que
 creás vos.
 

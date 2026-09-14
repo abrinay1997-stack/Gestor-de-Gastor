@@ -22,11 +22,12 @@ import { Avatar, Barra, Boton, Ficha, Icono, Tarjeta, Vacio } from '../component
 import { EtiquetaEntidad, SelectorEntidad } from '../components/ui/entidad.tsx';
 import { cn } from '../lib/utils.ts';
 
-export function Inicio({ alVerMovimiento, alAgregar, alVerAnalisis }: {
+export function Inicio({ alVerMovimiento, alAgregar, alVerAnalisis, alVerConsejero }: {
   alVerMovimiento: (tx: Transaction) => void;
   alAgregar: () => void;
-  /** Analisis solo vive en la barra lateral, que en celular no existe. */
+  /** Analisis y Consejero solo viven en la barra lateral, que en celular no existe. */
   alVerAnalisis?: () => void;
+  alVerConsejero?: () => void;
 }) {
   const {
     accounts, categories, transactions: todos, budgets, members, me, household,
@@ -254,6 +255,19 @@ export function Inicio({ alVerMovimiento, alAgregar, alVerAnalisis }: {
       {/* Analisis solo esta en la barra lateral, que en celular no se dibuja:
           sin esto, desde el telefono no habia forma de llegar —y ahi vive el
           resultado por economia, que es medio motivo de tener economias. */}
+      {alVerConsejero && (
+        <button
+          onClick={alVerConsejero}
+          className="md:hidden w-full rounded-2xl min-h-12 px-4 flex items-center gap-3 text-white bg-linear-to-br from-marca-600 to-marca-700 border border-white/15 active:scale-[0.99] transition-transform"
+        >
+          <Icono nombre="sparkles" size={18} />
+          <span className="text-sm font-medium flex-1 text-left">
+            Preguntarle al consejero
+          </span>
+          <Icono nombre="chevron-right" size={16} className="opacity-70" />
+        </button>
+      )}
+
       {alVerAnalisis && (
         <button
           onClick={alVerAnalisis}

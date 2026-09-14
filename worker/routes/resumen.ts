@@ -55,9 +55,18 @@ const INVARIANTES = [
   'Una jarra en negativo no es un error de calculo: es que se gasto de ella mas de lo que se le puso.',
 ];
 
-export async function traer(_req: Request, env: Env, sesion: Sesion): Promise<Response> {
-  const snap = await snapshot(env, sesion.householdId, sesion.memberId);
-  if (!snap) return error('No se encontro el hogar', 404);
+/**
+ * El resumen como objeto, para reusarlo sin pasar por HTTP.
+ *
+ * Lo usa la ruta de abajo y tambien el consejero (consejo.ts), que necesita
+ * exactamente estos numeros como contexto. Que salga de un solo lugar es lo
+ * que evita que la pantalla y la IA cuenten cosas distintas.
+ */
+export async function resumenDelHogar(
+  env: Env, householdId: string, memberId: string,
+): Promise<Record<string, unknown> | null> {
+  const snap = await snapshot(env, householdId, memberId);
+  if (!snap) return null;
 
   const { accounts, categories, jars, transactions, entities, budgets, recurring } = snap;
   const activas = accounts.filter((c) => !c.archived);
@@ -87,7 +96,7 @@ export async function traer(_req: Request, env: Env, sesion: Sesion): Promise<Re
     usosPorCategoria.set(t.categoryId, a);
   }
 
-  return json({
+  return {
     generadoEn: Date.now(),
     moneda: snap.household.currency,
 
@@ -199,5 +208,11 @@ export async function traer(_req: Request, env: Env, sesion: Sesion): Promise<Re
       repartEnJarras: r.distributeToJars,
       proximo: r.nextRun,
     })),
-  });
+  };
+}
+
+export async function traer(_req: Request, env: Env, sesion: Sesion): Promise<Response> {
+  const resumen = await resumenDelHogar(env, sesion.householdId, sesion.memberId);
+  if (!resumen) return error('No se encontro el hogar', 404);
+  return json(resumen);
 }

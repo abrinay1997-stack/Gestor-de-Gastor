@@ -9,6 +9,7 @@ import { Movimientos } from './pages/Movimientos.tsx';
 import { Cuentas } from './pages/Cuentas.tsx';
 import { Jarras } from './pages/Jarras.tsx';
 import { Ajustes } from './pages/Ajustes.tsx';
+import { Consejero } from './pages/Consejero.tsx';
 import { Icono } from './components/ui/base.tsx';
 import { cn } from './lib/utils.ts';
 import type { Transaction } from '@shared/types';
@@ -56,12 +57,14 @@ export default function App() {
             alVerMovimiento={setViendo}
             alAgregar={abrirNuevo}
             alVerAnalisis={() => setSolapa('analisis')}
+            alVerConsejero={() => setSolapa('consejero')}
           />
         )}
         {solapa === 'movimientos' && <Movimientos alVerMovimiento={setViendo} alAgregar={abrirNuevo} />}
         {solapa === 'cuentas' && <Cuentas />}
         {solapa === 'jarras' && <Jarras alVerMovimiento={setViendo} />}
         {solapa === 'ajustes' && <Ajustes />}
+        {solapa === 'consejero' && <Consejero />}
         {solapa === 'analisis' && (
           <Suspense fallback={
             <div className="flex justify-center py-16">
