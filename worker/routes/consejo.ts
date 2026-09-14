@@ -239,7 +239,11 @@ export async function preguntar(
       for (let vuelta = 0; vuelta < MAX_VUELTAS; vuelta += 1) {
         const corriente = cliente.messages.stream({
           model: MODELO,
-          max_tokens: 4000,
+          // Techo de TODO lo que genera, y pensar gasta de este mismo
+          // presupuesto. Con 4000 una pregunta que lo haga pensar un rato
+          // dejaba la respuesta cortada a la mitad. Alto no cuesta nada: solo
+          // se paga lo que sale, y el prompt ya pide respuestas cortas.
+          max_tokens: 16000,
           thinking: { type: 'adaptive' },
           // Preguntas concretas sobre pocos numeros, y ademas pidieron
           // respuestas cortas: pensar de mas aca solo agrega demora y preambulo.
