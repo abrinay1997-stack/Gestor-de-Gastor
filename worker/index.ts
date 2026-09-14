@@ -55,6 +55,11 @@ const RUTAS_CON_ID: { prefijo: string; metodos: Partial<Record<string, HandlerCo
   { prefijo: '/api/accounts/', metodos: { PUT: data.editarCuenta, DELETE: data.borrarCuenta } },
   { prefijo: '/api/categories/', metodos: { PUT: data.editarCategoria } },
   { prefijo: '/api/budgets/', metodos: { DELETE: data.borrarPresupuesto } },
+  // "Ya me pagaron" / "todavia no me pagaron". Ver recurring.ts.
+  // Van ANTES de '/api/recurring/': el router toma el primer prefijo que
+  // coincide, y con el generico primero el id quedaria en "cobrar/xyz".
+  { prefijo: '/api/recurring/cobrar/', metodos: { POST: recurring.cobrar } },
+  { prefijo: '/api/recurring/deshacer/', metodos: { POST: recurring.deshacerCobro } },
   { prefijo: '/api/recurring/', metodos: { PUT: recurring.editar, DELETE: recurring.borrar } },
   { prefijo: '/api/jar-transfers/', metodos: { DELETE: jarTransfers.borrar } },
   { prefijo: '/api/entities/', metodos: { PUT: entities.editar, DELETE: entities.borrar } },
@@ -138,8 +143,9 @@ async function manejarApi(req: Request, env: Env, url: URL): Promise<Response> {
     if (!pathname.startsWith(prefijo)) continue;
 
     const id = decodeURIComponent(pathname.slice(prefijo.length));
-    // Un id no lleva barras: si las tiene, es otra ruta que no existe.
-    if (!id || id.includes('/')) break;
+    // Un id no lleva barras. Si las tiene, este no es el prefijo correcto:
+    // se sigue buscando, porque puede haber uno mas largo mas abajo.
+    if (!id || id.includes('/')) continue;
 
     const handler = metodos[metodo];
     if (!handler) return error(`Método ${metodo} no permitido acá`, 405);

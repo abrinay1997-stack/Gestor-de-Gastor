@@ -37,8 +37,8 @@ export function Ajustes() {
 
   const mesActual = claveMes(Date.now());
   const delMes = useMemo(
-    () => estadoPresupuestos(budgets, transactions, mesActual),
-    [budgets, transactions, mesActual],
+    () => estadoPresupuestos(budgets, transactions, mesActual, categories),
+    [budgets, transactions, mesActual, categories],
   );
 
   return (
@@ -768,14 +768,17 @@ function HojaPresupuesto({ abierta, alCerrar, editando }: {
   const mesActual = claveMes(Date.now());
 
   const [categoryId, setCategoryId] = useState('');
+  // Solo para el tope global. Vacio = todas las economias.
+  const [economiaTope, setEconomiaTope] = useState('');
   const [monto, setMonto] = useState('');
   const [cargando, setCargando] = useState(false);
 
   useEffect(() => {
     if (!abierta) return;
     setCategoryId(editando?.categoryId ?? '');
+    setEconomiaTope(editando?.entityId ?? (editando ? '' : entidadActiva ?? ''));
     setMonto(editando ? montoPlano(editando.amountMinor, moneda) : '');
-  }, [abierta, editando, moneda]);
+  }, [abierta, editando, moneda, entidadActiva]);
 
   // El presupuesto no lleva entidad propia: la saca de su categoria, igual que
   // un movimiento. Lo unico que cambia con la economia activa es cuantas
@@ -789,7 +792,11 @@ function HojaPresupuesto({ abierta, alCerrar, editando }: {
     (e) => e.id === categories.find((c) => c.id === categoryId)?.entityId,
   );
   const montoMinor = parseMonto(monto, moneda);
-  const existente = budgets.find((b) => b.period === mesActual && (b.categoryId ?? '') === categoryId);
+  const existente = budgets.find((b) => (
+    b.period === mesActual
+    && (b.categoryId ?? '') === categoryId
+    && (b.entityId ?? '') === (categoryId ? '' : economiaTope)
+  ));
 
   async function eliminar() {
     if (!editando) return;
@@ -829,13 +836,31 @@ function HojaPresupuesto({ abierta, alCerrar, editando }: {
           {gastos.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </Selector>
 
-        {economias.length > 1 && (
+        {economias.length > 1 && (categoryId ? (
           <p className="text-xs txt-3 -mt-2 px-1 leading-relaxed">
-            {suEconomia
-              ? `Es el tope de ${suEconomia.name}, porque la categoría es de ahí. Si mañana movés la categoría, el tope se va con ella.`
-              : 'El tope global cuenta los gastos de todas las economías, no solo los de la casa.'}
+            Es el tope de {suEconomia?.name ?? 'nadie'}, porque la categoría es
+            de ahí. Si mañana movés la categoría, el tope se va con ella.
           </p>
-        )}
+        ) : (
+          <>
+            <Selector
+              etiqueta="Economía"
+              value={economiaTope}
+              onChange={(e) => setEconomiaTope(e.target.value)}
+              disabled={Boolean(editando)}
+            >
+              <option value="">Todas juntas</option>
+              {economias.map((e) => (
+                <option key={e.id} value={e.id}>Solo {e.name}</option>
+              ))}
+            </Selector>
+            <p className="text-xs txt-3 -mt-2 px-1 leading-relaxed">
+              {economiaTope
+                ? `Cuenta todo lo que gaste ${economias.find((e) => e.id === economiaTope)?.name} este mes, en cualquier categoría.`
+                : 'Cuenta los gastos de todas las economías juntas.'}
+            </p>
+          </>
+        ))}
 
         <Campo
           etiqueta="Tope mensual"
@@ -862,7 +887,14 @@ function HojaPresupuesto({ abierta, alCerrar, editando }: {
               if (montoMinor === null) return;
               setCargando(true);
               try {
-                await guardarPresupuesto({ categoryId: categoryId || null, amountMinor: montoMinor, period: mesActual });
+                await guardarPresupuesto({
+                  categoryId: categoryId || null,
+                  // La entidad solo viaja en el tope global: el de categoria
+                  // la hereda de la categoria y congelarla seria un error.
+                  entityId: categoryId ? null : (economiaTope || null),
+                  amountMinor: montoMinor,
+                  period: mesActual,
+                });
                 alCerrar();
               } catch (e) {
                 avisar(e instanceof Error ? e.message : 'No se pudo guardar');

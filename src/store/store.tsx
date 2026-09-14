@@ -323,11 +323,15 @@ interface Acciones {
   }) => Promise<void>;
   borrarTraspaso: (id: string) => Promise<void>;
   ponerJarrasAlDia: () => Promise<number>;
-  guardarPresupuesto: (b: { categoryId: string | null; amountMinor: number; period: string }) => Promise<void>;
+  guardarPresupuesto: (b: {
+    categoryId: string | null; entityId?: string | null; amountMinor: number; period: string;
+  }) => Promise<void>;
   borrarPresupuesto: (id: string) => Promise<void>;
   guardarPerfil: (d: { displayName?: string; color?: string; emoji?: string; homeLayout?: SeccionInicio[] }) => Promise<void>;
   guardarRecurrente: (r: Partial<Recurring> & { startAt?: number }, id?: string) => Promise<void>;
   borrarRecurrente: (id: string) => Promise<void>;
+  cobrarRecurrente: (id: string, d?: { amountMinor?: number; date?: number }) => Promise<void>;
+  deshacerCobro: (id: string) => Promise<void>;
   invitar: (d: { email: string; password: string; displayName: string }) => Promise<void>;
   avisar: (texto: string, tipo?: 'error' | 'ok') => void;
 }
@@ -638,6 +642,18 @@ export function Store({ children }: { children: ReactNode }) {
     borrarRecurrente: async (id) => {
       await api.borrarRecurrente(id);
       dispatch({ t: 'recurring:delete', id });
+    },
+
+    cobrarRecurrente: async (id, d) => {
+      const r = await api.cobrarRecurrente(id, d);
+      dispatch({ t: 'recurring:upsert', recurring: r.recurring });
+      dispatch({ t: 'tx:upsert', tx: r.tx });
+    },
+
+    deshacerCobro: async (id) => {
+      const r = await api.deshacerCobro(id);
+      dispatch({ t: 'recurring:upsert', recurring: r.recurring });
+      dispatch({ t: 'tx:delete', id: r.txBorrado });
     },
 
     invitar: async (d) => {

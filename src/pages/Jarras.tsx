@@ -182,12 +182,14 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
                 </p>
               </div>
               <div>
-                <p className="text-xs txt-2 mb-1">Sin asignar</p>
+                <p className="text-xs txt-2 mb-1">
+                  {libre < 0 ? 'Asignado de más' : 'Sin asignar'}
+                </p>
                 <p className={cn(
                   'text-2xl font-bold tabular tracking-tight',
                   libre < 0 ? 'text-red-500' : 'txt',
                 )}>
-                  {formatMonto(libre, moneda)}
+                  {formatMonto(Math.abs(libre), moneda)}
                 </p>
               </div>
             </div>
@@ -283,7 +285,22 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
                   {/* Cuanto de lo que entro en el periodo ya se gasto. */}
                   <Barra ratio={gastado} color={j.color} alerta />
 
-                  <p className="text-[11px] txt-3 mt-2">
+                  {/* La frase que se viene a buscar: cuanto se puede gastar
+                      todavia, o cuanto se gasto de mas. El saldo de arriba ya
+                      lo dice en numero, pero en numero hay que interpretarlo y
+                      el signo se lee mal en el apuro. */}
+                  <p className={cn(
+                    'text-xs mt-2 font-medium',
+                    enRojo ? 'text-red-500' : 'text-marca-700 dark:text-marca-500',
+                  )}>
+                    {enRojo
+                      ? `Te pasaste ${formatMonto(-j.balanceMinor, moneda)}`
+                      : j.balanceMinor === 0
+                        ? 'Vacía: no queda nada para gastar de acá'
+                        : `Podés gastar ${formatMonto(j.balanceMinor, moneda)}`}
+                  </p>
+
+                  <p className="text-[11px] txt-3 mt-1">
                     {f.entroMinor === 0 && f.salioMinor === 0 ? (
                       <>Sin movimientos en {describirPeriodo(periodo).toLowerCase()}</>
                     ) : (
@@ -297,9 +314,9 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
                   </p>
 
                   {enRojo && (
-                    <p className="text-xs text-red-500 mt-2">
-                      Gastaste más de lo que esta jarra tuvo nunca. Movele plata
-                      desde otra con el botón de arriba.
+                    <p className="text-xs txt-3 mt-1.5 leading-relaxed">
+                      Salió más de lo que esta jarra recibió en toda su vida.
+                      Movele plata desde otra con el botón «Mover» de arriba.
                     </p>
                   )}
                 </Tarjeta>

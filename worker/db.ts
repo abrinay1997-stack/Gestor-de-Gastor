@@ -204,6 +204,7 @@ export const aRecurring = (f: Fila): Recurring => ({
   active: bool(f.active),
   nextRun: int(f.next_run),
   lastRun: intOpt(f.last_run),
+  esperandoDesde: intOpt(f.esperando_desde),
   createdAt: int(f.created_at),
   updatedAt: int(f.updated_at),
   entityId: strOpt(f.entity_id),

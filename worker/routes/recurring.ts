@@ -6,7 +6,8 @@
  */
 
 import type { Sesion } from '../auth.ts';
-import { listarRecurrentes, recurrentePorId } from '../db.ts';
+import { listarRecurrentes, movimientoPorId, recurrentePorId } from '../db.ts';
+import { ambitoDeReparto, sentenciasImputacion } from '../jarras.ts';
 import type { Env } from '../env.ts';
 import {
   ahora, booleano, cuerpo, difundir, entero, error, idOpcional, json,
@@ -14,7 +15,7 @@ import {
 } from '../http.ts';
 import { TxType } from '../../shared/types.ts';
 import {
-  primeraFecha, QUINCENA_POR_DEFECTO, reglaDe, type Frecuencia,
+  primeraFecha, QUINCENA_POR_DEFECTO, reglaDe, siguienteFecha, type Frecuencia,
 } from '../../shared/recurrencia.ts';
 
 const FRECUENCIAS = ['semanal', 'quincenal', 'mensual', 'anual'] as const;
@@ -209,4 +210,150 @@ export async function borrar(
   // Solo pierden el vinculo (ON DELETE SET NULL).
   await difundir(env, sesion.householdId, { kind: 'recurring:delete', id, by: sesion.memberId });
   return json({ ok: true });
+}
+
+// ---------------------------------------------------------------------------
+// Confirmar o deshacer un cobro
+// ---------------------------------------------------------------------------
+
+/**
+ * "Ya me pagaron": crea el movimiento ahora, sin esperar a la fecha.
+ *
+ * El sueldo es quincenal pero el 14 ya esta en la cuenta, o el 15 paso y el
+ * jefe pago recien el 18. La fecha teorica y la real casi nunca coinciden, y
+ * hasta ahora la app solo sabia la teorica.
+ *
+ * Escribe el movimiento con sus imputaciones de jarra en el mismo batch, igual
+ * que el disparador: un ingreso que las jarras no ven es plata que despues no
+ * cuadra.
+ */
+export async function cobrar(
+  req: Request, env: Env, sesion: Sesion, id: string,
+): Promise<Response> {
+  const r = await recurrentePorId(env, sesion.householdId, id);
+  if (!r) return error('El pago habitual no existe', 404);
+
+  const body = await cuerpo(req);
+  const t = ahora();
+  // El monto puede diferir del habitual —un sueldo con horas extra, una
+  // factura mas cara— y obligar a editarlo despues seria pedir el trabajo dos
+  // veces.
+  const amountMinor = body.amountMinor === undefined || body.amountMinor === null
+    ? r.amountMinor
+    : entero(body.amountMinor, 'amountMinor', { min: 1, max: MAX_MONTO });
+  const date = body.date === undefined || body.date === null
+    ? t
+    : entero(body.date, 'date', { min: 0, max: 4_102_444_800_000 });
+
+  // Contra el doble toque, que es el riesgo real: dos movimientos identicos
+  // del mismo pago habitual el mismo dia. No se intenta adivinar el ciclo
+  // —eso lo decide la pantalla, que sabe si esta pendiente o cobrado—, solo se
+  // frena la duplicacion accidental, que cuesta plata.
+  const yaHay = await env.DB.prepare(
+    `SELECT id FROM tx
+      WHERE household_id = ?1 AND recurring_id = ?2 AND amount_minor = ?3
+        AND date BETWEEN ?4 AND ?5 LIMIT 1`,
+  ).bind(
+    sesion.householdId, id, amountMinor,
+    date - 43_200_000, date + 43_200_000,
+  ).first<{ id: string }>();
+
+  if (yaHay) {
+    return error('Ya hay un cobro igual de este pago habitual ese día', 409);
+  }
+
+  const txId = nuevoId();
+  const ambito = await ambitoDeReparto(env, sesion.householdId);
+  const jars = r.distributeToJars
+    ? ambito.jarrasPara({ entityId: r.entityId, categoryId: r.categoryId })
+    : [];
+
+  // Si veniamos de un "deshacer", el ciclo ya estaba consumido y `next_run` ya
+  // apunta al siguiente: adelantarlo otra vez se saltearia un cobro entero.
+  const esperaba = r.esperandoDesde !== null;
+  const proxima = esperaba ? r.nextRun : siguienteFecha(reglaDe({
+    frequency: r.frequency, dayOfMonth: r.dayOfMonth, dayOfMonth2: r.dayOfMonth2,
+    dayOfWeek: r.dayOfWeek, monthOfYear: r.monthOfYear,
+  }), r.nextRun);
+
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO tx (id, household_id, type, amount_minor, account_id, dest_account_id,
+                       dest_amount_minor, category_id, jar_id, distribute_to_jars,
+                       description, notes, date, created_by, paid_by, recurring_id,
+                       created_at, updated_at)
+       VALUES (?1,?2,?3,?4,?5,NULL,NULL,?6,?7,?8,?9,NULL,?10,?11,?12,?13,?14,?14)`,
+    ).bind(
+      txId, sesion.householdId, r.type, amountMinor, r.accountId, r.categoryId,
+      r.jarId, r.distributeToJars ? 1 : 0, r.name, date, sesion.memberId,
+      r.paidBy, r.id, t,
+    ),
+    ...sentenciasImputacion(env, sesion.householdId, txId, {
+      type: r.type, amountMinor, distributeToJars: r.distributeToJars, jarId: r.jarId,
+    }, jars, t),
+    env.DB.prepare(
+      `UPDATE recurring SET next_run = ?1, last_run = ?2, esperando_desde = NULL,
+                            updated_at = ?3 WHERE id = ?4 AND household_id = ?5`,
+    ).bind(proxima, date, t, id, sesion.householdId),
+  ]);
+
+  const [recurrente, tx] = await Promise.all([
+    recurrentePorId(env, sesion.householdId, id),
+    movimientoPorId(env, sesion.householdId, txId),
+  ]);
+  if (!recurrente || !tx) return error('No se pudo confirmar el cobro', 500);
+
+  await difundir(env, sesion.householdId, { kind: 'tx:upsert', tx, by: sesion.memberId });
+  await difundir(env, sesion.householdId, {
+    kind: 'recurring:upsert', recurring: recurrente, by: sesion.memberId,
+  });
+  return json({ recurring: recurrente, tx }, { status: 201 });
+}
+
+/**
+ * "Todavia no me pagaron": borra el movimiento que se habia dado por cobrado.
+ *
+ * Borrarlo devuelve el saldo de la cuenta y las imputaciones de jarra solas,
+ * porque nada de eso se guarda: se calcula. Es el mismo comportamiento que
+ * borrar cualquier movimiento.
+ *
+ * `next_run` NO retrocede. Si retrocediera quedaria en el pasado y el
+ * disparador volveria a crear el movimiento en su proximo barrido, que es
+ * exactamente lo que se acaba de decir que no paso. En su lugar queda anotado
+ * en `esperando_desde`, y la pantalla lo muestra como pendiente hasta que
+ * llegue de verdad.
+ */
+export async function deshacerCobro(
+  _req: Request, env: Env, sesion: Sesion, id: string,
+): Promise<Response> {
+  const r = await recurrentePorId(env, sesion.householdId, id);
+  if (!r) return error('El pago habitual no existe', 404);
+
+  const fila = await env.DB.prepare(
+    `SELECT id, date FROM tx WHERE household_id = ?1 AND recurring_id = ?2
+      ORDER BY date DESC, created_at DESC LIMIT 1`,
+  ).bind(sesion.householdId, id).first<{ id: string; date: number }>();
+
+  if (!fila) return error('No hay ningún cobro que deshacer', 404);
+
+  const t = ahora();
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM tx WHERE id = ?1 AND household_id = ?2')
+      .bind(fila.id, sesion.householdId),
+    env.DB.prepare(
+      `UPDATE recurring SET esperando_desde = ?1, last_run = NULL, updated_at = ?2
+        WHERE id = ?3 AND household_id = ?4`,
+    ).bind(fila.date, t, id, sesion.householdId),
+  ]);
+
+  const recurrente = await recurrentePorId(env, sesion.householdId, id);
+  if (!recurrente) return error('No se pudo deshacer', 500);
+
+  await difundir(env, sesion.householdId, {
+    kind: 'tx:delete', id: fila.id, by: sesion.memberId,
+  });
+  await difundir(env, sesion.householdId, {
+    kind: 'recurring:upsert', recurring: recurrente, by: sesion.memberId,
+  });
+  return json({ recurring: recurrente, txBorrado: fila.id });
 }

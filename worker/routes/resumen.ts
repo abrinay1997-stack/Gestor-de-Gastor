@@ -181,7 +181,7 @@ export async function traer(_req: Request, env: Env, sesion: Sesion): Promise<Re
     desdeSiempre: resumir(transactions),
 
     // --- lo que viene ---
-    presupuestosDelMes: estadoPresupuestos(budgets, transactions, claveMes(Date.now()))
+    presupuestosDelMes: estadoPresupuestos(budgets, transactions, claveMes(Date.now()), categories)
       .map((e) => ({
         categoria: categories.find((c) => c.id === e.budget.categoryId)?.name ?? 'Todo el mes',
         topeMinor: e.budget.amountMinor,

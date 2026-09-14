@@ -188,7 +188,9 @@ export const api = {
   ponerJarrasAlDia: () =>
     post<{ repartidos: number; jars: Jar[] }>('/api/jars/poner-al-dia', {}),
 
-  guardarPresupuesto: (b: { categoryId: string | null; amountMinor: number; period: string }) =>
+  guardarPresupuesto: (b: {
+    categoryId: string | null; entityId?: string | null; amountMinor: number; period: string;
+  }) =>
     put<{ budget: Budget }>('/api/budgets', b),
   borrarPresupuesto: (id: string) => del<{ ok: true }>(`/api/budgets/${id}`),
 
@@ -201,4 +203,12 @@ export const api = {
   editarRecurrente: (id: string, r: Partial<Recurring>) =>
     put<{ recurring: Recurring }>(`/api/recurring/${id}`, r),
   borrarRecurrente: (id: string) => del<{ ok: true }>(`/api/recurring/${id}`),
+
+  /** "Ya me pagaron": crea el movimiento ahora, sin esperar a la fecha. */
+  cobrarRecurrente: (id: string, d?: { amountMinor?: number; date?: number }) =>
+    post<{ recurring: Recurring; tx: Transaction }>(`/api/recurring/cobrar/${id}`, d ?? {}),
+
+  /** "Todavia no me pagaron": borra el movimiento que se dio por cobrado. */
+  deshacerCobro: (id: string) =>
+    post<{ recurring: Recurring; txBorrado: string }>(`/api/recurring/deshacer/${id}`, {}),
 };

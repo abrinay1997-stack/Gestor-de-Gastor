@@ -345,6 +345,12 @@ export async function guardarPresupuesto(req: Request, env: Env, sesion: Sesion)
   const amountMinor = entero(body.amountMinor, 'amountMinor', { min: 0, max: 999_999_999_999 });
   const period = periodo(body.period, 'period');
 
+  // Un tope de categoria ya sabe de quien es —la categoria lo sabe—, asi que
+  // la entidad solo se guarda en el tope global: "todo el mes de PanaClaw".
+  // Guardarla tambien en el de categoria la congelaria, y mover la categoria
+  // a otra economia dejaria el tope atras.
+  const entityId = categoryId ? null : idOpcional(body.entityId, 'entityId');
+
   if (categoryId) {
     const cat = await env.DB.prepare('SELECT id FROM category WHERE id = ?1 AND household_id = ?2')
       .bind(categoryId, sesion.householdId).first();
@@ -360,17 +366,18 @@ export async function guardarPresupuesto(req: Request, env: Env, sesion: Sesion)
     `INSERT INTO budget (id, household_id, category_id, amount_minor, period,
                          created_at, updated_at, entity_id)
      VALUES (?1,?2,?3,?4,?5,?6,?6,?7)
-     ON CONFLICT(household_id, period, IFNULL(category_id, '')) DO UPDATE SET
-       amount_minor = excluded.amount_minor, updated_at = excluded.updated_at,
-       entity_id = excluded.entity_id`,
-  ).bind(
-    id, sesion.householdId, categoryId, amountMinor, period, t,
-    idOpcional(body.entityId, 'entityId'),
-  ).run();
+     ON CONFLICT(household_id, period, IFNULL(category_id, ''), IFNULL(entity_id, ''))
+     DO UPDATE SET
+       amount_minor = excluded.amount_minor, updated_at = excluded.updated_at`,
+  ).bind(id, sesion.householdId, categoryId, amountMinor, period, t, entityId).run();
 
   const fila = await env.DB.prepare(
-    `SELECT * FROM budget WHERE household_id = ?1 AND period = ?2 AND IFNULL(category_id,'') = ?3`,
-  ).bind(sesion.householdId, period, categoryId ?? '').first<Record<string, unknown>>();
+    `SELECT * FROM budget
+      WHERE household_id = ?1 AND period = ?2
+        AND IFNULL(category_id,'') = ?3 AND IFNULL(entity_id,'') = ?4`,
+  ).bind(
+    sesion.householdId, period, categoryId ?? '', entityId ?? '',
+  ).first<Record<string, unknown>>();
   if (!fila) return error('No se pudo guardar el presupuesto', 500);
 
   const budget = aBudget(fila);

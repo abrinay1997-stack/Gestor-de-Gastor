@@ -13,7 +13,9 @@ import {
   autorDe, calcularPatrimonio, claveMes, estadoPresupuestos, filtrarPorEntidad,
   porCategoria, porPersona, resumir, transaccionesDelMes,
 } from '@shared/domain';
-import { SECCIONES_INICIO, TxType, type SeccionInicio, type Transaction } from '@shared/types';
+import {
+  SECCIONES_INICIO, TxType, type Recurring, type SeccionInicio, type Transaction,
+} from '@shared/types';
 import { describirRegla } from '@shared/recurrencia';
 import { fechaCorta, moverMes, nombreMes } from '../lib/utils.ts';
 import { Avatar, Barra, Boton, Ficha, Icono, Tarjeta, Vacio } from '../components/ui/base.tsx';
@@ -49,7 +51,10 @@ export function Inicio({ alVerMovimiento, alAgregar, alVerAnalisis }: {
   const patrimonio = useMemo(() => calcularPatrimonio(accounts), [accounts]);
   const porPers = useMemo(() => porPersona(delMes, members), [delMes, members]);
   const gastoPorCat = useMemo(() => porCategoria(delMes, categories, 'gasto').slice(0, 5), [delMes, categories]);
-  const presupuestos = useMemo(() => estadoPresupuestos(budgets, transactions, mes), [budgets, transactions, mes]);
+  const presupuestos = useMemo(
+    () => estadoPresupuestos(budgets, transactions, mes, categories),
+    [budgets, transactions, mes, categories],
+  );
   const ultimos = useMemo(() => transactions.slice(0, 6), [transactions]);
 
   // Los pagos habituales heredan la economia de su categoria, igual que un
@@ -194,30 +199,9 @@ export function Inicio({ alVerMovimiento, alAgregar, alVerAnalisis }: {
       <Tarjeta className="py-3">
         <p className="text-xs font-medium txt-3 px-1 mb-1">Pagos habituales</p>
         <div className="divide-y divide-[var(--borde)] -mx-1">
-          {proximos.map((r) => {
-            const cat = categories.find((c) => c.id === r.categoryId);
-            const dias = Math.ceil((r.nextRun - Date.now()) / 86_400_000);
-            return (
-              <div key={r.id} className="flex items-center gap-3 py-3 px-1">
-                <Ficha color={cat?.color ?? '#8b5cf6'} icono={cat?.icon ?? 'repeat'} size={38} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium txt truncate">{r.name}</p>
-                  <p className="text-xs txt-3 truncate">
-                    {describirRegla({
-                      frecuencia: r.frequency,
-                      diaDelMes: r.dayOfMonth ?? undefined,
-                      diaDeSemana: r.dayOfWeek ?? undefined,
-                      mesDelAnio: r.monthOfYear ?? undefined,
-                    })}
-                    {dias >= 0 && dias <= 7 && ` · en ${dias === 0 ? 'hoy' : `${dias} día${dias > 1 ? 's' : ''}`}`}
-                  </p>
-                </div>
-                <p className="text-sm font-semibold tabular txt shrink-0">
-                  {formatMonto(r.amountMinor, moneda)}
-                </p>
-              </div>
-            );
-          })}
+          {proximos.map((r) => (
+            <FilaHabitual key={r.id} recurrente={r} />
+          ))}
         </div>
       </Tarjeta>
     ) : null,
@@ -355,5 +339,102 @@ export function FilaMovimiento({ tx, alTocar }: { tx: Transaction; alTocar: () =
         )}
       </div>
     </button>
+  );
+}
+
+/**
+ * Un pago habitual, con el boton para confirmar o deshacer el cobro.
+ *
+ * La fecha teorica y la real casi nunca coinciden: a veces pagan el 14 aunque
+ * el sueldo sea el 15, y a veces el 15 pasa y el jefe no pago. Hasta ahora la
+ * app solo sabia la teorica, asi que el saldo mostraba plata que no estaba —o
+ * escondia la que si—, y encima se repartia en las jarras.
+ */
+function FilaHabitual({ recurrente: r }: { recurrente: Recurring }) {
+  const { categories, transactions, household, cobrarRecurrente, deshacerCobro, avisar } = useStore();
+  const moneda = household?.currency ?? 'USD';
+  const [ocupado, setOcupado] = useState(false);
+
+  const cat = categories.find((c) => c.id === r.categoryId);
+  const dias = Math.ceil((r.nextRun - Date.now()) / 86_400_000);
+
+  // El ultimo movimiento que nacio de este pago habitual. Es lo que se
+  // deshace, y su existencia es lo que dice si el ciclo ya se cobro.
+  const ultimo = useMemo(
+    () => transactions.filter((t) => t.recurringId === r.id)
+      .sort((a, b) => b.date - a.date)[0],
+    [transactions, r.id],
+  );
+
+  // Pendiente = el ciclo se dio por cobrado y se deshizo, o todavia no llego
+  // la fecha. Cobrado = hay un movimiento de este ciclo sin deshacer.
+  const esperando = r.esperandoDesde !== null;
+  const cobrado = !esperando && ultimo !== undefined && r.lastRun !== null;
+  const esIngreso = r.type === TxType.INGRESO;
+
+  async function alternar() {
+    setOcupado(true);
+    try {
+      if (cobrado) await deshacerCobro(r.id);
+      else await cobrarRecurrente(r.id);
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : 'No se pudo');
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-3 py-3 px-1">
+      <Ficha color={cat?.color ?? '#8b5cf6'} icono={cat?.icon ?? 'repeat'} size={38} />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium txt truncate">{r.name}</p>
+        <p className="text-xs txt-3 truncate">
+          {esperando ? (
+            <span className="text-amber-600 dark:text-amber-500">
+              Se esperaba el {fechaCorta(r.esperandoDesde ?? 0)} · sin {esIngreso ? 'cobrar' : 'pagar'}
+            </span>
+          ) : cobrado ? (
+            <span className="text-marca-700 dark:text-marca-500">
+              {esIngreso ? 'Cobrado' : 'Pagado'} el {fechaCorta(ultimo.date)}
+            </span>
+          ) : (
+            <>
+              {describirRegla({
+                frecuencia: r.frequency,
+                diaDelMes: r.dayOfMonth ?? undefined,
+                diaDeSemana: r.dayOfWeek ?? undefined,
+                mesDelAnio: r.monthOfYear ?? undefined,
+              })}
+              {dias >= 0 && dias <= 7 && ` · ${dias === 0 ? 'hoy' : `en ${dias} día${dias > 1 ? 's' : ''}`}`}
+            </>
+          )}
+        </p>
+      </div>
+
+      <p className="text-sm font-semibold tabular txt shrink-0">
+        {formatMonto(r.amountMinor, moneda)}
+      </p>
+
+      {/* El check. Prendido = ya paso de verdad. Apagado = todavia no.
+          Apagarlo borra el movimiento que la app habia creado sola. */}
+      <button
+        onClick={() => void alternar()}
+        disabled={ocupado}
+        aria-label={cobrado
+          ? `Deshacer: todavía no ${esIngreso ? 'me pagaron' : 'lo pagué'}`
+          : `Marcar que ya ${esIngreso ? 'me pagaron' : 'lo pagué'}`}
+        className={cn(
+          'w-9 h-9 rounded-full border flex items-center justify-center shrink-0 transition-all active:scale-90 disabled:opacity-40',
+          cobrado
+            ? 'bg-marca-600 border-transparent text-white'
+            : esperando
+              ? 'border-amber-500 text-amber-600 dark:text-amber-500'
+              : 'superficie-2 borde txt-3',
+        )}
+      >
+        <Icono nombre={cobrado ? 'check' : 'circle'} size={17} />
+      </button>
+    </div>
   );
 }

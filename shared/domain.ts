@@ -588,21 +588,37 @@ export function balancePorMes(
   });
 }
 
-/** Estado de cada presupuesto del mes. */
+/**
+ * Estado de cada presupuesto del mes.
+ *
+ * Un tope de categoria cuenta solo esa categoria, y con eso ya queda acotado a
+ * su economia: la categoria sabe de quien es. El tope global cuenta todo el
+ * mes, salvo que lleve entidad, y entonces cuenta solo esa economia — que es
+ * la unica forma de decir "PanaClaw no gasta mas de X este mes".
+ *
+ * `categorias` hace falta para eso ultimo: la economia de un movimiento sale
+ * de su categoria. Sin ella, un tope con entidad no puede filtrar nada.
+ */
 export function estadoPresupuestos(
   budgets: Budget[],
   transactions: Transaction[],
   period: string,
+  categorias: Category[] = [],
 ): { budget: Budget; gastadoMinor: number; ratio: number }[] {
   const delMes = transaccionesDelMes(transactions, period);
+  const indice = indexarCategorias(categorias);
 
   return budgets
     .filter((b) => b.period === period)
     .map((budget) => {
       const gastadoMinor = sumarMinor(
         ...delMes
-          .filter((t) => t.type === TxType.GASTO &&
-            (budget.categoryId === null || t.categoryId === budget.categoryId))
+          .filter((t) => {
+            if (t.type !== TxType.GASTO) return false;
+            if (budget.categoryId !== null) return t.categoryId === budget.categoryId;
+            if (budget.entityId !== null) return entidadDe(t, indice) === budget.entityId;
+            return true;
+          })
           .map((t) => t.amountMinor),
       );
       return {

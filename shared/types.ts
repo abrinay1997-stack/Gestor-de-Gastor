@@ -368,6 +368,13 @@ export interface Recurring {
   /** Cuando toca el proximo. Avanzar esto es lo que evita duplicados. */
   nextRun: number;
   lastRun: number | null;
+  /**
+   * La fecha del ciclo que se dio por cobrado y despues se deshizo, o null.
+   *
+   * Con valor, la pantalla lo muestra como pendiente y confirmarlo NO adelanta
+   * `nextRun`: ese ciclo ya estaba consumido. Ver migracion 0006.
+   */
+  esperandoDesde: number | null;
   createdAt: number;
   updatedAt: number;
 }

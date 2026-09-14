@@ -47,7 +47,8 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
   editando?: Transaction | null;
 }) {
   const {
-    accounts, categories, jars, entities, transactions, members, me, household, guardarTx,
+    accounts, categories, jars, entities, entidadActiva, transactions, members, me,
+    household, guardarTx,
   } = useStore();
   const moneda = household?.currency ?? 'USD';
 
@@ -124,10 +125,30 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
   const esTransferencia = tipo === TxType.TRANSFERENCIA;
   const tipoCategoria = tipo === TxType.INGRESO ? 'ingreso' : 'gasto';
 
-  const categoriasVisibles = useMemo(
-    () => categories.filter((c) => !c.archived && c.type === tipoCategoria),
-    [categories, tipoCategoria],
+  // Ordenadas por economia, y primero las de la que se esta mirando: si estan
+  // en PanaClaw, las de PanaClaw arriba.
+  const categoriasVisibles = useMemo(() => {
+    const orden = new Map(entities.map((e) => [e.id, e.displayOrder]));
+    return categories
+      .filter((c) => !c.archived && c.type === tipoCategoria)
+      .sort((a, b) => {
+        if (a.entityId !== b.entityId) {
+          if (a.entityId === entidadActiva) return -1;
+          if (b.entityId === entidadActiva) return 1;
+          return (orden.get(a.entityId ?? '') ?? 999) - (orden.get(b.entityId ?? '') ?? 999);
+        }
+        return a.displayOrder - b.displayOrder;
+      });
+  }, [categories, tipoCategoria, entities, entidadActiva]);
+
+  // Con una sola economia el nombre no aporta nada. Con dos, es la diferencia
+  // entre cargar "Suscripciones" de la casa o la del negocio, que son gastos
+  // de dueños distintos y terminan en jarras distintas.
+  const variasEconomias = useMemo(
+    () => entities.filter((e) => !e.archived).length > 1,
+    [entities],
   );
+  const economiaDe = (id: string | null) => entities.find((e) => e.id === id);
 
   const cuentaSel = activas.find((c) => c.id === accountId);
 
@@ -289,20 +310,37 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           <div>
             <span className="block text-xs font-medium txt-2 mb-2">Categoría</span>
             <div className="flex gap-2 overflow-x-auto sin-barra pb-1 -mx-1 px-1">
-              {categoriasVisibles.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => setCategoryId(categoryId === c.id ? '' : c.id)}
-                  className={cn(
-                    'shrink-0 min-h-11 px-3 rounded-xl border text-sm font-medium flex items-center gap-1.5 transition-all',
-                    categoryId === c.id ? 'border-transparent text-white' : 'superficie-2 borde txt-2',
-                  )}
-                  style={categoryId === c.id ? { background: c.color } : undefined}
-                >
-                  <Icono nombre={c.icon} size={15} />
-                  {c.name}
-                </button>
-              ))}
+              {categoriasVisibles.map((c) => {
+                const suya = economiaDe(c.entityId);
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => setCategoryId(categoryId === c.id ? '' : c.id)}
+                    className={cn(
+                      'shrink-0 min-h-11 px-3 rounded-xl border text-sm font-medium flex items-center gap-1.5 transition-all',
+                      categoryId === c.id ? 'border-transparent text-white' : 'superficie-2 borde txt-2',
+                    )}
+                    style={categoryId === c.id ? { background: c.color } : undefined}
+                  >
+                    <Icono nombre={c.icon} size={15} />
+                    <span className="flex flex-col items-start leading-tight">
+                      {c.name}
+                      {variasEconomias && (
+                        <span
+                          className="text-[10px] font-normal"
+                          style={{
+                            color: categoryId === c.id
+                              ? 'rgb(255 255 255 / 0.75)'
+                              : (suya?.color ?? 'var(--texto-3)'),
+                          }}
+                        >
+                          {suya?.name ?? 'Sin economía'}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
