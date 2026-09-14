@@ -18,7 +18,7 @@ import { describirPeriodo, periodoMes, type Periodo } from '@shared/periodo';
 import type { Entity, Jar, Transaction } from '@shared/types';
 import { FilaMovimiento } from './Inicio.tsx';
 import {
-  Barra, Boton, Campo, Ficha, Hoja, Icono, Selector, Tarjeta, Vacio,
+  Barra, Boton, Campo, Ficha, Hoja, Icono, Selector, SelectorIcono, Tarjeta, Vacio,
 } from '../components/ui/base.tsx';
 import { SelectorPeriodo } from '../components/ui/periodo.tsx';
 import { SelectorEntidad } from '../components/ui/entidad.tsx';
@@ -754,7 +754,20 @@ function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
   // significa nada.
   const [entidad, setEntidad] = useState<string | null>(null);
   const [borradores, setBorradores] = useState<Borrador[]>([]);
+  const [iconoAbierto, setIconoAbierto] = useState<number | null>(null);
   const [guardando, setGuardando] = useState(false);
+
+  /** Sube o baja una jarra. El orden se guarda al guardar, como todo lo demas. */
+  const mover = (i: number, paso: number) => {
+    const j = i + paso;
+    if (j < 0 || j >= borradores.length) return;
+    setBorradores((prev) => {
+      const copia = [...prev];
+      [copia[i], copia[j]] = [copia[j], copia[i]];
+      return copia;
+    });
+    setIconoAbierto(null);
+  };
 
   useEffect(() => {
     if (!abierta) return;
@@ -863,7 +876,16 @@ function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
         {borradores.map((b, i) => (
           <div key={b.id ?? `nueva-${i}`} className="superficie-2 rounded-2xl p-3 space-y-3">
             <div className="flex items-center gap-2.5">
-              <Ficha color={b.color} icono={b.icon} size={38} />
+              {/* La ficha abre el selector de iconos. Es el mismo que usan las
+                  categorias: un candado no es un chanchito, y la jarra se
+                  reconoce de un vistazo por el icono, no leyendo el nombre. */}
+              <button
+                onClick={() => setIconoAbierto(iconoAbierto === i ? null : i)}
+                aria-label={`Cambiar el ícono de ${b.name}`}
+                className="shrink-0 rounded-xl active:scale-95 transition-transform"
+              >
+                <Ficha color={b.color} icono={b.icon} size={38} />
+              </button>
               <input
                 value={b.name}
                 onChange={(e) => cambiar(i, 'name', e.target.value)}
@@ -878,6 +900,43 @@ function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
                 <Icono nombre="trash-2" size={17} />
               </button>
             </div>
+
+            {iconoAbierto === i && (
+              <div className="superficie rounded-2xl p-2.5 borde border">
+                <SelectorIcono
+                  valor={b.icon}
+                  color={b.color}
+                  alElegir={(n) => { cambiar(i, 'icon', n); setIconoAbierto(null); }}
+                />
+              </div>
+            )}
+
+            {/* Mover de lugar. Flechas y no arrastrar: en un telefono, arrastrar
+                dentro de una hoja que ya se desplaza pelea con el scroll, y
+                estas jarras se ordenan una vez y no se tocan mas. */}
+            {borradores.length > 1 && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => mover(i, -1)}
+                  disabled={i === 0}
+                  aria-label={`Subir ${b.name}`}
+                  className="w-9 h-9 rounded-xl superficie borde border flex items-center justify-center txt-2 disabled:opacity-30 active:scale-95 transition-transform"
+                >
+                  <Icono nombre="chevron-up" size={16} />
+                </button>
+                <button
+                  onClick={() => mover(i, 1)}
+                  disabled={i === borradores.length - 1}
+                  aria-label={`Bajar ${b.name}`}
+                  className="w-9 h-9 rounded-xl superficie borde border flex items-center justify-center txt-2 disabled:opacity-30 active:scale-95 transition-transform"
+                >
+                  <Icono nombre="chevron-down" size={16} />
+                </button>
+                <span className="text-xs txt-3 ml-1">
+                  {i + 1} de {borradores.length}
+                </span>
+              </div>
+            )}
 
             {/* Como se llena. Un frasco de la casa va por porcentaje porque el
                 sueldo es parejo; un cobro de agencia va de $50 a $5.000 y ahi

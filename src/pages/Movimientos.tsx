@@ -105,28 +105,30 @@ export function Movimientos({ alVerMovimiento, alAgregar }: {
       <SelectorEntidad />
       <SelectorPeriodo periodo={periodo} alCambiar={setPeriodo} />
 
-      <div className="flex gap-2">
+      {/* El buscador ocupa el ancho entero. Antes compartia fila con el boton
+          de filtros y quedaba corrido hacia un lado; los filtros van abajo,
+          centrados, donde no le roban ancho a lo que mas se usa. */}
+      <div className="space-y-2">
         <Campo
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
           placeholder="Buscar..."
           type="search"
-          className="flex-1"
+          className="w-full"
         />
         <button
           onClick={() => setVerFiltros(!verFiltros)}
-          aria-label="Filtros"
+          aria-expanded={verFiltros}
           className={cn(
-            'w-11 min-h-11 rounded-xl border flex items-center justify-center shrink-0 relative transition-colors',
+            'w-full min-h-10 rounded-xl border flex items-center justify-center gap-2 text-sm font-medium transition-colors',
             activos > 0 ? 'bg-marca-600 text-white border-transparent' : 'superficie-2 borde txt-2',
           )}
         >
-          <Icono nombre="filter" size={18} />
-          {activos > 0 && (
-            <span className="absolute -top-1 -right-1 w-4.5 h-4.5 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
-              {activos}
-            </span>
-          )}
+          <Icono nombre="filter" size={16} />
+          {activos > 0
+            ? `${activos} filtro${activos > 1 ? 's' : ''}`
+            : 'Filtros'}
+          <Icono nombre={verFiltros ? 'chevron-up' : 'chevron-down'} size={15} />
         </button>
       </div>
 
