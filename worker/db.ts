@@ -17,7 +17,7 @@
 
 import type {
   Account, Adjustment, Budget, Category, Entity, Household, Jar, JarImputacion,
-  JarTransfer, Member, Recurring, SeccionInicio,
+  JarAporte, JarTransfer, Member, Recurring, SeccionInicio,
   Snapshot, Transaction,
 } from '../shared/types.ts';
 import { SECCIONES_INICIO } from '../shared/types.ts';
@@ -111,6 +111,17 @@ export const aJarTransfer = (f: Fila): JarTransfer => ({
   householdId: str(f.household_id),
   fromJarId: str(f.from_jar_id),
   toJarId: str(f.to_jar_id),
+  amountMinor: int(f.amount_minor),
+  note: strOpt(f.note),
+  date: int(f.date),
+  createdBy: str(f.created_by),
+  createdAt: int(f.created_at),
+});
+
+export const aJarAporte = (f: Fila): JarAporte => ({
+  id: str(f.id),
+  householdId: str(f.household_id),
+  jarId: str(f.jar_id),
   amountMinor: int(f.amount_minor),
   note: strOpt(f.note),
   date: int(f.date),
@@ -385,6 +396,13 @@ export async function listarTraspasos(
   return results.map(aJarTransfer);
 }
 
+export async function listarAportes(env: Env, householdId: string): Promise<JarAporte[]> {
+  const { results } = await env.DB.prepare(
+    'SELECT * FROM jar_aporte WHERE household_id = ?1 ORDER BY date DESC, created_at DESC',
+  ).bind(householdId).all<Fila>();
+  return results.map(aJarAporte);
+}
+
 /**
  * Jarras con su saldo de toda la vida.
  *
@@ -396,6 +414,7 @@ export async function listarJarras(
   householdId: string,
   imputaciones?: JarImputacion[],
   transfers?: JarTransfer[],
+  aportes?: JarAporte[],
 ): Promise<Jar[]> {
   const { results } = await env.DB.prepare(
     'SELECT * FROM jar WHERE household_id = ?1 ORDER BY display_order ASC, created_at ASC',
@@ -404,11 +423,12 @@ export async function listarJarras(
   const jarras = results.map(aJar);
   if (jarras.length === 0) return jarras;
 
-  const [imp, tra] = await Promise.all([
+  const [imp, tra, apo] = await Promise.all([
     imputaciones ?? listarImputaciones(env, householdId),
     transfers ?? listarTraspasos(env, householdId),
+    aportes ?? listarAportes(env, householdId),
   ]);
-  const saldos = calcularJarras(jarras, imp, tra);
+  const saldos = calcularJarras(jarras, imp, tra, undefined, undefined, apo);
 
   return jarras.map((j) => ({ ...j, balanceMinor: saldos.get(j.id) ?? 0 }));
 }
@@ -422,7 +442,7 @@ export async function snapshot(
   if (!filaHogar) return null;
 
   const [accounts, categories, budgets, members, transactions, recurring,
-         imputaciones, jarTransfers, entities] = await Promise.all([
+         imputaciones, jarTransfers, entities, jarAportes] = await Promise.all([
     listarCuentas(env, householdId),
     listarCategorias(env, householdId),
     listarPresupuestos(env, householdId),
@@ -432,10 +452,11 @@ export async function snapshot(
     listarImputaciones(env, householdId),
     listarTraspasos(env, householdId),
     listarEntidades(env, householdId),
+    listarAportes(env, householdId),
   ]);
 
   // Se reusa lo ya traido en vez de volver a consultarlo.
-  const jars = await listarJarras(env, householdId, imputaciones, jarTransfers);
+  const jars = await listarJarras(env, householdId, imputaciones, jarTransfers, jarAportes);
 
   const me = members.find((m) => m.id === memberId);
   if (!me) return null;
@@ -443,6 +464,6 @@ export async function snapshot(
   return {
     household: aHousehold(filaHogar),
     members, me, accounts, categories, jars, budgets, transactions, recurring,
-    imputaciones, jarTransfers, entities,
+    imputaciones, jarTransfers, entities, jarAportes,
   };
 }

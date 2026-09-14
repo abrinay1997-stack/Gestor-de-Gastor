@@ -43,6 +43,9 @@ const RUTAS: Record<string, Partial<Record<string, Handler>>> = {
   '/api/adjustments': { GET: adjustments.listar, POST: adjustments.crear },
   '/api/jar-transfers': { GET: jarTransfers.listar, POST: jarTransfers.crear },
   '/api/jars/poner-al-dia': { POST: jarTransfers.ponerAlDia },
+  // Repartir en jarras plata que ya estaba en las cuentas (los saldos
+  // iniciales, sobre todo). Ver jarTransfers.ts.
+  '/api/jars/asignar': { POST: jarTransfers.asignar },
   // Un negocio le paga a la casa: sale de una jarra suya y entra repartido.
   '/api/jar-transfers/pago': { POST: jarTransfers.pagar },
   '/api/entities': { GET: entities.listar, POST: entities.crear },
@@ -65,6 +68,7 @@ const RUTAS_CON_ID: { prefijo: string; metodos: Partial<Record<string, HandlerCo
   { prefijo: '/api/recurring/cobrar/', metodos: { POST: recurring.cobrar } },
   { prefijo: '/api/recurring/deshacer/', metodos: { POST: recurring.deshacerCobro } },
   { prefijo: '/api/recurring/', metodos: { PUT: recurring.editar, DELETE: recurring.borrar } },
+  { prefijo: '/api/jar-aportes/', metodos: { DELETE: jarTransfers.borrarAporte } },
   { prefijo: '/api/jar-transfers/', metodos: { DELETE: jarTransfers.borrar } },
   { prefijo: '/api/entities/', metodos: { PUT: entities.editar, DELETE: entities.borrar } },
 ];

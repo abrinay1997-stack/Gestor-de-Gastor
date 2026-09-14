@@ -8,7 +8,8 @@
 
 import type { Sesion } from '../auth.ts';
 import {
-  aJarTransfer, listarCuentas, listarImputaciones, listarJarras, listarTraspasos,
+  aJarTransfer, listarAportes, listarCuentas, listarImputaciones, listarJarras,
+  listarTraspasos,
 } from '../db.ts';
 import { ambitoDeReparto, sentenciasImputacion } from '../jarras.ts';
 import { repartirEnJarras, validarJarras } from '../../shared/domain.ts';
@@ -243,4 +244,96 @@ export async function ponerAlDia(_r: Request, env: Env, sesion: Sesion): Promise
   });
 
   return json({ repartidos, jars: jarsNuevas });
+}
+
+// ---------------------------------------------------------------------------
+// Asignar a las jarras lo que estaba sin asignar
+// ---------------------------------------------------------------------------
+
+/**
+ * Reparte entre las jarras plata que YA esta en las cuentas y que ninguna
+ * jarra vio nunca.
+ *
+ * El caso que lo motiva: la pantalla decia "Sin asignar $887.10" con todos los
+ * movimientos asignados. Era cierto —$887.10 es exactamente la suma de los
+ * saldos iniciales de las cuentas— pero no habia forma de bajarlo ni de
+ * entenderlo. Las jarras solo ven movimientos, y ese capital de arranque nunca
+ * fue uno.
+ *
+ * No toca ninguna cuenta: la plata ya estaba ahi, lo que cambia es para que
+ * esta. Y se deshace borrando los aportes, porque el saldo de la jarra no se
+ * guarda, se suma.
+ */
+export async function asignar(req: Request, env: Env, sesion: Sesion): Promise<Response> {
+  const body = await cuerpo(req);
+
+  const amountMinor = entero(body.amountMinor, 'amountMinor', { min: 1, max: MAX_MONTO });
+  const note = textoOpcional(body.note, 'note', 200);
+  const date = entero(body.date ?? ahora(), 'date', { min: 0, max: 4_102_444_800_000 });
+  const jarId = body.jarId === undefined || body.jarId === null
+    ? null
+    : texto(body.jarId, 'jarId', { max: 64, min: 1 });
+
+  const todas = await listarJarras(env, sesion.householdId);
+  if (todas.length === 0) return error('No hay jarras configuradas', 400);
+
+  // A una sola jarra, o repartido entre las de una economia.
+  let partes: Map<string, number>;
+  if (jarId) {
+    const jarra = todas.find((j) => j.id === jarId);
+    if (!jarra) return error('La jarra no existe', 404);
+    partes = new Map([[jarId, amountMinor]]);
+  } else {
+    const entityId = body.entityId === undefined || body.entityId === null
+      ? null
+      : texto(body.entityId, 'entityId', { max: 64, min: 1 });
+    const destino = entityId === null ? todas : todas.filter((j) => j.entityId === entityId);
+    if (destino.length === 0) return error('Esa economía no tiene jarras', 400);
+
+    const { ok, sumaBp, motivo } = validarJarras(destino);
+    if (!ok) {
+      return error(
+        motivo ?? `Para repartir, los porcentajes tienen que sumar 100%. Ahora suman ${(sumaBp / 100).toFixed(2)}%.`,
+        400,
+      );
+    }
+    partes = repartirEnJarras(amountMinor, destino);
+  }
+
+  const t = ahora();
+  const filas = [...partes]
+    .filter(([, monto]) => monto !== 0)
+    .map(([jid, monto]) => ({ id: nuevoId(), jarId: jid, monto }));
+  if (filas.length === 0) return error('El monto es muy chico para repartirlo', 400);
+
+  await env.DB.batch(filas.map((f) => env.DB.prepare(
+    `INSERT INTO jar_aporte (id, household_id, jar_id, amount_minor, note, date,
+                             created_by, created_at)
+     VALUES (?1,?2,?3,?4,?5,?6,?7,?8)`,
+  ).bind(f.id, sesion.householdId, f.jarId, f.monto, note, date, sesion.memberId, t)));
+
+  const [accounts, jars, jarAportes] = await Promise.all([
+    listarCuentas(env, sesion.householdId),
+    listarJarras(env, sesion.householdId),
+    listarAportes(env, sesion.householdId),
+  ]);
+  await difundir(env, sesion.householdId, { kind: 'recargar', accounts, jars });
+
+  return json({
+    aportes: jarAportes.filter((a) => filas.some((f) => f.id === a.id)),
+    jars,
+  }, { status: 201 });
+}
+
+/** Devolver un aporte al sin asignar. */
+export async function borrarAporte(
+  _req: Request, env: Env, sesion: Sesion, id: string,
+): Promise<Response> {
+  const { meta } = await env.DB.prepare(
+    'DELETE FROM jar_aporte WHERE id = ?1 AND household_id = ?2',
+  ).bind(id, sesion.householdId).run();
+  if (!meta.changes) return error('El aporte no existe', 404);
+
+  await difundir(env, sesion.householdId, { kind: 'jarAporte:delete', id, by: sesion.memberId });
+  return json({ ok: true, jars: await listarJarras(env, sesion.householdId) });
 }

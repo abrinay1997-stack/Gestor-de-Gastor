@@ -19,7 +19,7 @@ import { api, ApiError } from '../api/client.ts';
 import { live, type EstadoLive } from '../api/live.ts';
 import { calcularJarras, calcularSaldos } from '@shared/domain';
 import type {
-  Account, Budget, Category, Entity, Jar, JarImputacion, JarTransfer, LiveEvent,
+  Account, Budget, Category, Entity, Jar, JarAporte, JarImputacion, JarTransfer, LiveEvent,
   Member, Recurring, SeccionInicio, Snapshot, Transaction, TransactionInput,
 } from '@shared/types';
 
@@ -48,6 +48,7 @@ interface Estado {
   /** Lo que cada movimiento le hizo a cada jarra, congelado al guardarlo. */
   imputaciones: JarImputacion[];
   jarTransfers: JarTransfer[];
+  jarAportes: JarAporte[];
   /** Ids con una escritura en vuelo: la UI los muestra atenuados. */
   enVuelo: Set<string>;
   /** Movimientos cargados sin conexion, esperando para subir. */
@@ -61,7 +62,7 @@ const inicial: Estado = {
   cargando: true, autenticado: false, instalado: true, me: null, members: [],
   household: null, accounts: [], categories: [], entities: [], entidadActiva: null,
   jars: [], budgets: [],
-  transactions: [], recurring: [], imputaciones: [], jarTransfers: [],
+  transactions: [], recurring: [], imputaciones: [], jarTransfers: [], jarAportes: [],
   enVuelo: new Set(), cola: [], online: [],
   estadoLive: 'desconectado', aviso: null,
 };
@@ -120,6 +121,7 @@ function reducer(s: Estado, a: Accion): Estado {
         jars: a.snap.jars, budgets: a.snap.budgets, recurring: a.snap.recurring,
         transactions: ordenar(a.snap.transactions),
         imputaciones: a.snap.imputaciones, jarTransfers: a.snap.jarTransfers,
+        jarAportes: a.snap.jarAportes ?? [],
       };
 
     case 'salir':
@@ -323,6 +325,10 @@ interface Acciones {
   }) => Promise<void>;
   borrarTraspaso: (id: string) => Promise<void>;
   ponerJarrasAlDia: () => Promise<number>;
+  asignarAJarras: (d: {
+    amountMinor: number; jarId?: string | null; entityId?: string | null; note?: string;
+  }) => Promise<void>;
+  borrarAporte: (id: string) => Promise<void>;
   guardarPresupuesto: (b: {
     categoryId: string | null; entityId?: string | null; amountMinor: number; period: string;
   }) => Promise<void>;
@@ -472,9 +478,12 @@ export function Store({ children }: { children: ReactNode }) {
   // repartir el historial con los porcentajes de hoy. Es lo que hace que
   // cambiar un porcentaje no mueva el pasado.
   const jarrasConSaldo = useMemo(() => {
-    const saldos = calcularJarras(estado.jars, estado.imputaciones, estado.jarTransfers);
+    const saldos = calcularJarras(
+      estado.jars, estado.imputaciones, estado.jarTransfers,
+      undefined, undefined, estado.jarAportes,
+    );
     return estado.jars.map((j) => ({ ...j, balanceMinor: saldos.get(j.id) ?? 0 }));
-  }, [estado.jars, estado.imputaciones, estado.jarTransfers]);
+  }, [estado.jars, estado.imputaciones, estado.jarTransfers, estado.jarAportes]);
 
   const acciones = useMemo<Acciones>(() => ({
     avisar,
@@ -617,6 +626,19 @@ export function Store({ children }: { children: ReactNode }) {
       // parchear uno por uno. Pasa una sola vez.
       if (r.repartidos > 0) await cargar();
       return r.repartidos;
+    },
+
+    asignarAJarras: async (d) => {
+      const r = await api.asignarAJarras(d);
+      dispatch({ t: 'jars', jars: r.jars });
+      // Se recarga para traer los aportes nuevos: el saldo ya vino recalculado,
+      // pero la lista de movimientos de cada jarra sale de ellos.
+      await cargar();
+    },
+
+    borrarAporte: async (id) => {
+      await api.borrarAporte(id);
+      await cargar();
     },
 
     guardarPresupuesto: async (b) => {

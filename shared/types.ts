@@ -292,6 +292,25 @@ export interface JarTransfer {
   createdAt: number;
 }
 
+/**
+ * Plata que entra a una jarra sin venir de un movimiento: sale de lo que esta
+ * sin asignar.
+ *
+ * Es lo que permite repartir el capital con el que se arranco —los saldos
+ * iniciales de las cuentas—, que las jarras nunca vieron porque solo ven
+ * movimientos. Negativo devuelve la plata a sin asignar.
+ */
+export interface JarAporte {
+  id: string;
+  householdId: string;
+  jarId: string;
+  amountMinor: number;
+  note: string | null;
+  date: number;
+  createdBy: string;
+  createdAt: number;
+}
+
 // ---------------------------------------------------------------------------
 // Presupuestos
 // ---------------------------------------------------------------------------
@@ -439,6 +458,8 @@ export interface Snapshot {
   /** Lo que cada movimiento le hizo a cada jarra, congelado. */
   imputaciones: JarImputacion[];
   jarTransfers: JarTransfer[];
+  /** Lo asignado a mano desde el sin asignar. Ver JarAporte. */
+  jarAportes: JarAporte[];
 }
 
 // ---------------------------------------------------------------------------
@@ -462,6 +483,8 @@ export type LiveEvent =
   | { kind: 'jars'; jars: Jar[]; by: string }
   | { kind: 'jarTransfer:upsert'; transfer: JarTransfer; by: string }
   | { kind: 'jarTransfer:delete'; id: string; by: string }
+  | { kind: 'jarAporte:upsert'; aporte: JarAporte; by: string }
+  | { kind: 'jarAporte:delete'; id: string; by: string }
   /**
    * Las imputaciones de un movimiento. Van con el evento del movimiento y no
    * dentro de el porque tambien cambian solas cuando se reparte un ingreso

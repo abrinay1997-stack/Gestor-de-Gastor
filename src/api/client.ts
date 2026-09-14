@@ -4,7 +4,7 @@
 
 import { derivarClave } from '@shared/kdf';
 import type {
-  Account, Adjustment, Budget, Category, Entity, Jar, JarImputacion, JarTransfer,
+  Account, Adjustment, Budget, Category, Entity, Jar, JarAporte, JarImputacion, JarTransfer,
   Member, Recurring, SeccionInicio, Snapshot, Transaction, TransactionInput,
 } from '@shared/types';
 
@@ -183,6 +183,17 @@ export const api = {
 
   borrarTraspaso: (id: string) =>
     del<{ ok: true; jars: Jar[] }>(`/api/jar-transfers/${id}`),
+
+  /**
+   * Reparte en las jarras plata que ya estaba en las cuentas y que ninguna
+   * jarra vio: los saldos iniciales, sobre todo.
+   */
+  asignarAJarras: (d: {
+    amountMinor: number; jarId?: string | null; entityId?: string | null; note?: string;
+  }) => post<{ aportes: JarAporte[]; jars: Jar[] }>('/api/jars/asignar', d),
+
+  borrarAporte: (id: string) =>
+    del<{ ok: true; jars: Jar[] }>(`/api/jar-aportes/${id}`),
 
   /** Reparte los ingresos viejos que nunca llegaron a ninguna jarra. */
   ponerJarrasAlDia: () =>

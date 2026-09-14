@@ -22,7 +22,7 @@ import {
 } from '../components/ui/base.tsx';
 import { SelectorPeriodo } from '../components/ui/periodo.tsx';
 import { SelectorEntidad } from '../components/ui/entidad.tsx';
-import { cn } from '../lib/utils.ts';
+import { cn, fechaCorta } from '../lib/utils.ts';
 
 
 const COLORES = ['#3b82f6', '#10b981', '#8b5cf6', '#ec4899', '#f59e0b', '#f43f5e', '#06b6d4', '#64748b'];
@@ -53,6 +53,15 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
 
   const nombreActiva = entities.find((e) => e.id === entidadActiva)?.name ?? '';
 
+  // Cuanto de lo que esta sin asignar es capital de arranque. Es la parte que
+  // desconcierta: los movimientos pueden estar todos asignados y el numero
+  // seguir ahi, porque esto nunca fue un movimiento.
+  const inicialesSinAsignar = useMemo(
+    () => accounts.filter((c) => !c.archived)
+      .reduce((t, c) => t + Math.max(0, c.initialBalanceMinor), 0),
+    [accounts],
+  );
+
   // En "Todo" con mas de una economia, cada tanda lleva su titulo: seis
   // frascos de la casa y tres de un negocio en una sola lista corrida no se
   // entienden, y los porcentajes de cada tanda suman 100% por separado.
@@ -75,6 +84,7 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
   const [editando, setEditando] = useState(false);
   const [abierta, setAbierta] = useState<Jar | null>(null);
   const [traspasando, setTraspasando] = useState(false);
+  const [asignando, setAsignando] = useState(false);
   const [periodo, setPeriodo] = useState<Periodo>(() => periodoMes(Date.now()));
   const [poniendoAlDia, setPoniendoAlDia] = useState(false);
 
@@ -193,6 +203,19 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
                 </p>
               </div>
             </div>
+            {/* De donde sale ese numero. Sin esto la pantalla decia "Sin
+                asignar $887.10" con TODOS los movimientos asignados, y no
+                habia forma de entenderlo: eran los saldos iniciales de las
+                cuentas, plata que ya estaba ahi y que las jarras nunca vieron
+                porque solo ven movimientos. */}
+            {libre > 0 && entidadActiva === null && inicialesSinAsignar > 0 && (
+              <p className="text-xs txt-3 mt-2.5 leading-relaxed">
+                {inicialesSinAsignar >= libre
+                  ? <>Es el capital con el que arrancaron: los saldos iniciales de las cuentas. Nunca pasó por una jarra porque las jarras solo ven movimientos.</>
+                  : <>Incluye {formatMonto(inicialesSinAsignar, moneda)} de los saldos iniciales de las cuentas, que nunca pasaron por una jarra.</>}
+              </p>
+            )}
+
             <p className="text-xs txt-3 mt-3 leading-relaxed">
               {libre < 0 ? (
                 <>
@@ -217,6 +240,23 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
               )}
             </p>
           </Tarjeta>
+
+          {/* Y la forma de bajarlo. Un numero que no se puede mover y no se
+              explica enseña a desconfiar del resto de la pantalla. */}
+          {libre > 0 && jars.length > 0 && (
+            <Tarjeta className="border-marca-500/40">
+              <p className="text-sm font-medium txt mb-1">
+                Hay {formatMonto(libre, moneda)} sin repartir
+              </p>
+              <p className="text-xs txt-3 leading-relaxed mb-3">
+                Plata que está en las cuentas y todavía no tiene propósito.
+                Repartirla no mueve ninguna cuenta: solo dice para qué está.
+              </p>
+              <Boton onClick={() => setAsignando(true)} className="w-full">
+                Repartirla entre las jarras
+              </Boton>
+            </Tarjeta>
+          )}
 
           {huerfanos.length > 0 && (
             <Tarjeta className="border-marca-500/40">
@@ -340,6 +380,12 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
       />
 
       <HojaTraspaso abierta={traspasando} alCerrar={() => setTraspasando(false)} />
+
+      <HojaAsignar
+        abierta={asignando}
+        alCerrar={() => setAsignando(false)}
+        disponible={libre}
+      />
 
       <EditorJarras
         abierta={editando}
@@ -624,7 +670,9 @@ function MovimientosDeJarra({ jarra, alCerrar, alVerMovimiento }: {
   alCerrar: () => void;
   alVerMovimiento: (tx: Transaction) => void;
 }) {
-  const { transactions, imputaciones, household } = useStore();
+  const {
+    transactions, imputaciones, jarAportes, household, borrarAporte, avisar,
+  } = useStore();
   const moneda = household?.currency ?? 'USD';
 
   const movimientos = useMemo(() => {
@@ -636,6 +684,13 @@ function MovimientosDeJarra({ jarra, alCerrar, alVerMovimiento }: {
       .filter((x): x is { tx: Transaction; delta: number } => x.tx !== undefined)
       .sort((a, b) => b.tx.date - a.tx.date);
   }, [jarra, transactions, imputaciones]);
+
+  // Lo asignado a mano. Va aparte porque no viene de ningun movimiento: no se
+  // puede tocar para ver un detalle, se borra y listo.
+  const aportes = useMemo(
+    () => (jarra ? jarAportes.filter((a) => a.jarId === jarra.id) : []),
+    [jarra, jarAportes],
+  );
 
   if (!jarra) return null;
 
@@ -671,12 +726,55 @@ function MovimientosDeJarra({ jarra, alCerrar, alVerMovimiento }: {
           </div>
         </div>
 
+        {/* Lo asignado a mano desde el sin asignar. Va arriba y aparte porque
+            no es un movimiento: no se puede abrir para ver un detalle, y se
+            deshace borrandolo. */}
+        {aportes.length > 0 && (
+          <div>
+            <p className="text-xs font-medium txt-3 px-1 mb-1">Asignado a mano</p>
+            <div className="divide-y divide-[var(--borde)]">
+              {aportes.map((a) => (
+                <div key={a.id} className="flex items-center gap-3 py-2.5 px-1">
+                  <Ficha color={jarra.color} icono="hand-coins" size={34} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm txt truncate">
+                      {a.note ?? 'Repartido desde sin asignar'}
+                    </p>
+                    <p className="text-xs txt-3">{fechaCorta(a.date)}</p>
+                  </div>
+                  <span className={cn(
+                    'text-sm tabular font-medium shrink-0',
+                    a.amountMinor > 0 ? 'text-marca-600 dark:text-marca-500' : 'text-red-500',
+                  )}>
+                    {a.amountMinor > 0 ? '+' : '−'}{formatMonto(Math.abs(a.amountMinor), moneda)}
+                  </span>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await borrarAporte(a.id);
+                      } catch (e) {
+                        avisar(e instanceof Error ? e.message : 'No se pudo deshacer');
+                      }
+                    }}
+                    aria-label="Deshacer esta asignación"
+                    className="w-9 h-9 rounded-lg flex items-center justify-center txt-3 shrink-0"
+                  >
+                    <Icono nombre="trash-2" size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {movimientos.length === 0 ? (
-          <Vacio
-            icono="receipt-text"
-            titulo="Sin movimientos"
-            texto="Esta jarra todavía no recibió ni gastó nada. Repartí un ingreso o imputale un gasto."
-          />
+          aportes.length === 0 ? (
+            <Vacio
+              icono="receipt-text"
+              titulo="Sin movimientos"
+              texto="Esta jarra todavía no recibió ni gastó nada. Repartí un ingreso o imputale un gasto."
+            />
+          ) : null
         ) : (
           <div>
             <p className="text-xs font-medium txt-3 px-1 mb-1">
@@ -1090,6 +1188,145 @@ function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
             Los porcentajes deben sumar 100% para poder repartir un ingreso.
           </p>
         )}
+      </div>
+    </Hoja>
+  );
+}
+
+/**
+ * Repartir entre las jarras plata que ya esta en las cuentas.
+ *
+ * Casi siempre es el capital con el que se arranco —los saldos iniciales— que
+ * las jarras nunca vieron, porque solo ven movimientos. No mueve ninguna
+ * cuenta: la plata ya esta ahi, lo unico que cambia es para que esta.
+ */
+function HojaAsignar({ abierta, alCerrar, disponible }: {
+  abierta: boolean; alCerrar: () => void; disponible: number;
+}) {
+  const {
+    jars, entities, entidadActiva, household, asignarAJarras, avisar,
+  } = useStore();
+  const moneda = household?.currency ?? 'USD';
+
+  const [montoTexto, setMontoTexto] = useState('');
+  const [destino, setDestino] = useState('');
+  const [nota, setNota] = useState('');
+  const [guardando, setGuardando] = useState(false);
+
+  const economias = entities.filter((e) => !e.archived);
+  const porDefecto = useMemo(() => entidadPorDefecto(entities), [entities]);
+
+  useEffect(() => {
+    if (!abierta) return;
+    // Todo lo disponible por defecto: es lo que se viene a hacer.
+    setMontoTexto(disponible > 0 ? montoPlano(disponible, moneda) : '');
+    setDestino(entidadActiva ? `e:${entidadActiva}` : `e:${porDefecto ?? ''}`);
+    setNota('');
+  }, [abierta, disponible, moneda, entidadActiva, porDefecto]);
+
+  const monto = parseMonto(montoTexto, moneda);
+  const esEconomia = destino.startsWith('e:');
+  const economiaId = esEconomia ? destino.slice(2) : null;
+
+  // Como caeria, con las reglas de quien recibe.
+  const reparto = useMemo(() => {
+    if (monto === null || monto <= 0) return [];
+    if (!esEconomia) {
+      const j = jars.find((x) => x.id === destino);
+      return j ? [{ jarra: j, parte: monto }] : [];
+    }
+    const suyas = jars.filter((j) => j.entityId === economiaId);
+    const partes = repartirEnJarras(monto, suyas);
+    return suyas
+      .map((jarra) => ({ jarra, parte: partes.get(jarra.id) ?? 0 }))
+      .filter((x) => x.parte !== 0);
+  }, [monto, esEconomia, economiaId, destino, jars]);
+
+  const puede = monto !== null && monto > 0 && reparto.length > 0 && !guardando;
+
+  async function guardar() {
+    if (!puede || monto === null) return;
+    setGuardando(true);
+    try {
+      await asignarAJarras({
+        amountMinor: monto,
+        jarId: esEconomia ? null : destino,
+        entityId: esEconomia ? economiaId : null,
+        note: nota.trim() || undefined,
+      });
+      alCerrar();
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : 'No se pudo repartir');
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  if (!abierta) return null;
+
+  return (
+    <Hoja abierta alCerrar={alCerrar} titulo="Repartir lo que está sin asignar">
+      <div className="space-y-4">
+        <p className="text-xs txt-3 leading-relaxed">
+          No se mueve plata de ninguna cuenta: ya está ahí. Lo único que cambia
+          es para qué está guardada. Si te arrepentís, se deshace desde la jarra.
+        </p>
+
+        <Campo
+          etiqueta="Monto"
+          value={montoTexto}
+          onChange={(e) => setMontoTexto(e.target.value)}
+          placeholder="0.00"
+          inputMode="decimal"
+        />
+
+        {monto !== null && monto > disponible && (
+          <p className="text-xs text-amber-600 dark:text-amber-500 px-1 -mt-2 leading-relaxed">
+            Sin asignar hay {formatMonto(disponible, moneda)}. Repartir más deja
+            las jarras con más de lo que hay en las cuentas.
+          </p>
+        )}
+
+        <Selector etiqueta="A" value={destino} onChange={(e) => setDestino(e.target.value)}>
+          {economias.filter((e) => jars.some((j) => j.entityId === e.id)).map((e) => (
+            <option key={e.id} value={`e:${e.id}`}>
+              Repartir entre las jarras de {e.name}
+            </option>
+          ))}
+          <optgroup label="O a una sola jarra">
+            {jars.map((j) => (
+              <option key={j.id} value={j.id}>
+                {j.name} · {formatMonto(j.balanceMinor, moneda)}
+              </option>
+            ))}
+          </optgroup>
+        </Selector>
+
+        {reparto.length > 0 && (
+          <div className="superficie-2 rounded-2xl p-3 space-y-1.5 -mt-1">
+            <p className="text-xs txt-2 mb-1.5">Queda así:</p>
+            {reparto.map(({ jarra, parte }) => (
+              <div key={jarra.id} className="flex items-center justify-between gap-2 text-xs">
+                <span className="txt-2 truncate">{jarra.name}</span>
+                <span className="tabular font-medium txt shrink-0">
+                  {formatMonto(jarra.balanceMinor, moneda)} → {formatMonto(jarra.balanceMinor + parte, moneda)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <Campo
+          etiqueta="Por qué (opcional)"
+          value={nota}
+          onChange={(e) => setNota(e.target.value)}
+          placeholder="Lo que ya teníamos ahorrado..."
+          maxLength={200}
+        />
+
+        <Boton onClick={() => void guardar()} disabled={!puede} className="w-full min-h-12">
+          {guardando ? 'Repartiendo...' : 'Repartir'}
+        </Boton>
       </div>
     </Hoja>
   );

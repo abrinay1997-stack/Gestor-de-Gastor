@@ -5,8 +5,8 @@
  */
 
 import {
-  type Account, type Budget, type Category, type Entity, type Jar, type JarImputacion,
-  type JarTransfer, type Member, type Transaction, TxType,
+  type Account, type Budget, type Category, type Entity, type Jar, type JarAporte,
+  type JarImputacion, type JarTransfer, type Member, type Transaction, TxType,
 } from './types.ts';
 import { repartir, sumarMinor } from './money.ts';
 import { dentroDe, type Periodo } from './periodo.ts';
@@ -222,6 +222,7 @@ export function calcularJarras(
   transfers: JarTransfer[],
   fechaDe?: (txId: string) => number | undefined,
   periodo?: Periodo,
+  aportes: JarAporte[] = [],
 ): Map<string, number> {
   const saldos = new Map<string, number>(jars.map((j) => [j.id, 0]));
   const suma = (jarId: string, delta: number) => {
@@ -246,6 +247,13 @@ export function calcularJarras(
     suma(t.toJarId, t.amountMinor);
   }
 
+  // Lo asignado a mano desde el sin asignar: no vino de ningun movimiento, y
+  // por eso sube el saldo de la jarra sin tocar ninguna cuenta.
+  for (const a of aportes) {
+    if (periodo && !dentroDe(a.date, periodo)) continue;
+    suma(a.jarId, a.amountMinor);
+  }
+
   return saldos;
 }
 
@@ -261,6 +269,7 @@ export function flujoDeJarras(
   transfers: JarTransfer[],
   fechaDe?: (txId: string) => number | undefined,
   periodo?: Periodo,
+  aportes: JarAporte[] = [],
 ): Map<string, FlujoJarra> {
   const out = new Map<string, FlujoJarra>(jars.map((j) => [j.id, { entroMinor: 0, salioMinor: 0 }]));
   const anotar = (jarId: string, delta: number) => {
@@ -282,6 +291,12 @@ export function flujoDeJarras(
     anotar(t.fromJarId, -t.amountMinor);
     anotar(t.toJarId, t.amountMinor);
   }
+
+  for (const a of aportes) {
+    if (periodo && !dentroDe(a.date, periodo)) continue;
+    anotar(a.jarId, a.amountMinor);
+  }
+
   return out;
 }
 
