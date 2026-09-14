@@ -115,8 +115,13 @@
 @layer utilities {
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
   .safe-top { padding-top: env(safe-area-inset-top, 0px); }
-  .superficie { background: var(--superficie); }
-  .superficie-2 { background: var(--superficie-2); }
+  /* background-color, NO el atajo `background`.
+     El atajo tambien reescribe background-image, y como estas viven en la
+     misma capa que las utilidades de Tailwind pero mas abajo, le ganaban por
+     orden a cualquier gradiente puesto sobre una Tarjeta: el balance del mes
+     quedaba texto blanco sobre tarjeta blanca, invisible. */
+  .superficie { background-color: var(--superficie); }
+  .superficie-2 { background-color: var(--superficie-2); }
   .borde { border-color: var(--borde); }
   .txt { color: var(--texto); }
   .txt-2 { color: var(--texto-2); }
