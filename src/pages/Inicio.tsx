@@ -11,23 +11,22 @@ import { useStore } from '../store/store.tsx';
 import { formatMonto } from '@shared/money';
 import {
   autorDe, calcularPatrimonio, claveMes, estadoPresupuestos, filtrarPorEntidad,
-  porCategoria, porPersona, resumir, transaccionesDelMes,
+  porCategoria, porPersona, resumir,
 } from '@shared/domain';
+import { dentroDe, periodoMes, type Periodo } from '@shared/periodo';
 import {
   SECCIONES_INICIO, TxType, type Recurring, type SeccionInicio, type Transaction,
 } from '@shared/types';
 import { describirRegla } from '@shared/recurrencia';
-import { fechaCorta, moverMes, nombreMes } from '../lib/utils.ts';
+import { fechaCorta, nombreMes } from '../lib/utils.ts';
 import { Avatar, Barra, Boton, Ficha, Icono, Tarjeta, Vacio } from '../components/ui/base.tsx';
 import { EtiquetaEntidad, SelectorEntidad } from '../components/ui/entidad.tsx';
+import { SelectorPeriodo } from '../components/ui/periodo.tsx';
 import { cn } from '../lib/utils.ts';
 
-export function Inicio({ alVerMovimiento, alAgregar, alVerAnalisis, alVerConsejero }: {
+export function Inicio({ alVerMovimiento, alAgregar }: {
   alVerMovimiento: (tx: Transaction) => void;
   alAgregar: () => void;
-  /** Analisis y Consejero solo viven en la barra lateral, que en celular no existe. */
-  alVerAnalisis?: () => void;
-  alVerConsejero?: () => void;
 }) {
   const {
     accounts, categories, transactions: todos, budgets, members, me, household,
@@ -35,7 +34,14 @@ export function Inicio({ alVerMovimiento, alAgregar, alVerAnalisis, alVerConseje
   } = useStore();
   const moneda = household?.currency ?? 'USD';
 
-  const [mes, setMes] = useState(() => claveMes(Date.now()));
+  // El mismo selector que Movimientos y Jarras: dia, semana, mes, año o rango
+  // libre. Arranca en el mes, que es como se miraba antes.
+  const [periodo, setPeriodo] = useState<Periodo>(() => periodoMes(Date.now()));
+
+  // Los presupuestos son mensuales por definicion, asi que no siguen al rango:
+  // siguen al mes donde cae. Si no, un rango de dos semanas mostraria el tope
+  // entero contra medio mes de gastos, que es peor que no mostrarlo.
+  const mes = claveMes(Math.min(periodo.hasta, Date.now()));
 
   // TODO lo de esta pantalla sale de aca, asi que el selector de arriba manda
   // sobre el balance, el gasto por categoria, quien gasto y los presupuestos.
@@ -45,7 +51,10 @@ export function Inicio({ alVerMovimiento, alAgregar, alVerAnalisis, alVerConseje
     [todos, categories, entidadActiva],
   );
 
-  const delMes = useMemo(() => transaccionesDelMes(transactions, mes), [transactions, mes]);
+  const delMes = useMemo(
+    () => transactions.filter((t) => dentroDe(t.date, periodo)),
+    [transactions, periodo],
+  );
   const resumen = useMemo(() => resumir(delMes), [delMes]);
   // El patrimonio es la excepcion: las cuentas estan mezcladas, no hay una que
   // sea de un negocio. Filtrarlo seria inventar un numero que no existe.
@@ -56,7 +65,7 @@ export function Inicio({ alVerMovimiento, alAgregar, alVerAnalisis, alVerConseje
     () => estadoPresupuestos(budgets, transactions, mes, categories),
     [budgets, transactions, mes, categories],
   );
-  const ultimos = useMemo(() => transactions.slice(0, 6), [transactions]);
+  const ultimos = useMemo(() => delMes.slice(0, 6), [delMes]);
 
   // Los pagos habituales heredan la economia de su categoria, igual que un
   // movimiento.
@@ -74,8 +83,6 @@ export function Inicio({ alVerMovimiento, alAgregar, alVerAnalisis, alVerConseje
 
   const nombreActiva = entities.find((e) => e.id === entidadActiva)?.name ?? '';
 
-  const esMesActual = mes === claveMes(Date.now());
-
   // El orden guardado manda; si esta vacio, el de fabrica. Las secciones que
   // la persona saco simplemente no estan en la lista.
   const orden: SeccionInicio[] = me?.homeLayout?.length ? me.homeLayout : [...SECCIONES_INICIO];
@@ -84,7 +91,8 @@ export function Inicio({ alVerMovimiento, alAgregar, alVerAnalisis, alVerConseje
     'resumen': (
       <Tarjeta className="bg-linear-to-br from-marca-600 to-marca-700 border-transparent text-white">
         <p className="text-sm opacity-80 mb-1">
-          {nombreActiva ? `Balance del mes · ${nombreActiva}` : 'Balance del mes'}
+          {periodo.tipo === 'mes' ? 'Balance del mes' : 'Balance del período'}
+          {nombreActiva && ` · ${nombreActiva}`}
         </p>
         <p className="text-4xl font-bold tabular tracking-tight mb-5">{formatMonto(resumen.flujoMinor, moneda)}</p>
         <div className="grid grid-cols-2 gap-3">
@@ -150,7 +158,10 @@ export function Inicio({ alVerMovimiento, alAgregar, alVerAnalisis, alVerConseje
 
     'presupuestos': presupuestos.length > 0 ? (
       <Tarjeta>
-        <h2 className="font-semibold txt mb-3.5">Presupuestos</h2>
+        <h2 className="font-semibold txt mb-0.5">Presupuestos</h2>
+        {/* Siempre del mes entero, aunque arriba haya un rango: es lo que un
+            tope mensual significa. Decirlo evita leerlo como del rango. */}
+        <p className="text-xs txt-3 mb-3">{nombreMes(mes)}</p>
         <div className="space-y-3.5">
           {presupuestos.map(({ budget, gastadoMinor, ratio }) => {
             const cat = categories.find((c) => c.id === budget.categoryId);
@@ -211,12 +222,22 @@ export function Inicio({ alVerMovimiento, alAgregar, alVerAnalisis, alVerConseje
       <Tarjeta>
         <h2 className="font-semibold txt mb-1">Últimos movimientos</h2>
         {ultimos.length === 0 ? (
-          <Vacio
-            icono="receipt-text"
-            titulo="Todavía no hay nada"
-            texto="Registrá tu primer movimiento y va a aparecer acá, también en el teléfono de tu pareja."
-            accion={<Boton onClick={alAgregar}>Registrar el primero</Boton>}
-          />
+          transactions.length === 0 ? (
+            <Vacio
+              icono="receipt-text"
+              titulo="Todavía no hay nada"
+              texto="Registrá tu primer movimiento y va a aparecer acá, también en el teléfono de tu pareja."
+              accion={<Boton onClick={alAgregar}>Registrar el primero</Boton>}
+            />
+          ) : (
+            // No es que no haya nada: no hay nada en este rango. Decir lo
+            // contrario haria dudar de si se perdio la plata.
+            <Vacio
+              icono="search-x"
+              titulo="Nada en este período"
+              texto="Movete de período con el selector de arriba para ver otros movimientos."
+            />
+          )
         ) : (
           <div className="divide-y divide-[var(--borde)] -mx-1">
             {ultimos.map((tx) => (
@@ -232,60 +253,10 @@ export function Inicio({ alVerMovimiento, alAgregar, alVerAnalisis, alVerConseje
     <div className="space-y-4">
       <SelectorEntidad />
 
-      {/* Arriba de todo y sin scrollear. Estuvo al final de la pantalla y
-          nadie lo encontro: quedaba a mil pixeles del tope, debajo de la lista
-          de movimientos. */}
-      {alVerConsejero && (
-        <button
-          onClick={alVerConsejero}
-          className="md:hidden w-full rounded-2xl min-h-12 px-4 flex items-center gap-3 text-white bg-linear-to-br from-marca-600 to-marca-700 border border-white/15 shadow-md shadow-marca-600/25 active:scale-[0.99] transition-transform"
-        >
-          <Icono nombre="sparkles" size={18} />
-          <span className="text-sm font-medium flex-1 text-left">
-            Preguntarle al consejero
-          </span>
-          <Icono nombre="chevron-right" size={16} className="opacity-70" />
-        </button>
-      )}
-
-      <div className="flex items-center justify-between">
-        <button
-          onClick={() => setMes(moverMes(mes, -1))}
-          aria-label="Mes anterior"
-          className="w-10 h-10 rounded-xl superficie-2 flex items-center justify-center txt-2"
-        >
-          <Icono nombre="chevron-left" size={19} />
-        </button>
-        <h1 className="font-semibold txt tracking-tight">{nombreMes(mes)}</h1>
-        <button
-          onClick={() => setMes(moverMes(mes, 1))}
-          disabled={esMesActual}
-          aria-label="Mes siguiente"
-          className="w-10 h-10 rounded-xl superficie-2 flex items-center justify-center txt-2 disabled:opacity-30"
-        >
-          <Icono nombre="chevron-right" size={19} />
-        </button>
-      </div>
+      <SelectorPeriodo periodo={periodo} alCambiar={setPeriodo} />
 
       {orden.map((id) => secciones[id] && <div key={id}>{secciones[id]}</div>)}
 
-      {/* Analisis solo esta en la barra lateral, que en celular no se dibuja:
-          sin esto, desde el telefono no habia forma de llegar —y ahi vive el
-          resultado por economia, que es medio motivo de tener economias. */}
-      {alVerAnalisis && (
-        <button
-          onClick={alVerAnalisis}
-          className="md:hidden w-full superficie-2 borde border rounded-2xl min-h-12 px-4 flex items-center gap-3 txt-2 active:scale-[0.99] transition-transform"
-        >
-          <Icono nombre="chart-pie" size={18} />
-          <span className="text-sm font-medium flex-1 text-left">
-            {entities.filter((e) => !e.archived).length > 1
-              ? 'Análisis y resultado por economía'
-              : 'Análisis del mes'}
-          </span>
-          <Icono nombre="chevron-right" size={16} className="txt-3" />
-        </button>
-      )}
     </div>
   );
 }

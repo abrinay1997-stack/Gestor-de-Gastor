@@ -64,9 +64,11 @@ export function SelectorPeriodo({ periodo, alCambiar }: {
           <Icono nombre="chevron-left" size={19} />
         </button>
 
+        {/* min-w-0: sin eso el boton no baja de lo que mide su texto, y a
+            320px "Septiembre de 2026" empujaba la flecha fuera de pantalla. */}
         <button
           onClick={() => setAbierto(true)}
-          className="flex-1 min-h-10 rounded-xl flex items-center justify-center gap-1.5 px-2 active:superficie-2 transition-colors"
+          className="flex-1 min-w-0 min-h-10 rounded-xl flex items-center justify-center gap-1.5 px-2 active:superficie-2 transition-colors"
         >
           <span className="font-semibold txt truncate">{mayusculaInicial(describirPeriodo(periodo))}</span>
           <Icono nombre="chevron-down" size={15} className="txt-3 shrink-0" />

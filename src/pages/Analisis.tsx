@@ -17,9 +17,11 @@ import {
   balancePorMes, claveMes, filtrarPorEntidad, porCategoria, porPersona,
   resultadoPorEntidad, resumir, transaccionesDelMes,
 } from '@shared/domain';
-import { cn, moverMes, nombreMes } from '../lib/utils.ts';
-import { Ficha, Icono, Tarjeta, Vacio } from '../components/ui/base.tsx';
+import { dentroDe, periodoMes, type Periodo } from '@shared/periodo';
+import { cn, moverMes } from '../lib/utils.ts';
+import { Ficha, Tarjeta, Vacio } from '../components/ui/base.tsx';
 import { SelectorEntidad } from '../components/ui/entidad.tsx';
+import { SelectorPeriodo } from '../components/ui/periodo.tsx';
 import { decimalesDe } from '@shared/money';
 
 /**
@@ -38,7 +40,12 @@ export function Analisis() {
   const moneda = household?.currency ?? 'USD';
   const decimales = decimalesDe(moneda);
 
-  const [mes, setMes] = useState(() => claveMes(Date.now()));
+  const [periodo, setPeriodo] = useState<Periodo>(() => periodoMes(Date.now()));
+
+  // Los dos graficos de abajo son mes a mes por definicion: no siguen al rango,
+  // siguen al mes donde termina. Cortar una barra mensual por la mitad de un
+  // rango daria una tendencia que no existe.
+  const mes = claveMes(Math.min(periodo.hasta, Date.now()));
 
   // Todo lo de abajo respeta la entidad elegida. En "Todo" no filtra nada,
   // que es la vista consolidada.
@@ -47,7 +54,10 @@ export function Analisis() {
     [todos, categories, entidadActiva],
   );
 
-  const delMes = useMemo(() => transaccionesDelMes(transactions, mes), [transactions, mes]);
+  const delMes = useMemo(
+    () => transactions.filter((t) => dentroDe(t.date, periodo)),
+    [transactions, periodo],
+  );
   const resumen = useMemo(() => resumir(delMes), [delMes]);
 
   const torta = useMemo(
@@ -114,33 +124,16 @@ export function Analisis() {
   const porEntidad = useMemo(() => {
     if (entidadActiva !== null) return [];
     const nombres = new Map(entities.map((e) => [e.id, e]));
-    return resultadoPorEntidad(transaccionesDelMes(todos, mes), categories)
+    return resultadoPorEntidad(todos.filter((t) => dentroDe(t.date, periodo)), categories)
       .filter((r) => r.cantidad > 0)
       .map((r) => ({ ...r, entidad: r.entityId ? nombres.get(r.entityId) : undefined }));
-  }, [entidadActiva, entities, todos, categories, mes]);
+  }, [entidadActiva, entities, todos, categories, periodo]);
 
   return (
     <div className="space-y-4">
       <SelectorEntidad />
 
-      <div className="flex items-center justify-between">
-        <button
-          onClick={() => setMes(moverMes(mes, -1))}
-          aria-label="Mes anterior"
-          className="w-10 h-10 rounded-xl superficie-2 flex items-center justify-center txt-2"
-        >
-          <Icono nombre="chevron-left" size={19} />
-        </button>
-        <h1 className="font-semibold txt tracking-tight">{nombreMes(mes)}</h1>
-        <button
-          onClick={() => setMes(moverMes(mes, 1))}
-          disabled={mes === claveMes(Date.now())}
-          aria-label="Mes siguiente"
-          className="w-10 h-10 rounded-xl superficie-2 flex items-center justify-center txt-2 disabled:opacity-30"
-        >
-          <Icono nombre="chevron-right" size={19} />
-        </button>
-      </div>
+      <SelectorPeriodo periodo={periodo} alCambiar={setPeriodo} />
 
       {porEntidad.length > 1 && (
         <Tarjeta>
@@ -182,7 +175,7 @@ export function Analisis() {
         <Tarjeta>
           <Vacio
             icono="chart-pie"
-            titulo="Sin datos este mes"
+            titulo="Sin datos en este período"
             texto="Cuando registren movimientos vas a ver acá en qué se va la plata y cómo evoluciona mes a mes."
           />
         </Tarjeta>

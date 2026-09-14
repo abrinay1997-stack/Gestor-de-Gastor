@@ -24,12 +24,17 @@ import { useConfirmar } from '../components/ui/confirmar.tsx';
 import { PagosHabituales } from './ajustes/PagosHabituales.tsx';
 import { cn } from '../lib/utils.ts';
 
-type Hoja1 = null | 'invitar' | 'password' | 'presupuesto' | 'categorias'
-  | 'entidades' | 'perfil' | 'inicio';
+type Hoja1 = null | 'invitar' | 'password' | 'presupuestos' | 'presupuesto'
+  | 'habituales' | 'categorias' | 'entidades' | 'perfil' | 'inicio';
 
-export function Ajustes() {
+export function Ajustes({ alVerConsejero, alVerAnalisis }: {
+  /** Consejero y Analisis no estan en la barra de abajo: se entra por aca. */
+  alVerConsejero?: () => void;
+  alVerAnalisis?: () => void;
+}) {
   const {
-    me, members, household, categories, entities, budgets, accounts, transactions, salir,
+    me, members, household, categories, entities, budgets, accounts, transactions,
+    recurring, salir,
   } = useStore();
   const moneda = household?.currency ?? 'USD';
 
@@ -77,54 +82,40 @@ export function Ajustes() {
         )}
       </Tarjeta>
 
-      {/* Presupuestos */}
-      <Tarjeta>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold txt">Presupuestos</h2>
-          <button
-            onClick={() => { setPresupuestoEdit(null); setHoja('presupuesto'); }}
-            className="text-sm text-marca-600 dark:text-marca-500 font-medium min-h-9 px-1"
-          >
-            Agregar
-          </button>
-        </div>
-
-        {delMes.length === 0 ? (
-          <p className="text-sm txt-3 leading-relaxed">
-            Sin presupuestos para {nombreMes(mesActual)}. Poner un tope por
-            categoría ayuda a ver el desvío antes de que sea tarde.
-          </p>
-        ) : (
-          <div className="space-y-3.5">
-            {delMes.map(({ budget, gastadoMinor, ratio }) => {
-              const cat = categories.find((c) => c.id === budget.categoryId);
-              return (
-                <button
-                  key={budget.id}
-                  onClick={() => { setPresupuestoEdit(budget); setHoja('presupuesto'); }}
-                  className="w-full text-left"
-                >
-                  <div className="flex items-baseline justify-between mb-1.5">
-                    <span className="text-sm font-medium txt">{cat?.name ?? 'Todo el mes'}</span>
-                    <span className={cn(
-                      'text-xs tabular',
-                      ratio > 1 ? 'text-red-500 font-semibold' : ratio > 0.8 ? 'text-amber-500' : 'txt-2',
-                    )}>
-                      {formatMonto(gastadoMinor, moneda, { compacto: true })} / {formatMonto(budget.amountMinor, moneda, { compacto: true })}
-                    </span>
-                  </div>
-                  <Barra ratio={ratio} color={cat?.color ?? '#10b981'} alerta />
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </Tarjeta>
-
-      <PagosHabituales />
-
-      {/* Accesos */}
+      {/* Todo lo que no es el dia a dia vive aca, en una sola lista. Antes
+          los presupuestos y los pagos habituales eran dos tarjetas abiertas
+          que empujaban el resto de los ajustes fuera de la pantalla. */}
       <Tarjeta className="p-0 overflow-hidden">
+        {alVerConsejero && (
+          <Opcion
+            icono="sparkles"
+            color="#10b981"
+            titulo="Consejero"
+            detalle="Preguntale"
+            alTocar={alVerConsejero}
+          />
+        )}
+        {alVerAnalisis && (
+          <Opcion
+            icono="chart-pie"
+            color="#3b82f6"
+            titulo="Análisis"
+            detalle="Gráficos"
+            alTocar={alVerAnalisis}
+          />
+        )}
+        <Opcion
+          icono="scale"
+          titulo="Presupuestos"
+          detalle={delMes.length > 0 ? `${delMes.length} este mes` : 'Sin topes'}
+          alTocar={() => setHoja('presupuestos')}
+        />
+        <Opcion
+          icono="repeat"
+          titulo="Pagos habituales"
+          detalle={recurring.length > 0 ? `${recurring.length} activos` : 'Ninguno'}
+          alTocar={() => setHoja('habituales')}
+        />
         <Opcion
           icono="building-2"
           titulo="Economías"
@@ -160,9 +151,15 @@ export function Ajustes() {
       <HojaOrdenInicio abierta={hoja === 'inicio'} alCerrar={() => setHoja(null)} />
       <HojaInvitar abierta={hoja === 'invitar'} alCerrar={() => setHoja(null)} />
       <HojaPassword abierta={hoja === 'password'} alCerrar={() => setHoja(null)} />
+      <HojaPresupuestos
+        abierta={hoja === 'presupuestos'}
+        alCerrar={() => setHoja(null)}
+        alEditar={(b) => { setPresupuestoEdit(b); setHoja('presupuesto'); }}
+      />
+      <PagosHabituales abierta={hoja === 'habituales'} alCerrar={() => setHoja(null)} />
       <HojaPresupuesto
         abierta={hoja === 'presupuesto'}
-        alCerrar={() => { setHoja(null); setPresupuestoEdit(null); }}
+        alCerrar={() => { setHoja('presupuestos'); setPresupuestoEdit(null); }}
         editando={presupuestoEdit}
       />
       <HojaEntidades abierta={hoja === 'entidades'} alCerrar={() => setHoja(null)} />
@@ -171,17 +168,28 @@ export function Ajustes() {
   );
 }
 
-function Opcion({ icono, titulo, detalle, alTocar }: {
-  icono: string; titulo: string; detalle?: string; alTocar: () => void;
+/**
+ * Una fila de la lista. El color es para las dos primeras, que no configuran
+ * nada sino que llevan a otra pantalla: sin eso se perdian entre los ajustes.
+ */
+function Opcion({ icono, titulo, detalle, color, alTocar }: {
+  icono: string; titulo: string; detalle?: string; color?: string; alTocar: () => void;
 }) {
   return (
     <button
       onClick={alTocar}
       className="w-full flex items-center gap-3 px-5 min-h-14 text-left border-b borde last:border-b-0 active:superficie-2 transition-colors"
     >
-      <Icono nombre={icono} size={19} className="txt-2 shrink-0" />
-      <span className="flex-1 text-sm font-medium txt">{titulo}</span>
-      {detalle && <span className="text-xs txt-3 shrink-0">{detalle}</span>}
+      <Icono
+        nombre={icono}
+        size={19}
+        className={cn('shrink-0', !color && 'txt-2')}
+        style={color ? { color } : undefined}
+      />
+      <span className="text-sm font-medium txt shrink-0">{titulo}</span>
+      {/* El detalle cede primero: con tres economias listadas el nombre de la
+          fila quedaba aplastado contra el icono. */}
+      <span className="flex-1 min-w-0 text-xs txt-3 text-right truncate">{detalle}</span>
       <Icono nombre="chevron-right" size={17} className="txt-3 shrink-0" />
     </button>
   );
@@ -756,6 +764,80 @@ function EditorCategoria({ categoria, alCerrar }: {
 }
 
 // --- presupuestos ---------------------------------------------------------
+
+/**
+ * La lista de topes del mes. Vive en una hoja y no suelta en Ajustes porque
+ * con varios presupuestos empujaba todo lo demas fuera de la pantalla.
+ */
+function HojaPresupuestos({ abierta, alCerrar, alEditar }: {
+  abierta: boolean; alCerrar: () => void; alEditar: (b: Budget | null) => void;
+}) {
+  const { categories, entities, budgets, transactions, household } = useStore();
+  const moneda = household?.currency ?? 'USD';
+  const mesActual = claveMes(Date.now());
+
+  const delMes = useMemo(
+    () => estadoPresupuestos(budgets, transactions, mesActual, categories),
+    [budgets, transactions, mesActual, categories],
+  );
+
+  return (
+    <Hoja abierta={abierta} alCerrar={alCerrar} titulo="Presupuestos">
+      <div className="space-y-5">
+        <p className="text-xs txt-3 -mt-1">{nombreMes(mesActual)}</p>
+
+        <Boton onClick={() => alEditar(null)} className="w-full">
+          <Icono nombre="plus" size={17} /> Nuevo presupuesto
+        </Boton>
+
+        {delMes.length === 0 ? (
+          <p className="text-sm txt-3 leading-relaxed">
+            Todavía no hay topes este mes. Poner un tope por categoría ayuda a
+            ver el desvío antes de que sea tarde.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {delMes.map(({ budget, gastadoMinor, ratio }) => {
+              const cat = categories.find((c) => c.id === budget.categoryId);
+              // El global puede ser de una economia sola; el de categoria la
+              // hereda de ella. En los dos casos se dice de quien es el tope.
+              const economia = entities.find((e) => e.id === (cat ? cat.entityId : budget.entityId));
+              const restante = budget.amountMinor - gastadoMinor;
+              return (
+                <button
+                  key={budget.id}
+                  onClick={() => alEditar(budget)}
+                  className="w-full text-left"
+                >
+                  <div className="flex items-baseline justify-between mb-1.5 gap-2">
+                    <span className="text-sm font-medium txt truncate">
+                      {cat?.name ?? 'Todo el mes'}
+                      {economia && (
+                        <span className="txt-3 font-normal"> · {economia.name}</span>
+                      )}
+                    </span>
+                    <span className={cn(
+                      'text-xs tabular shrink-0',
+                      ratio > 1 ? 'text-red-500 font-semibold' : ratio > 0.8 ? 'text-amber-500' : 'txt-2',
+                    )}>
+                      {formatMonto(gastadoMinor, moneda, { compacto: true })} / {formatMonto(budget.amountMinor, moneda, { compacto: true })}
+                    </span>
+                  </div>
+                  <Barra ratio={ratio} color={cat?.color ?? '#10b981'} alerta />
+                  <p className="text-[11px] txt-3 mt-1">
+                    {restante >= 0
+                      ? `Quedan ${formatMonto(restante, moneda)}`
+                      : `Te pasaste ${formatMonto(-restante, moneda)}`}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </Hoja>
+  );
+}
 
 function HojaPresupuesto({ abierta, alCerrar, editando }: {
   abierta: boolean; alCerrar: () => void; editando: Budget | null;

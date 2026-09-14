@@ -8,7 +8,7 @@
 
 import type { Entity } from '@shared/types';
 import { useStore } from '../../store/store.tsx';
-import { Icono } from './base.tsx';
+
 import { cn } from '../../lib/utils.ts';
 
 export function SelectorEntidad() {
@@ -19,45 +19,51 @@ export function SelectorEntidad() {
   // negocio, la pantalla se queda como estaba.
   if (visibles.length < 2) return null;
 
-  return (
-    <div className="flex gap-1.5 overflow-x-auto sin-barra -mx-1 px-1 pb-0.5">
-      <Pestana
-        activa={entidadActiva === null}
-        alTocar={() => verEntidad(null)}
-        nombre="Todo"
-        icono="chart-pie"
-        color="#64748b"
-      />
-      {visibles.map((e) => (
-        <Pestana
-          key={e.id}
-          activa={entidadActiva === e.id}
-          alTocar={() => verEntidad(e.id)}
-          nombre={e.name}
-          icono={e.icon}
-          color={e.color}
-        />
-      ))}
-    </div>
-  );
-}
+  const opciones = [
+    { id: null as string | null, nombre: 'Todo', color: null as string | null },
+    ...visibles.map((e) => ({ id: e.id as string | null, nombre: e.name, color: e.color })),
+  ];
 
-function Pestana({ activa, alTocar, nombre, icono, color }: {
-  activa: boolean; alTocar: () => void; nombre: string; icono: string; color: string;
-}) {
+  // Hasta cinco entran en partes iguales, que es lo que lo hace simetrico y
+  // callado. De ahi en adelante se desliza, porque partirlo en seis dejaria
+  // cada nombre en dos letras.
+  const enPartesIguales = opciones.length <= 5;
+
   return (
-    <button
-      onClick={alTocar}
+    <div
+      role="tablist"
       className={cn(
-        'flex items-center gap-1.5 min-h-9 px-3 rounded-full text-sm font-medium',
-        'whitespace-nowrap shrink-0 border transition-all active:scale-95',
-        activa ? 'text-white border-transparent' : 'superficie-2 borde txt-2',
+        'superficie-2 borde border rounded-2xl p-1 gap-1',
+        enPartesIguales ? 'grid' : 'flex overflow-x-auto sin-barra',
       )}
-      style={activa ? { background: color } : undefined}
+      style={enPartesIguales
+        ? { gridTemplateColumns: `repeat(${opciones.length}, minmax(0, 1fr))` }
+        : undefined}
     >
-      <Icono nombre={icono} size={14} />
-      {nombre}
-    </button>
+      {opciones.map((o) => {
+        const activa = entidadActiva === o.id;
+        return (
+          <button
+            key={o.id ?? 'todo'}
+            role="tab"
+            aria-selected={activa}
+            onClick={() => verEntidad(o.id)}
+            className={cn(
+              'min-h-9 px-2 rounded-xl text-[13px] font-medium truncate transition-colors',
+              !enPartesIguales && 'shrink-0 px-3.5',
+              activa ? 'superficie txt shadow-sm' : 'txt-3',
+            )}
+            style={activa && o.color
+              // Un fondo suave del color de la economia, no el color lleno: se
+              // distingue igual y deja de gritar.
+              ? { background: `color-mix(in srgb, ${o.color} 16%, var(--superficie))`, color: o.color }
+              : undefined}
+          >
+            {o.nombre}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

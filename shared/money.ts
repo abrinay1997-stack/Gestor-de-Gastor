@@ -75,13 +75,19 @@ export function formatMonto(
   const d = decimalesDe(currency);
   const valor = minor / 10 ** d;
 
+  // En compacto los montos redondos pierden los decimales ($80, no $80.00),
+  // pero los que tienen centavos los muestran enteros: "$64.1" no es plata,
+  // es un numero a medio escribir.
+  const redondo = minor % 10 ** d === 0;
+  const decimales = opciones.compacto && redondo ? 0 : d;
+
   const fmt = new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
-    minimumFractionDigits: opciones.compacto ? 0 : d,
-    maximumFractionDigits: d,
+    minimumFractionDigits: decimales,
+    maximumFractionDigits: decimales,
     ...(opciones.compacto && Math.abs(valor) >= 10_000
-      ? { notation: 'compact' as const, maximumFractionDigits: 1 }
+      ? { notation: 'compact' as const, minimumFractionDigits: 0, maximumFractionDigits: 1 }
       : {}),
   });
 

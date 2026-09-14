@@ -1,6 +1,9 @@
 /**
  * Pagos habituales: se crean y configuran aca, igual que los presupuestos.
  *
+ * Es una hoja y no una tarjeta suelta en Ajustes: con media docena de pagos
+ * la lista empujaba el resto de los ajustes fuera de la pantalla.
+ *
  * El movimiento lo carga solo el disparador programado cuando llega la fecha.
  * Por eso el formulario insiste con la fecha del proximo cobro: es la unica
  * forma de que quien lo configura sepa que va a pasar y cuando.
@@ -14,13 +17,15 @@ import {
   DIAS_SEMANA, describirRegla, MESES, primeraFecha, QUINCENA_POR_DEFECTO,
   reglaDe, type Frecuencia,
 } from '@shared/recurrencia';
-import { Boton, Campo, Ficha, Hoja, Icono, Selector, Tarjeta } from '../../components/ui/base.tsx';
+import { Boton, Campo, Ficha, Hoja, Icono, Selector } from '../../components/ui/base.tsx';
 import { OpcionesPorEconomia } from '../../components/ui/entidad.tsx';
 import { useConfirmar } from '../../components/ui/confirmar.tsx';
 import { etiquetaCuenta } from '../../components/transactions/CargaRapida.tsx';
 import { cn } from '../../lib/utils.ts';
 
-export function PagosHabituales() {
+export function PagosHabituales({ abierta, alCerrar }: {
+  abierta: boolean; alCerrar: () => void;
+}) {
   const { recurring, categories, accounts, household, borrarRecurrente, avisar } = useStore();
   const confirmar = useConfirmar();
   const moneda = household?.currency ?? 'USD';
@@ -44,16 +49,11 @@ export function PagosHabituales() {
 
   return (
     <>
-      <Tarjeta>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold txt">Pagos habituales</h2>
-          <button
-            onClick={() => { setEditando(null); setAbierto(true); }}
-            className="text-sm text-marca-600 dark:text-marca-500 font-medium min-h-9 px-1"
-          >
-            Agregar
-          </button>
-        </div>
+      <Hoja abierta={abierta && !abierto} alCerrar={alCerrar} titulo="Pagos habituales">
+        <div className="space-y-5">
+          <Boton onClick={() => { setEditando(null); setAbierto(true); }} className="w-full">
+            <Icono nombre="plus" size={17} /> Nuevo pago habitual
+          </Boton>
 
         {recurring.length === 0 ? (
           <p className="text-sm txt-3 leading-relaxed">
@@ -103,7 +103,8 @@ export function PagosHabituales() {
             })}
           </div>
         )}
-      </Tarjeta>
+        </div>
+      </Hoja>
 
       <FormularioPago
         abierto={abierto}

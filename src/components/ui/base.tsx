@@ -3,7 +3,9 @@
  * menos de 44px, que es el minimo que recomienda Apple para tocar sin errar.
  */
 
-import { type ButtonHTMLAttributes, type ComponentPropsWithRef, type ReactNode } from 'react';
+import {
+  type ButtonHTMLAttributes, type ComponentPropsWithRef, type CSSProperties, type ReactNode,
+} from 'react';
 import { cn } from '../../lib/utils.ts';
 import { X } from 'lucide-react';
 import { GRUPOS_ICONO, ICONO_GENERICO, ICONOS } from './iconos.ts';
@@ -15,11 +17,11 @@ import { GRUPOS_ICONO, ICONO_GENERICO, ICONOS } from './iconos.ts';
  * explicito de ./iconos.ts. Si el nombre no esta, cae en uno generico en vez
  * de romper la pantalla: los nombres vienen de la base y pueden quedar viejos.
  */
-export function Icono({ nombre, size = 20, className }: {
-  nombre: string; size?: number; className?: string;
+export function Icono({ nombre, size = 20, className, style }: {
+  nombre: string; size?: number; className?: string; style?: CSSProperties;
 }) {
   const Comp = ICONOS[nombre] ?? ICONO_GENERICO;
-  return <Comp size={size} className={className} />;
+  return <Comp size={size} className={className} style={style} />;
 }
 
 // --- boton ---------------------------------------------------------------

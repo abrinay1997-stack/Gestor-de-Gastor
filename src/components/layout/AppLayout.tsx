@@ -25,10 +25,9 @@ const DESTINOS: { id: Solapa; etiqueta: string; icono: string; enBarra: boolean 
   { id: 'movimientos', etiqueta: 'Movimientos', icono: 'receipt-text', enBarra: true },
   { id: 'jarras', etiqueta: 'Jarras', icono: 'piggy-bank', enBarra: true },
   { id: 'cuentas', etiqueta: 'Cuentas', icono: 'wallet', enBarra: true },
-  { id: 'analisis', etiqueta: 'Análisis', icono: 'chart-pie', enBarra: false },
   // Fuera de la barra: con seis destinos las etiquetas se tocan, y a 320px
-  // no entra ninguna. Se llega desde arriba de Inicio, que es lo primero que
-  // se ve al abrir.
+  // no entra ninguna. Se llega desde Ajustes, arriba de todo.
+  { id: 'analisis', etiqueta: 'Análisis', icono: 'chart-pie', enBarra: false },
   { id: 'consejero', etiqueta: 'Consejero', icono: 'sparkles', enBarra: false },
   { id: 'ajustes', etiqueta: 'Ajustes', icono: 'settings', enBarra: true },
 ];
@@ -101,7 +100,11 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
     alCambiar(s);
   };
 
-  const activa = Math.max(0, enBarra.findIndex((d) => d.id === solapa));
+  // Analisis y Consejero no estan en la barra. Sin esto la luz se quedaba
+  // sobre "Inicio" y parecia que estabas en Inicio estando en otro lado.
+  const indice = enBarra.findIndex((d) => d.id === solapa);
+  const enLaBarra = indice >= 0;
+  const activa = enLaBarra ? indice : 0;
   const n = enBarra.length;
 
   return (
@@ -190,14 +193,16 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
       <nav className="md:hidden fixed inset-x-0 flex justify-center px-3 pointer-events-none z-30" style={{ bottom: 'calc(0.25rem + env(safe-area-inset-bottom, 0px))' }}>
         <div className={cn('barra-flotante pointer-events-auto relative w-full max-w-[430px] rounded-[32px] px-2.5 py-2', compacto && 'py-1.5')}>
           <div className="relative flex w-full">
-            <span
-              aria-hidden="true"
-              className="luz-deslizante"
-              style={{
-                width: `${100 / n}%`,
-                transform: `translateX(${activa * 100}%)`,
-              }}
-            />
+            {enLaBarra && (
+              <span
+                aria-hidden="true"
+                className="luz-deslizante"
+                style={{
+                  width: `${100 / n}%`,
+                  transform: `translateX(${activa * 100}%)`,
+                }}
+              />
+            )}
             {enBarra.map((d) => (
               <button
                 key={d.id}

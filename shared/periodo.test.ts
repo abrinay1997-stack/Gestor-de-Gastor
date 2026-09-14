@@ -143,4 +143,11 @@ describe('describirPeriodo', () => {
   it('describe el año con solo el numero', () => {
     expect(describirPeriodo(periodoAnio(en(2026, 6, 1)))).toBe('2026');
   });
+
+  it('el mes de este año va sin año, y el de otro año con año', () => {
+    const esteAnio = new Date().getFullYear();
+    expect(describirPeriodo(periodoMes(en(esteAnio, 9, 15)))).toBe('septiembre');
+    expect(describirPeriodo(periodoMes(en(esteAnio - 3, 9, 15))))
+      .toBe(`septiembre de ${esteAnio - 3}`);
+  });
 });

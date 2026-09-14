@@ -106,7 +106,11 @@ export function describirPeriodo(p: Periodo): string {
     case 'semana':
       return `${F_DIA.format(d)} al ${F_DIA.format(new Date(p.hasta))}`;
     case 'mes':
-      return d.toLocaleDateString('es', { month: 'long', year: 'numeric' });
+      // Sin el año cuando es el de hoy: a 320px "Septiembre de 2026" no entra
+      // y se cortaba justo el año, que es la parte que importa.
+      return d.getFullYear() === anioActual
+        ? d.toLocaleDateString('es', { month: 'long' })
+        : d.toLocaleDateString('es', { month: 'long', year: 'numeric' });
     case 'anio':
       return String(d.getFullYear());
     case 'rango':

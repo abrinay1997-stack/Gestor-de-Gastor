@@ -53,17 +53,17 @@ export default function App() {
     <>
       <AppLayout solapa={solapa} alCambiar={setSolapa} alAgregar={abrirNuevo}>
         {solapa === 'inicio' && (
-          <Inicio
-            alVerMovimiento={setViendo}
-            alAgregar={abrirNuevo}
-            alVerAnalisis={() => setSolapa('analisis')}
-            alVerConsejero={() => setSolapa('consejero')}
-          />
+          <Inicio alVerMovimiento={setViendo} alAgregar={abrirNuevo} />
         )}
         {solapa === 'movimientos' && <Movimientos alVerMovimiento={setViendo} alAgregar={abrirNuevo} />}
         {solapa === 'cuentas' && <Cuentas />}
         {solapa === 'jarras' && <Jarras alVerMovimiento={setViendo} />}
-        {solapa === 'ajustes' && <Ajustes />}
+        {solapa === 'ajustes' && (
+          <Ajustes
+            alVerAnalisis={() => setSolapa('analisis')}
+            alVerConsejero={() => setSolapa('consejero')}
+          />
+        )}
         {solapa === 'consejero' && <Consejero />}
         {solapa === 'analisis' && (
           <Suspense fallback={
