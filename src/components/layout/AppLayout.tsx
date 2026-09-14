@@ -26,6 +26,9 @@ const DESTINOS: { id: Solapa; etiqueta: string; icono: string; enBarra: boolean 
   { id: 'jarras', etiqueta: 'Jarras', icono: 'piggy-bank', enBarra: true },
   { id: 'cuentas', etiqueta: 'Cuentas', icono: 'wallet', enBarra: true },
   { id: 'analisis', etiqueta: 'Análisis', icono: 'chart-pie', enBarra: false },
+  // Fuera de la barra: con seis destinos las etiquetas se tocan, y a 320px
+  // no entra ninguna. Se llega desde arriba de Inicio, que es lo primero que
+  // se ve al abrir.
   { id: 'consejero', etiqueta: 'Consejero', icono: 'sparkles', enBarra: false },
   { id: 'ajustes', etiqueta: 'Ajustes', icono: 'settings', enBarra: true },
 ];

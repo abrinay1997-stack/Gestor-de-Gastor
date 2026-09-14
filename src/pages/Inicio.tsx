@@ -231,6 +231,23 @@ export function Inicio({ alVerMovimiento, alAgregar, alVerAnalisis, alVerConseje
   return (
     <div className="space-y-4">
       <SelectorEntidad />
+
+      {/* Arriba de todo y sin scrollear. Estuvo al final de la pantalla y
+          nadie lo encontro: quedaba a mil pixeles del tope, debajo de la lista
+          de movimientos. */}
+      {alVerConsejero && (
+        <button
+          onClick={alVerConsejero}
+          className="md:hidden w-full rounded-2xl min-h-12 px-4 flex items-center gap-3 text-white bg-linear-to-br from-marca-600 to-marca-700 border border-white/15 shadow-md shadow-marca-600/25 active:scale-[0.99] transition-transform"
+        >
+          <Icono nombre="sparkles" size={18} />
+          <span className="text-sm font-medium flex-1 text-left">
+            Preguntarle al consejero
+          </span>
+          <Icono nombre="chevron-right" size={16} className="opacity-70" />
+        </button>
+      )}
+
       <div className="flex items-center justify-between">
         <button
           onClick={() => setMes(moverMes(mes, -1))}
@@ -255,19 +272,6 @@ export function Inicio({ alVerMovimiento, alAgregar, alVerAnalisis, alVerConseje
       {/* Analisis solo esta en la barra lateral, que en celular no se dibuja:
           sin esto, desde el telefono no habia forma de llegar —y ahi vive el
           resultado por economia, que es medio motivo de tener economias. */}
-      {alVerConsejero && (
-        <button
-          onClick={alVerConsejero}
-          className="md:hidden w-full rounded-2xl min-h-12 px-4 flex items-center gap-3 text-white bg-linear-to-br from-marca-600 to-marca-700 border border-white/15 active:scale-[0.99] transition-transform"
-        >
-          <Icono nombre="sparkles" size={18} />
-          <span className="text-sm font-medium flex-1 text-left">
-            Preguntarle al consejero
-          </span>
-          <Icono nombre="chevron-right" size={16} className="opacity-70" />
-        </button>
-      )}
-
       {alVerAnalisis && (
         <button
           onClick={alVerAnalisis}
