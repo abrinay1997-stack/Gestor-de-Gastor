@@ -105,30 +105,41 @@ export function Movimientos({ alVerMovimiento, alAgregar }: {
       <SelectorEntidad />
       <SelectorPeriodo periodo={periodo} alCambiar={setPeriodo} />
 
-      {/* El buscador ocupa el ancho entero. Antes compartia fila con el boton
-          de filtros y quedaba corrido hacia un lado; los filtros van abajo,
-          centrados, donde no le roban ancho a lo que mas se usa. */}
-      <div className="space-y-2">
-        <Campo
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          placeholder="Buscar..."
-          type="search"
-          className="w-full"
-        />
+      {/* El buscador se lleva todo el ancho que sobra y el filtro es un
+          cuadrado de su misma altura al lado. Lo que descuadraba antes no era
+          compartir fila sino que el filtro fuera una pastilla ancha con texto:
+          dejaba el campo corto y la fila coja. Cuadrado y del mismo alto, los
+          dos se leen como una sola pieza. */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <Campo
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar..."
+            type="search"
+            className="w-full"
+          />
+        </div>
         <button
           onClick={() => setVerFiltros(!verFiltros)}
           aria-expanded={verFiltros}
+          aria-label={activos > 0
+            ? `Filtros (${activos} activo${activos > 1 ? 's' : ''})`
+            : 'Filtros'}
           className={cn(
-            'w-full min-h-10 rounded-xl border flex items-center justify-center gap-2 text-sm font-medium transition-colors',
-            activos > 0 ? 'bg-marca-600 text-white border-transparent' : 'superficie-2 borde txt-2',
+            'w-11 h-11 shrink-0 rounded-2xl border flex flex-col items-center justify-center gap-0',
+            'transition-colors active:scale-[0.97] duration-100',
+            activos > 0
+              ? 'bg-marca-600 text-white border-transparent shadow-sm'
+              : verFiltros ? 'superficie-2 borde txt ring-2 ring-marca-500/25' : 'superficie-2 borde txt-2',
           )}
         >
-          <Icono nombre="filter" size={16} />
-          {activos > 0
-            ? `${activos} filtro${activos > 1 ? 's' : ''}`
-            : 'Filtros'}
-          <Icono nombre={verFiltros ? 'chevron-up' : 'chevron-down'} size={15} />
+          <Icono nombre="filter" size={activos > 0 ? 16 : 18} />
+          {/* El numero adentro del cuadrado y no en un globito rojo encima:
+              el globito ya habia molestado, y aca no tapa nada. */}
+          {activos > 0 && (
+            <span className="text-[10px] font-semibold leading-none mt-0.5">{activos}</span>
+          )}
         </button>
       </div>
 

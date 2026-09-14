@@ -51,8 +51,6 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
     [jars, entidadActiva],
   );
 
-  const nombreActiva = entities.find((e) => e.id === entidadActiva)?.name ?? '';
-
   // Cuanto de lo que esta sin asignar es capital de arranque. Es la parte que
   // desconcierta: los movimientos pueden estar todos asignados y el numero
   // seguir ahi, porque esto nunca fue un movimiento.
@@ -107,10 +105,8 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
     [jars, imputaciones, jarTransfers],
   );
 
-  // El total de la vista, y el sin asignar contra TODAS las jarras: la resta
-  // es entre las cuentas del hogar y todo lo que ya tiene dueño, mire uno lo
-  // que mire.
-  const total = useMemo(() => visibles.reduce((s, j) => s + j.balanceMinor, 0), [visibles]);
+  // El sin asignar se mide contra TODAS las jarras, mire uno lo que mire: la
+  // resta es entre las cuentas del hogar y todo lo que ya tiene dueño.
   const saldosVida = useMemo(
     () => new Map(jars.map((j) => [j.id, j.balanceMinor])),
     [jars],
@@ -179,67 +175,30 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
         </Tarjeta>
       ) : (
         <>
-          {/* La conciliacion: hasta ahora las jarras y las cuentas eran dos
-              libros que nadie podia cotejar. */}
-          <Tarjeta>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="text-xs txt-2 mb-1">
-                  {entidadActiva === null ? 'En jarras' : `En jarras de ${nombreActiva}`}
-                </p>
-                <p className="text-2xl font-bold tabular tracking-tight txt">
-                  {formatMonto(total, moneda)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs txt-2 mb-1">
-                  {libre < 0 ? 'Asignado de más' : 'Sin asignar'}
-                </p>
-                <p className={cn(
-                  'text-2xl font-bold tabular tracking-tight',
-                  libre < 0 ? 'text-red-500' : 'txt',
-                )}>
-                  {formatMonto(Math.abs(libre), moneda)}
-                </p>
-              </div>
-            </div>
-            {/* De donde sale ese numero. Sin esto la pantalla decia "Sin
-                asignar $887.10" con TODOS los movimientos asignados, y no
-                habia forma de entenderlo: eran los saldos iniciales de las
-                cuentas, plata que ya estaba ahi y que las jarras nunca vieron
-                porque solo ven movimientos. */}
-            {libre > 0 && entidadActiva === null && inicialesSinAsignar > 0 && (
-              <p className="text-xs txt-3 mt-2.5 leading-relaxed">
-                {inicialesSinAsignar >= libre
-                  ? <>Es el capital con el que arrancaron: los saldos iniciales de las cuentas. Nunca pasó por una jarra porque las jarras solo ven movimientos.</>
-                  : <>Incluye {formatMonto(inicialesSinAsignar, moneda)} de los saldos iniciales de las cuentas, que nunca pasaron por una jarra.</>}
-              </p>
-            )}
+          {/* Ya no hay tarjeta de conciliacion permanente. El recuadro con
+              "En jarras / Sin asignar" estaba siempre, incluso con todo
+              cuadrado, que es el caso normal: mostraba dos numeros y tres
+              renglones de explicacion para decir que no pasa nada. Lo que de
+              verdad hay que ver aparece abajo, y solo cuando hay algo que
+              hacer: plata sin repartir, o jarras asignadas de mas. */}
 
-            <p className="text-xs txt-3 mt-3 leading-relaxed">
-              {libre < 0 ? (
-                <>
-                  {/* El sin asignar es del hogar entero, siempre. Mirando una
-                      economia sola, decir "las jarras" a secas haria pensar
-                      que el rojo es de este negocio. */}
-                  {entidadActiva === null ? 'Las jarras' : 'Todas las jarras juntas'} tienen
-                  asignado más de lo que hay en las cuentas
-                  ({formatMonto(enCuentas, moneda)}). Movés plata entre jarras o
-                  ajustás un saldo de cuenta.
-                </>
-              ) : (
-                <>
-                  {/* Las cuentas no estan separadas por economia, asi que el
-                      sin asignar siempre es del hogar entero. Decirlo evita
-                      que se lea como plata libre de este negocio. */}
-                  {entidadActiva === null
-                    ? <>Suman {formatMonto(enCuentas, moneda)}, que es exactamente lo que hay en las cuentas.</>
-                    : <>Todas las jarras juntas y lo sin asignar suman {formatMonto(enCuentas, moneda)}, que es lo que hay en las cuentas. Las cuentas no están separadas por economía.</>}
-                  {libre > 0 && ' Lo de la derecha todavía no tiene trabajo asignado.'}
-                </>
-              )}
-            </p>
-          </Tarjeta>
+          {libre < 0 && (
+            <Tarjeta className="border-red-500/40">
+              <p className="text-sm font-medium text-red-500 mb-1">
+                Las jarras tienen {formatMonto(-libre, moneda)} de más
+              </p>
+              <p className="text-xs txt-3 leading-relaxed">
+                {/* El sin asignar es del hogar entero, siempre: las cuentas no
+                    estan separadas por economia. Mirando un negocio solo,
+                    decir "las jarras" a secas haria pensar que el rojo es de
+                    ese negocio. */}
+                {entidadActiva === null ? 'Entre todas' : 'Todas las jarras juntas'} suman
+                más de lo que hay en las cuentas ({formatMonto(enCuentas, moneda)}).
+                Se arregla moviendo plata entre jarras, con «Mover» acá arriba, o
+                ajustando el saldo de una cuenta.
+              </p>
+            </Tarjeta>
+          )}
 
           {/* Y la forma de bajarlo. Un numero que no se puede mover y no se
               explica enseña a desconfiar del resto de la pantalla. */}
@@ -248,9 +207,20 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
               <p className="text-sm font-medium txt mb-1">
                 Hay {formatMonto(libre, moneda)} sin repartir
               </p>
+              {/* De donde sale ese numero. Sin esto la pantalla decia "Sin
+                  asignar $887.10" con TODOS los movimientos asignados y no
+                  habia forma de entenderlo: eran los saldos iniciales de las
+                  cuentas, plata que ya estaba ahi y que las jarras nunca
+                  vieron porque solo ven movimientos. */}
               <p className="text-xs txt-3 leading-relaxed mb-3">
-                Plata que está en las cuentas y todavía no tiene propósito.
-                Repartirla no mueve ninguna cuenta: solo dice para qué está.
+                {inicialesSinAsignar >= libre
+                  ? 'Es el capital con el que arrancaron: los saldos iniciales de las cuentas. Nunca pasó por una jarra porque las jarras solo ven movimientos.'
+                  : inicialesSinAsignar > 0
+                    ? `Incluye ${formatMonto(inicialesSinAsignar, moneda)} de los saldos iniciales de las cuentas, que nunca pasaron por una jarra.`
+                    : 'Plata que está en las cuentas y todavía no tiene propósito.'}
+                {' '}Repartirla no mueve ninguna cuenta: solo dice para qué está.
+                {entidadActiva !== null
+                  && ' Es del hogar entero: las cuentas no están separadas por economía.'}
               </p>
               <Boton onClick={() => setAsignando(true)} className="w-full">
                 Repartirla entre las jarras
