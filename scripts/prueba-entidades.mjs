@@ -200,7 +200,42 @@ async function main() {
      snap.jars.find((j) => j.name === 'Impuestos').balanceMinor === antes,
      `${antes} -> ${snap.jars.find((j) => j.name === 'Impuestos').balanceMinor}`);
 
-  console.log('\n7. Archivar no borra historia');
+  console.log('\n7. El resumen para auditar sin leer el codigo');
+  const sinSesion = await fetch(BASE + '/api/resumen');
+  ok('exige sesion', sinSesion.status === 401, sinSesion.status);
+
+  const res = await pedir('/api/resumen');
+  ok('responde', res.status === 200, res.status);
+  const R = res.datos;
+  ok('dice como leer los montos',
+     R.comoLeerlo.invariantes.some((i) => i.includes('centavos')));
+  ok('trae el esquema de tablas', Object.keys(R.comoLeerlo.tablas).length >= 10);
+
+  // Los numeros del resumen tienen que ser los MISMOS que los del snapshot.
+  // Si divergen, la IA auditaria una realidad que la pantalla no muestra.
+  const snapAhora = (await pedir('/api/snapshot')).datos;
+  const jarrasSnap = snapAhora.jars.reduce((a, j) => a + j.balanceMinor, 0);
+  const cuentasSnap = snapAhora.accounts.filter((c) => !c.archived)
+    .reduce((a, c) => a + c.balanceMinor, 0);
+  ok('el saldo en jarras coincide con el snapshot', R.enJarrasMinor === jarrasSnap,
+     `${R.enJarrasMinor} vs ${jarrasSnap}`);
+  ok('el patrimonio coincide con el snapshot', R.patrimonioMinor === cuentasSnap,
+     `${R.patrimonioMinor} vs ${cuentasSnap}`);
+  ok('sin asignar es cuentas menos jarras',
+     R.sinAsignarMinor === cuentasSnap - jarrasSnap, R.sinAsignarMinor);
+
+  const pcResumen = R.economias.find((e) => e.nombre === 'PanaClaw');
+  ok('PanaClaw aparece con su resultado y sus jarras',
+     pcResumen && pcResumen.jarras === 3, JSON.stringify(pcResumen));
+  ok('los resultados de todas las economias mas lo sin clasificar dan el total',
+     R.economias.reduce((a, e) => a + e.resultadoMinor, 0) + R.sinClasificar.resultadoMinor
+       === R.desdeSiempre.flujoMinor,
+     `${R.economias.reduce((a, e) => a + e.resultadoMinor, 0)} + ${R.sinClasificar.resultadoMinor} != ${R.desdeSiempre.flujoMinor}`);
+  ok('pesa menos que el snapshot',
+     JSON.stringify(R).length < JSON.stringify(snapAhora).length,
+     `${JSON.stringify(R).length} vs ${JSON.stringify(snapAhora).length}`);
+
+  console.log('\n8. Archivar no borra historia');
   await pedir(`/api/entities/${bk.id}`, { method: 'DELETE' });
   snap = (await pedir('/api/snapshot')).datos;
   ok('queda archivada', snap.entities.find((e) => e.id === bk.id)?.archived === true);

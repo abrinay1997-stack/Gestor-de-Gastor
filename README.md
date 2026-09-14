@@ -217,6 +217,32 @@ como si fuera plata disponible.
 el de la app, se registra un ajuste en lugar de corregir el saldo a mano. Así
 el historial explica cada peso.
 
+**La economía vive en la categoría.** La casa y cada negocio son economías
+distintas dentro del mismo libro. De quién es un movimiento sale de su
+categoría, y el movimiento la hereda: `tx.entity_id` en `NULL` significa «la de
+mi categoría». Así, corregirse es cambiar una categoría y que toda su historia
+se reclasifique sola, sin reescribir un solo movimiento. Las jarras sí
+pertenecen a una economía de forma dura, porque los porcentajes tienen que
+sumar 100% dentro de un ámbito: un cobro de un negocio se reparte entre las
+jarras de ese negocio, y a la casa la plata le llega después.
+
+## Auditar las cuentas con una IA
+
+`GET /api/resumen` devuelve los números de tu hogar **ya calculados** —resultado
+por economía, saldos de cuentas y jarras, gasto por categoría, los últimos doce
+meses— junto con las reglas que hacen falta para interpretarlos y qué guarda
+cada tabla.
+
+Existe para que puedas pedirle a Claude (o a quien sea) «¿PanaClaw da o no
+da?» sin que tenga que leerse el código. Sin esto, responder eso obliga a leer
+las migraciones para entender el esquema, el dominio para saber cómo se calcula
+un saldo, y después los movimientos crudos para sumarlos a mano: miles de
+tokens y riesgo de que sume mal. Los números que devuelve salen de las mismas
+funciones que dibujan la pantalla, así que no hay dos verdades.
+
+Pide sesión, como todo lo demás. Los movimientos uno por uno siguen estando en
+`GET /api/snapshot`.
+
 ## Privacidad
 
 Los datos viven en tu propia base de D1, en tu cuenta de Cloudflare. No hay
