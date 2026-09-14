@@ -536,6 +536,22 @@ function HojaCategorias({ abierta, alCerrar }: { abierta: boolean; alCerrar: () 
   const gastos = visibles.filter((c) => c.type === 'gasto');
   const ingresos = visibles.filter((c) => c.type === 'ingreso');
 
+  // Con mas de una economia, la lista se agrupa por dueño. Sin esto habia que
+  // abrir las 30 categorias de a una para saber cual era de quien, que es
+  // justo lo que hay que hacer despues de crear un negocio.
+  const economias = entities.filter((e) => !e.archived);
+  const agrupar = (lista: Category[]) => {
+    if (economias.length < 2) return [{ economia: null as Entity | null, lista }];
+    const grupos = economias
+      .map((economia) => ({ economia, lista: lista.filter((c) => c.entityId === economia.id) }))
+      .filter((g) => g.lista.length > 0);
+    const sueltas = lista.filter((c) => !economias.some((e) => e.id === c.entityId));
+    // Las sin dueño van primero: son las que hay que arreglar.
+    return sueltas.length > 0
+      ? [{ economia: null as Entity | null, lista: sueltas }, ...grupos]
+      : grupos;
+  };
+
   async function archivar(c: Category) {
     const ok = await confirmar({
       titulo: `¿Archivar "${c.name}"?`,
@@ -563,14 +579,30 @@ function HojaCategorias({ abierta, alCerrar }: { abierta: boolean; alCerrar: () 
             <Icono nombre="plus" size={17} /> Nueva categoría
           </Boton>
 
+          {economias.length > 1 && (
+            <p className="text-xs txt-3 leading-relaxed superficie-2 rounded-2xl p-3">
+              Un movimiento pertenece a la economía de su categoría. Mové una
+              categoría de economía y toda su historia se va con ella, sin tocar
+              ningún movimiento.
+            </p>
+          )}
+
           {[
             { titulo: 'Gastos', lista: gastos },
             { titulo: 'Ingresos', lista: ingresos },
           ].map(({ titulo, lista }) => lista.length > 0 && (
             <div key={titulo}>
               <p className="text-xs font-medium txt-3 mb-2">{titulo}</p>
+              {agrupar(lista).map(({ economia, lista: suyas }) => (
+              <div key={economia?.id ?? 'sueltas'} className="mb-3 last:mb-0">
+                {economias.length > 1 && (
+                  <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5"
+                    style={{ color: economia?.color ?? '#ef4444' }}>
+                    {economia?.name ?? 'Sin economía'}
+                  </p>
+                )}
               <div className="space-y-1.5">
-                {lista.map((c) => (
+                {suyas.map((c) => (
                   <div key={c.id} className="flex items-center gap-3 py-1">
                     <Ficha color={c.color} icono={c.icon} size={34} />
                     <button onClick={() => setEditando(c)} className="flex-1 min-w-0 text-left">
@@ -593,6 +625,8 @@ function HojaCategorias({ abierta, alCerrar }: { abierta: boolean; alCerrar: () 
                   </div>
                 ))}
               </div>
+              </div>
+              ))}
             </div>
           ))}
         </div>

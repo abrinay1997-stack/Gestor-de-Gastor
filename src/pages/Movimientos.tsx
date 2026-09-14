@@ -26,7 +26,8 @@ export function Movimientos({ alVerMovimiento, alAgregar }: {
   alAgregar: () => void;
 }) {
   const {
-    transactions: todos, categories, accounts, members, household, entidadActiva,
+    transactions: todos, categories, accounts, members, household, entities,
+    entidadActiva, verEntidad,
   } = useStore();
 
   // La lista respeta la economia elegida. En "Todo" no filtra nada.
@@ -83,6 +84,17 @@ export function Movimientos({ alVerMovimiento, alAgregar }: {
   const activos = [
     quien !== 'todos', tipo !== 'todos', categoria !== '', cuenta !== '', busqueda !== '',
   ].filter(Boolean).length;
+
+  // Cuantos habria en este periodo SIN el filtro de economia. Sirve para no
+  // echarle la culpa al mes cuando en realidad la lista esta vacia porque la
+  // economia elegida todavia no tiene ninguna categoria asignada: decir
+  // "periodo sin movimientos" ahi es directamente mentir.
+  const hayEnElPeriodo = useMemo(
+    () => todos.filter((t) => dentroDe(t.date, periodo)).length,
+    [todos, periodo],
+  );
+  const vacioPorLaEconomia = entidadActiva !== null && activos === 0 && hayEnElPeriodo > 0;
+  const nombreActiva = entities.find((e) => e.id === entidadActiva)?.name ?? '';
 
   const limpiar = () => {
     setQuien('todos'); setTipo('todos'); setCategoria(''); setCuenta(''); setBusqueda('');
@@ -195,14 +207,20 @@ export function Movimientos({ alVerMovimiento, alAgregar }: {
       {filtrados.length === 0 ? (
         <Tarjeta>
           <Vacio
-            icono={activos > 0 ? 'search-x' : 'receipt-text'}
-            titulo={activos > 0 ? 'Nada coincide' : 'Período sin movimientos'}
-            texto={activos > 0
-              ? 'Probá cambiando los filtros o buscando otra cosa.'
-              : 'No hay movimientos registrados en este período.'}
-            accion={activos > 0
-              ? <Boton variante="secundario" onClick={limpiar}>Limpiar filtros</Boton>
-              : <Boton onClick={alAgregar}>Registrar movimiento</Boton>}
+            icono={vacioPorLaEconomia ? 'filter' : activos > 0 ? 'search-x' : 'receipt-text'}
+            titulo={vacioPorLaEconomia
+              ? `Nada en ${nombreActiva}`
+              : activos > 0 ? 'Nada coincide' : 'Período sin movimientos'}
+            texto={vacioPorLaEconomia
+              ? `Hay ${hayEnElPeriodo} movimiento${hayEnElPeriodo === 1 ? '' : 's'} este mes, pero ninguno es de ${nombreActiva}. Un movimiento pertenece a la economía de su categoría: asigná las categorías de ${nombreActiva} en Ajustes → Categorías.`
+              : activos > 0
+                ? 'Probá cambiando los filtros o buscando otra cosa.'
+                : 'No hay movimientos registrados en este período.'}
+            accion={vacioPorLaEconomia
+              ? <Boton variante="secundario" onClick={() => verEntidad(null)}>Ver todo</Boton>
+              : activos > 0
+                ? <Boton variante="secundario" onClick={limpiar}>Limpiar filtros</Boton>
+                : <Boton onClick={alAgregar}>Registrar movimiento</Boton>}
           />
         </Tarjeta>
       ) : (

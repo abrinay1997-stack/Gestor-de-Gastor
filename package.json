@@ -10,7 +10,7 @@
     "deploy": "npm run build && wrangler deploy",
     "db:init": "wrangler d1 migrations apply gastos-db --remote",
     "db:init:local": "wrangler d1 migrations apply gastos-db --local",
-    "lint": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json",
+    "lint": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json && node scripts/prueba-filtros.mjs",
     "test": "vitest run"
   },
   "dependencies": {

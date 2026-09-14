@@ -167,6 +167,22 @@ export async function crearCategoria(req: Request, env: Env, sesion: Sesion): Pr
   const t = ahora();
   const id = idOpcional(body.id, 'id') ?? nuevoId();
 
+  // Sin entidad explicita, la categoria nace en la primera economia —la casa—,
+  // no en NULL. NULL significa "sin clasificar": la categoria no aparece bajo
+  // ninguna economia, sus movimientos tampoco, y no hay nada en pantalla que
+  // avise. Heredar de la subcategoria del padre cuando lo hay, que es lo que
+  // uno espera.
+  const entityId = idOpcional(body.entityId, 'entityId')
+    ?? (parentId
+      ? (await env.DB.prepare('SELECT entity_id FROM category WHERE id = ?1')
+        .bind(parentId).first<{ entity_id: string | null }>())?.entity_id ?? null
+      : null)
+    ?? (await env.DB.prepare(
+      `SELECT id FROM entity WHERE household_id = ?1 AND archived = 0
+        ORDER BY display_order ASC, created_at ASC LIMIT 1`,
+    ).bind(sesion.householdId).first<{ id: string }>())?.id
+    ?? null;
+
   await env.DB.prepare(
     `INSERT INTO category (id, household_id, name, type, parent_id, icon, color,
                            archived, display_order, created_at, entity_id)
@@ -175,7 +191,7 @@ export async function crearCategoria(req: Request, env: Env, sesion: Sesion): Pr
     id, sesion.householdId, name, type, parentId,
     texto(body.icon ?? 'tag', 'icon', { max: 40 }), color(body.color, '#64748b'),
     entero(body.displayOrder ?? 0, 'displayOrder', { min: 0, max: 9999 }), t,
-    idOpcional(body.entityId, 'entityId'),
+    entityId,
   ).run();
 
   const fila = await env.DB.prepare('SELECT * FROM category WHERE id = ?1').bind(id)

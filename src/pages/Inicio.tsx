@@ -10,7 +10,7 @@ import { useMemo, useState } from 'react';
 import { useStore } from '../store/store.tsx';
 import { formatMonto } from '@shared/money';
 import {
-  autorDe, calcularPatrimonio, claveMes, estadoPresupuestos,
+  autorDe, calcularPatrimonio, claveMes, estadoPresupuestos, filtrarPorEntidad,
   porCategoria, porPersona, resumir, transaccionesDelMes,
 } from '@shared/domain';
 import { SECCIONES_INICIO, TxType, type SeccionInicio, type Transaction } from '@shared/types';
@@ -20,27 +20,53 @@ import { Avatar, Barra, Boton, Ficha, Icono, Tarjeta, Vacio } from '../component
 import { EtiquetaEntidad, SelectorEntidad } from '../components/ui/entidad.tsx';
 import { cn } from '../lib/utils.ts';
 
-export function Inicio({ alVerMovimiento, alAgregar }: {
+export function Inicio({ alVerMovimiento, alAgregar, alVerAnalisis }: {
   alVerMovimiento: (tx: Transaction) => void;
   alAgregar: () => void;
+  /** Analisis solo vive en la barra lateral, que en celular no existe. */
+  alVerAnalisis?: () => void;
 }) {
   const {
-    accounts, categories, transactions, budgets, members, me, household, recurring,
+    accounts, categories, transactions: todos, budgets, members, me, household,
+    recurring: todosLosHabituales, entities, entidadActiva,
   } = useStore();
   const moneda = household?.currency ?? 'USD';
 
   const [mes, setMes] = useState(() => claveMes(Date.now()));
 
+  // TODO lo de esta pantalla sale de aca, asi que el selector de arriba manda
+  // sobre el balance, el gasto por categoria, quien gasto y los presupuestos.
+  // En "Todo" no filtra nada y se ve la vida entera.
+  const transactions = useMemo(
+    () => filtrarPorEntidad(todos, categories, entidadActiva),
+    [todos, categories, entidadActiva],
+  );
+
   const delMes = useMemo(() => transaccionesDelMes(transactions, mes), [transactions, mes]);
   const resumen = useMemo(() => resumir(delMes), [delMes]);
+  // El patrimonio es la excepcion: las cuentas estan mezcladas, no hay una que
+  // sea de un negocio. Filtrarlo seria inventar un numero que no existe.
   const patrimonio = useMemo(() => calcularPatrimonio(accounts), [accounts]);
   const porPers = useMemo(() => porPersona(delMes, members), [delMes, members]);
   const gastoPorCat = useMemo(() => porCategoria(delMes, categories, 'gasto').slice(0, 5), [delMes, categories]);
   const presupuestos = useMemo(() => estadoPresupuestos(budgets, transactions, mes), [budgets, transactions, mes]);
   const ultimos = useMemo(() => transactions.slice(0, 6), [transactions]);
+
+  // Los pagos habituales heredan la economia de su categoria, igual que un
+  // movimiento.
+  const recurring = useMemo(() => {
+    if (entidadActiva === null) return todosLosHabituales;
+    const porId = new Map(categories.map((c) => [c.id, c]));
+    return todosLosHabituales.filter((r) => (
+      (r.entityId ?? (r.categoryId ? porId.get(r.categoryId)?.entityId ?? null : null)) === entidadActiva
+    ));
+  }, [todosLosHabituales, categories, entidadActiva]);
+
   const proximos = useMemo(
     () => recurring.filter((r) => r.active).slice(0, 4), [recurring],
   );
+
+  const nombreActiva = entities.find((e) => e.id === entidadActiva)?.name ?? '';
 
   const esMesActual = mes === claveMes(Date.now());
 
@@ -51,7 +77,9 @@ export function Inicio({ alVerMovimiento, alAgregar }: {
   const secciones: Record<SeccionInicio, React.ReactNode> = {
     'resumen': (
       <Tarjeta className="bg-linear-to-br from-marca-600 to-marca-700 border-transparent text-white">
-        <p className="text-sm opacity-80 mb-1">Balance del mes</p>
+        <p className="text-sm opacity-80 mb-1">
+          {nombreActiva ? `Balance del mes · ${nombreActiva}` : 'Balance del mes'}
+        </p>
         <p className="text-4xl font-bold tabular tracking-tight mb-5">{formatMonto(resumen.flujoMinor, moneda)}</p>
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-white/15 rounded-2xl p-3">
@@ -75,6 +103,12 @@ export function Inicio({ alVerMovimiento, alAgregar }: {
         <div>
           <p className="text-xs txt-2 mb-0.5">Patrimonio total</p>
           <p className="text-2xl font-semibold tabular tracking-tight txt">{formatMonto(patrimonio, moneda)}</p>
+          {/* Las cuentas estan mezcladas: no hay una que sea de un negocio.
+              Decirlo evita leer este numero como si fuera de la economia que
+              se esta mirando. */}
+          {nombreActiva && (
+            <p className="text-[11px] txt-3 mt-0.5">De todas las economías juntas</p>
+          )}
         </div>
         <Ficha color="#10b981" icono="landmark" size={44} />
       </Tarjeta>
@@ -232,6 +266,24 @@ export function Inicio({ alVerMovimiento, alAgregar }: {
       </div>
 
       {orden.map((id) => secciones[id] && <div key={id}>{secciones[id]}</div>)}
+
+      {/* Analisis solo esta en la barra lateral, que en celular no se dibuja:
+          sin esto, desde el telefono no habia forma de llegar —y ahi vive el
+          resultado por economia, que es medio motivo de tener economias. */}
+      {alVerAnalisis && (
+        <button
+          onClick={alVerAnalisis}
+          className="md:hidden w-full superficie-2 borde border rounded-2xl min-h-12 px-4 flex items-center gap-3 txt-2 active:scale-[0.99] transition-transform"
+        >
+          <Icono nombre="chart-pie" size={18} />
+          <span className="text-sm font-medium flex-1 text-left">
+            {entities.filter((e) => !e.archived).length > 1
+              ? 'Análisis y resultado por economía'
+              : 'Análisis del mes'}
+          </span>
+          <Icono nombre="chevron-right" size={16} className="txt-3" />
+        </button>
+      )}
     </div>
   );
 }
