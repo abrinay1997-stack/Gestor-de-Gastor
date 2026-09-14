@@ -11,7 +11,7 @@ import { claveMes, estadoPresupuestos } from '@shared/domain';
 import { MIN_PASSWORD } from '@shared/kdf';
 import {
   SECCIONES_INICIO, SECCION_LABEL, TX_TYPE_LABEL, TxType,
-  type Budget, type Category, type SeccionInicio,
+  type Budget, type Category, type Entity, type SeccionInicio,
 } from '@shared/types';
 import { nombreMes } from '../lib/utils.ts';
 import {
@@ -23,11 +23,12 @@ import { useConfirmar } from '../components/ui/confirmar.tsx';
 import { PagosHabituales } from './ajustes/PagosHabituales.tsx';
 import { cn } from '../lib/utils.ts';
 
-type Hoja1 = null | 'invitar' | 'password' | 'presupuesto' | 'categorias' | 'perfil' | 'inicio';
+type Hoja1 = null | 'invitar' | 'password' | 'presupuesto' | 'categorias'
+  | 'entidades' | 'perfil' | 'inicio';
 
 export function Ajustes() {
   const {
-    me, members, household, categories, budgets, accounts, transactions, salir,
+    me, members, household, categories, entities, budgets, accounts, transactions, salir,
   } = useStore();
   const moneda = household?.currency ?? 'USD';
 
@@ -124,6 +125,12 @@ export function Ajustes() {
       {/* Accesos */}
       <Tarjeta className="p-0 overflow-hidden">
         <Opcion
+          icono="building-2"
+          titulo="Economías"
+          detalle={entities.filter((e) => !e.archived).map((e) => e.name).join(' · ')}
+          alTocar={() => setHoja('entidades')}
+        />
+        <Opcion
           icono="tags"
           titulo="Categorías"
           detalle={`${categories.filter((c) => !c.archived).length} activas`}
@@ -157,6 +164,7 @@ export function Ajustes() {
         alCerrar={() => { setHoja(null); setPresupuestoEdit(null); }}
         editando={presupuestoEdit}
       />
+      <HojaEntidades abierta={hoja === 'entidades'} alCerrar={() => setHoja(null)} />
       <HojaCategorias abierta={hoja === 'categorias'} alCerrar={() => setHoja(null)} />
     </div>
   );
@@ -350,10 +358,179 @@ function HojaOrdenInicio({ abierta, alCerrar }: { abierta: boolean; alCerrar: ()
 
 // --- categorias -----------------------------------------------------------
 
+/**
+ * Las economias: la casa y los negocios.
+ *
+ * Un solo libro con varios dueños del dinero. Lo que decide de quien es cada
+ * movimiento no se elige aca sino en la categoria: aca solo se define que
+ * economias existen.
+ */
+function HojaEntidades({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => void }) {
+  const { entities, categories, archivarEntidad, avisar } = useStore();
+  const confirmar = useConfirmar();
+  const [editando, setEditando] = useState<Entity | null>(null);
+
+  const visibles = entities.filter((e) => !e.archived);
+
+  async function archivar(e: Entity) {
+    const cuantas = categories.filter((c) => c.entityId === e.id && !c.archived).length;
+    const ok = await confirmar({
+      titulo: `¿Archivar "${e.name}"?`,
+      detalle: cuantas > 0
+        ? `Deja de aparecer en el selector. Sus ${cuantas} categorías y todo su historial se quedan como están.`
+        : 'Deja de aparecer en el selector. Nada se borra.',
+      destructivo: true,
+    });
+    if (!ok) return;
+    try {
+      await archivarEntidad(e.id);
+    } catch (err) {
+      avisar(err instanceof Error ? err.message : 'No se pudo archivar');
+    }
+  }
+
+  return (
+    <>
+      <Hoja abierta={abierta && !editando} alCerrar={alCerrar} titulo="Economías">
+        <div className="space-y-5">
+          <p className="text-xs txt-3 leading-relaxed">
+            La casa y cada negocio, cada uno con su propio resultado, sus jarras y
+            sus presupuestos. De quién es cada movimiento se define en su
+            categoría, no acá.
+          </p>
+
+          <Boton onClick={() => setEditando({
+            id: '', householdId: '', name: '', kind: 'negocio', color: '#9a6a06',
+            icon: 'briefcase', displayOrder: visibles.length, archived: false, createdAt: 0,
+          })} className="w-full">
+            <Icono nombre="plus" size={17} /> Nueva economía
+          </Boton>
+
+          <div className="space-y-1">
+            {visibles.map((e) => (
+              <div key={e.id} className="flex items-center gap-3 py-2">
+                <Ficha color={e.color} icono={e.icon} size={38} />
+                <button onClick={() => setEditando(e)} className="flex-1 min-w-0 text-left">
+                  <p className="text-sm font-medium txt truncate">{e.name}</p>
+                  <p className="text-xs txt-3">
+                    {e.kind === 'negocio' ? 'Negocio' : 'Personal'}
+                    {' · '}
+                    {categories.filter((c) => c.entityId === e.id && !c.archived).length} categorías
+                  </p>
+                </button>
+                {visibles.length > 1 && (
+                  <button
+                    onClick={() => void archivar(e)}
+                    aria-label={`Archivar ${e.name}`}
+                    className="w-9 h-9 rounded-lg flex items-center justify-center txt-3 shrink-0"
+                  >
+                    <Icono nombre="archive" size={16} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </Hoja>
+
+      <EditorEntidad entidad={editando} alCerrar={() => setEditando(null)} />
+    </>
+  );
+}
+
+function EditorEntidad({ entidad, alCerrar }: { entidad: Entity | null; alCerrar: () => void }) {
+  const { guardarEntidad, avisar } = useStore();
+  const [name, setName] = useState('');
+  const [kind, setKind] = useState<'personal' | 'negocio'>('negocio');
+  const [icon, setIcon] = useState('briefcase');
+  const [color, setColor] = useState('#9a6a06');
+  const [guardando, setGuardando] = useState(false);
+
+  useEffect(() => {
+    if (!entidad) return;
+    setName(entidad.name);
+    setKind(entidad.kind);
+    setIcon(entidad.icon);
+    setColor(entidad.color);
+  }, [entidad]);
+
+  if (!entidad) return null;
+  const esNueva = entidad.id === '';
+
+  return (
+    <Hoja abierta alCerrar={alCerrar} titulo={esNueva ? 'Nueva economía' : 'Editar economía'}>
+      <div className="space-y-5">
+        <div className="flex flex-col items-center pt-1">
+          <Ficha color={color} icono={icon} size={64} />
+          <p className="text-sm font-medium txt mt-2">{name || 'Sin nombre'}</p>
+        </div>
+
+        <Campo
+          etiqueta="Nombre"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="PanaClaw, BukoFlow..."
+        />
+
+        <div className="grid grid-cols-2 gap-2">
+          {([['personal', 'Personal'], ['negocio', 'Negocio']] as const).map(([k, etiqueta]) => (
+            <button
+              key={k}
+              onClick={() => setKind(k)}
+              className={cn(
+                'min-h-11 rounded-xl text-sm font-medium border transition-all',
+                kind === k ? 'bg-marca-600 text-white border-transparent' : 'superficie-2 borde txt-2',
+              )}
+            >
+              {etiqueta}
+            </button>
+          ))}
+        </div>
+
+        <div>
+          <span className="block text-xs font-medium txt-2 mb-2">Color</span>
+          <SelectorColor valor={color} alElegir={setColor} />
+        </div>
+
+        <div>
+          <span className="block text-xs font-medium txt-2 mb-2">Ícono</span>
+          <SelectorIcono valor={icon} alElegir={setIcon} color={color} />
+        </div>
+
+        <Boton
+          onClick={async () => {
+            if (!name.trim()) return;
+            setGuardando(true);
+            try {
+              await guardarEntidad(
+                { name: name.trim(), kind, icon, color },
+                esNueva ? undefined : entidad.id,
+              );
+              alCerrar();
+            } catch (e) {
+              avisar(e instanceof Error ? e.message : 'No se pudo guardar');
+            } finally {
+              setGuardando(false);
+            }
+          }}
+          disabled={!name.trim() || guardando}
+          className="w-full min-h-12"
+        >
+          {guardando ? 'Guardando...' : 'Guardar'}
+        </Boton>
+      </div>
+    </Hoja>
+  );
+}
+
 function HojaCategorias({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => void }) {
-  const { categories, guardarCategoria, avisar } = useStore();
+  const { categories, entities, entidadActiva, guardarCategoria, avisar } = useStore();
   const confirmar = useConfirmar();
   const [editando, setEditando] = useState<Category | null>(null);
+
+  // Una categoria nueva nace en la entidad que se esta mirando. Si estan en
+  // el consolidado, en la primera, que es Familia.
+  const entidadPorDefecto = entidadActiva ?? entities.find((e) => !e.archived)?.id ?? null;
 
   const visibles = categories.filter((c) => !c.archived);
   const gastos = visibles.filter((c) => c.type === 'gasto');
@@ -380,7 +557,8 @@ function HojaCategorias({ abierta, alCerrar }: { abierta: boolean; alCerrar: () 
         <div className="space-y-5">
           <Boton onClick={() => setEditando({
             id: '', householdId: '', name: '', type: 'gasto', parentId: null,
-            icon: 'tag', color: '#64748b', archived: false, displayOrder: 0, createdAt: 0,
+            icon: 'tag', color: '#64748b', archived: false, displayOrder: 0,
+            createdAt: 0, entityId: entidadPorDefecto,
           })} className="w-full">
             <Icono nombre="plus" size={17} /> Nueva categoría
           </Boton>
@@ -428,11 +606,12 @@ function HojaCategorias({ abierta, alCerrar }: { abierta: boolean; alCerrar: () 
 function EditorCategoria({ categoria, alCerrar }: {
   categoria: Category | null; alCerrar: () => void;
 }) {
-  const { guardarCategoria, avisar } = useStore();
+  const { entities, transactions, guardarCategoria, avisar } = useStore();
   const [name, setName] = useState('');
   const [tipo, setTipo] = useState<'ingreso' | 'gasto'>('gasto');
   const [icon, setIcon] = useState('tag');
   const [color, setColor] = useState('#64748b');
+  const [entityId, setEntityId] = useState<string>('');
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
@@ -441,7 +620,16 @@ function EditorCategoria({ categoria, alCerrar }: {
     setTipo(categoria.type);
     setIcon(categoria.icon);
     setColor(categoria.color);
+    setEntityId(categoria.entityId ?? '');
   }, [categoria]);
+
+  const visibles = entities.filter((e) => !e.archived);
+  // Cuantos movimientos se van a reclasificar de una: es la informacion que
+  // hace que valga la pena tener la entidad aca y no en cada movimiento.
+  const cuantos = categoria
+    ? transactions.filter((t) => t.categoryId === categoria.id && !t.entityId).length
+    : 0;
+  const cambiaDeEntidad = categoria !== null && (categoria.entityId ?? '') !== entityId;
 
   if (!categoria) return null;
   const esNueva = categoria.id === '';
@@ -475,6 +663,27 @@ function EditorCategoria({ categoria, alCerrar }: {
           </div>
         )}
 
+        {visibles.length > 1 && (
+          <>
+            <Selector
+              etiqueta="De quién es"
+              value={entityId}
+              onChange={(e) => setEntityId(e.target.value)}
+            >
+              <option value="">Sin clasificar</option>
+              {visibles.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+            </Selector>
+            {cambiaDeEntidad && cuantos > 0 && (
+              <p className="text-xs txt-3 px-1 -mt-2 leading-relaxed">
+                {cuantos === 1
+                  ? 'El movimiento que usa esta categoría pasa también.'
+                  : `Los ${cuantos} movimientos que usan esta categoría pasan también.`}
+                {' '}No se reescribe ninguno: la entidad se lee desde acá.
+              </p>
+            )}
+          </>
+        )}
+
         <div>
           <span className="block text-xs font-medium txt-2 mb-2">Color</span>
           <SelectorColor valor={color} alElegir={setColor} />
@@ -491,7 +700,7 @@ function EditorCategoria({ categoria, alCerrar }: {
             setGuardando(true);
             try {
               await guardarCategoria(
-                { name: name.trim(), type: tipo, icon, color },
+                { name: name.trim(), type: tipo, icon, color, entityId: entityId || null },
                 esNueva ? undefined : categoria.id,
               );
               alCerrar();
@@ -516,7 +725,10 @@ function EditorCategoria({ categoria, alCerrar }: {
 function HojaPresupuesto({ abierta, alCerrar, editando }: {
   abierta: boolean; alCerrar: () => void; editando: Budget | null;
 }) {
-  const { categories, household, budgets, guardarPresupuesto, borrarPresupuesto, avisar } = useStore();
+  const {
+    categories, entities, entidadActiva, household, budgets,
+    guardarPresupuesto, borrarPresupuesto, avisar,
+  } = useStore();
   const confirmar = useConfirmar();
   const moneda = household?.currency ?? 'USD';
   const mesActual = claveMes(Date.now());
@@ -531,7 +743,17 @@ function HojaPresupuesto({ abierta, alCerrar, editando }: {
     setMonto(editando ? montoPlano(editando.amountMinor, moneda) : '');
   }, [abierta, editando, moneda]);
 
-  const gastos = categories.filter((c) => !c.archived && c.type === 'gasto');
+  // El presupuesto no lleva entidad propia: la saca de su categoria, igual que
+  // un movimiento. Lo unico que cambia con la economia activa es cuantas
+  // categorias hay para elegir.
+  const gastos = categories.filter((c) => (
+    !c.archived && c.type === 'gasto'
+    && (entidadActiva === null || c.entityId === entidadActiva)
+  ));
+  const economias = entities.filter((e) => !e.archived);
+  const suEconomia = entities.find(
+    (e) => e.id === categories.find((c) => c.id === categoryId)?.entityId,
+  );
   const montoMinor = parseMonto(monto, moneda);
   const existente = budgets.find((b) => b.period === mesActual && (b.categoryId ?? '') === categoryId);
 
@@ -572,6 +794,14 @@ function HojaPresupuesto({ abierta, alCerrar, editando }: {
           <option value="">Todo el mes (global)</option>
           {gastos.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </Selector>
+
+        {economias.length > 1 && (
+          <p className="text-xs txt-3 -mt-2 px-1 leading-relaxed">
+            {suEconomia
+              ? `Es el tope de ${suEconomia.name}, porque la categoría es de ahí. Si mañana movés la categoría, el tope se va con ella.`
+              : 'El tope global cuenta los gastos de todas las economías, no solo los de la casa.'}
+          </p>
+        )}
 
         <Campo
           etiqueta="Tope mensual"

@@ -5,7 +5,7 @@
  */
 
 import {
-  type Account, type Budget, type Category, type Jar, type JarImputacion,
+  type Account, type Budget, type Category, type Entity, type Jar, type JarImputacion,
   type JarTransfer, type Member, type Transaction, TxType,
 } from './types.ts';
 import { repartir, sumarMinor } from './money.ts';
@@ -106,21 +106,98 @@ export function calcularPatrimonio(accounts: Account[]): number {
  * Usa `repartir`, que garantiza que la suma de las partes sea exactamente el
  * total. Ver la explicacion del metodo del mayor resto en money.ts.
  */
-export function imputacionJarras(
-  tx: Pick<Transaction, 'type' | 'amountMinor' | 'distributeToJars' | 'jarId'>,
-  jars: Jar[],
-): Map<string, number> {
+/**
+ * Como se reparte un monto entre las jarras de una entidad.
+ *
+ * Tres formas de llenar una jarra, porque una casa y un negocio no reparten
+ * igual. Los frascos de la casa van por porcentaje: el ingreso es parejo. Un
+ * cobro de agencia va de $50 a $5.000, y ahi "$100 de publicidad" tiene mas
+ * sentido como monto fijo que como porcentaje.
+ *
+ * El orden importa y es este:
+ *
+ *   1. Los porcentajes, sobre el monto BRUTO. "20% de impuestos" tiene que ser
+ *      el 20% de lo que se cobro, no de lo que quedo despues de otras cosas.
+ *   2. Los fijos, cada uno hasta donde alcance. Si el cobro fue chico, el
+ *      primero se lleva lo que hay y los siguientes quedan en cero.
+ *   3. La jarra de resto, con lo que sobre.
+ *
+ * Asi la suma da SIEMPRE el total exacto y ninguna jarra recibe un negativo.
+ * Con todas en porcentaje sumando 100% el resultado es identico al de antes.
+ */
+export function repartirEnJarras(totalMinor: number, jars: Jar[]): Map<string, number> {
   const out = new Map<string, number>();
+  if (jars.length === 0 || totalMinor === 0) return out;
 
-  if (tx.type === TxType.INGRESO && tx.distributeToJars) {
-    const ordenadas = [...jars].sort((a, b) => a.displayOrder - b.displayOrder || a.id.localeCompare(b.id));
-    const partes = repartir(tx.amountMinor, ordenadas.map((j) => j.percentageBp));
-    ordenadas.forEach((j, i) => {
+  const ordenadas = [...jars].sort(
+    (a, b) => a.displayOrder - b.displayOrder || a.id.localeCompare(b.id),
+  );
+  const porcentaje = ordenadas.filter((j) => j.fillKind === 'porcentaje');
+  const fijas = ordenadas.filter((j) => j.fillKind === 'fijo');
+  const resto = ordenadas.find((j) => j.fillKind === 'resto');
+
+  // El caso clasico y el mas comun: todas por porcentaje, sumando 100%. Se
+  // usa el metodo del mayor resto, que reparte el total exacto sin perder
+  // centavos. Ver money.ts.
+  if (!resto && fijas.length === 0) {
+    const partes = repartir(totalMinor, porcentaje.map((j) => j.percentageBp));
+    porcentaje.forEach((j, i) => {
       if (partes[i] !== 0) out.set(j.id, partes[i]);
     });
     return out;
   }
 
+  let libre = totalMinor;
+
+  // 1. Porcentajes sobre el bruto.
+  //
+  //    Aca NO sirve `repartir`: esa funcion reparte el total entero entre los
+  //    pesos que recibe, asi que con una sola jarra al 20% le daria el 100%.
+  //    Sirve cuando los pesos son el reparto completo, y con una jarra de
+  //    resto no lo son. Cada una toma su parte por separado y el redondeo lo
+  //    absorbe el resto, que es su trabajo.
+  for (const j of porcentaje) {
+    const toma = Math.floor((totalMinor * j.percentageBp) / 10_000);
+    if (toma !== 0) out.set(j.id, toma);
+    libre -= toma;
+  }
+
+  // 2. Fijos, hasta donde alcance.
+  for (const j of fijas) {
+    if (libre <= 0) break;
+    const toma = Math.min(j.fillMinor ?? 0, libre);
+    if (toma > 0) {
+      out.set(j.id, (out.get(j.id) ?? 0) + toma);
+      libre -= toma;
+    }
+  }
+
+  // 3. Lo que sobre. Sin jarra de resto, la diferencia queda sin asignar, que
+  //    es visible en la pantalla de jarras y no se pierde en ningun lado.
+  if (resto && libre !== 0) out.set(resto.id, (out.get(resto.id) ?? 0) + libre);
+
+  return out;
+}
+
+/**
+ * Como se reparte un ingreso entre las jarras, o a que jarra va un movimiento.
+ * Devuelve un mapa jarraId -> centavos (positivos entran, negativos salen).
+ *
+ * Esto se calcula UNA sola vez, al guardar el movimiento, y el resultado queda
+ * escrito en jar_imputacion. Antes se recalculaba en cada lectura con los
+ * porcentajes vigentes, asi que subir el ahorro del 10% al 20% reescribia el
+ * sueldo de enero. Ahora cambiar un porcentaje solo afecta lo que venga
+ * despues.
+ */
+export function imputacionJarras(
+  tx: Pick<Transaction, 'type' | 'amountMinor' | 'distributeToJars' | 'jarId'>,
+  jars: Jar[],
+): Map<string, number> {
+  if (tx.type === TxType.INGRESO && tx.distributeToJars) {
+    return repartirEnJarras(tx.amountMinor, jars);
+  }
+
+  const out = new Map<string, number>();
   if (!tx.jarId) return out;
 
   if (tx.type === TxType.GASTO) out.set(tx.jarId, -tx.amountMinor);
@@ -232,10 +309,167 @@ export function sinAsignar(accounts: Account[], saldosJarras: Map<string, number
   return enCuentas - enJarras;
 }
 
-/** Los porcentajes de las jarras deben sumar 100%. */
-export function validarJarras(jars: Jar[]): { ok: boolean; sumaBp: number } {
-  const sumaBp = jars.reduce((a, j) => a + j.percentageBp, 0);
-  return { ok: sumaBp === 10_000, sumaBp };
+/**
+ * Que el reparto de una entidad sea valido.
+ *
+ * Sin jarra de resto, los porcentajes tienen que dar 100% exacto: si no,
+ * parte del ingreso no llegaria a ninguna jarra.
+ *
+ * Con jarra de resto la regla se afloja a "no pasarse de 100%", porque el
+ * resto absorbe lo que quede. Es lo que hace usable el modo de negocio: "20%
+ * impuestos, $100 publicidad, el resto a operacion" no se puede expresar con
+ * la regla dura.
+ */
+export function validarJarras(jars: Jar[]): {
+  ok: boolean; sumaBp: number; motivo?: string;
+} {
+  const sumaBp = jars
+    .filter((j) => j.fillKind === 'porcentaje')
+    .reduce((a, j) => a + j.percentageBp, 0);
+
+  const restos = jars.filter((j) => j.fillKind === 'resto');
+
+  if (restos.length > 1) {
+    return { ok: false, sumaBp, motivo: 'Solo puede haber una jarra que se lleve el resto' };
+  }
+
+  if (restos.length === 0) {
+    const hayFijas = jars.some((j) => j.fillKind === 'fijo');
+    if (hayFijas) {
+      return {
+        ok: false, sumaBp,
+        motivo: 'Con jarras de monto fijo hace falta una que se lleve el resto',
+      };
+    }
+    return {
+      ok: sumaBp === 10_000,
+      sumaBp,
+      motivo: sumaBp === 10_000 ? undefined : 'Los porcentajes tienen que sumar 100%',
+    };
+  }
+
+  return {
+    ok: sumaBp <= 10_000,
+    sumaBp,
+    motivo: sumaBp <= 10_000 ? undefined : 'Los porcentajes no pueden pasar de 100%',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Entidades
+// ---------------------------------------------------------------------------
+
+/**
+ * De quien es un movimiento.
+ *
+ * La entidad vive en la CATEGORIA y el movimiento la hereda. Escribirla en
+ * cada movimiento habria significado una pregunta mas en cada carga y 44
+ * decisiones en vez de 13; y sobre todo, corregirse despues seria reescribir
+ * movimientos uno por uno. Asi, cambiar la entidad de una categoria
+ * reclasifica toda su historia sin tocar un solo registro.
+ *
+ * El campo del movimiento solo se usa cuando se corrige uno suelto a mano, o
+ * cuando no hay categoria (una transferencia).
+ */
+export function entidadDe(
+  tx: Pick<Transaction, 'entityId' | 'categoryId'>,
+  categorias: Map<string, Category>,
+): string | null {
+  if (tx.entityId) return tx.entityId;
+  if (!tx.categoryId) return null;
+  return categorias.get(tx.categoryId)?.entityId ?? null;
+}
+
+/**
+ * La entidad que se usa cuando el movimiento no dice ninguna: la primera de
+ * la lista, que es la casa.
+ *
+ * Un ingreso sin categoria tiene que seguir cayendo en los frascos del hogar,
+ * que es donde caia antes de que existieran los negocios. Sin este piso, el
+ * interruptor de repartir seria un boton que no hace nada.
+ */
+export const entidadPorDefecto = (entities: Entity[]): string | null =>
+  [...entities]
+    .filter((e) => !e.archived)
+    .sort((a, b) => a.displayOrder - b.displayOrder || a.createdAt - b.createdAt)[0]?.id
+  ?? null;
+
+/**
+ * Las jarras que reparten un movimiento de esta entidad.
+ *
+ * Un cobro de PanaClaw se reparte entre las jarras de PanaClaw —impuestos,
+ * insumos, publicidad—, no entre los frascos de la casa. A la casa la plata
+ * llega despues, cuando el negocio le paga a alguien: ese es otro movimiento
+ * y ese si cae en los seis frascos.
+ *
+ * Por eso los porcentajes suman 100% DENTRO de cada entidad y no entre todas:
+ * son repartos de ingresos distintos.
+ */
+export function jarrasDe(
+  jars: Jar[],
+  entityId: string | null,
+  porDefecto: string | null = null,
+): Jar[] {
+  const objetivo = entityId ?? porDefecto;
+  return jars.filter((j) => j.entityId === objetivo);
+}
+
+/** Indice por id, para no recorrer la lista en cada movimiento. */
+export const indexarCategorias = (categorias: Category[]): Map<string, Category> =>
+  new Map(categorias.map((c) => [c.id, c]));
+
+export interface ResultadoEntidad {
+  entityId: string | null;
+  ingresoMinor: number;
+  gastoMinor: number;
+  resultadoMinor: number;
+  cantidad: number;
+}
+
+/**
+ * Ingresos menos gastos, por entidad.
+ *
+ * Es la pregunta que la app no podia responder: no "cuanto capital tengo",
+ * sino si el negocio da. Reusa `resumir`, asi que hereda sus reglas: las
+ * transferencias entre cuentas propias y los ajustes de saldo no son ni
+ * ingreso ni gasto.
+ *
+ * La clave null junta lo que todavia no tiene entidad, para que nada
+ * desaparezca del total por estar sin clasificar.
+ */
+export function resultadoPorEntidad(
+  transactions: Transaction[],
+  categorias: Category[],
+): ResultadoEntidad[] {
+  const indice = indexarCategorias(categorias);
+  const grupos = new Map<string | null, Transaction[]>();
+
+  for (const tx of transactions) {
+    const e = entidadDe(tx, indice);
+    grupos.set(e, [...(grupos.get(e) ?? []), tx]);
+  }
+
+  return [...grupos].map(([entityId, movs]) => {
+    const r = resumir(movs);
+    return {
+      entityId,
+      ingresoMinor: r.ingresoMinor,
+      gastoMinor: r.gastoMinor,
+      resultadoMinor: r.flujoMinor,
+      cantidad: r.cantidad,
+    };
+  }).sort((a, b) => Math.abs(b.resultadoMinor) - Math.abs(a.resultadoMinor));
+}
+
+/** Los movimientos de una entidad. `null` devuelve todos. */
+export function filtrarPorEntidad(
+  transactions: Transaction[],
+  categorias: Category[],
+  entityId: string | null,
+): Transaction[] {
+  if (entityId === null) return transactions;
+  const indice = indexarCategorias(categorias);
+  return transactions.filter((tx) => entidadDe(tx, indice) === entityId);
 }
 
 // ---------------------------------------------------------------------------

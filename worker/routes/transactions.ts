@@ -8,7 +8,7 @@
 import type { Sesion } from '../auth.ts';
 import { aTransaction, cuentaPorId, listarCuentas, listarJarras, listarMovimientos, movimientoPorId } from '../db.ts';
 import {
-  imputacionesDe, jarrasParaRepartir, mismoReparto, sentenciasImputacion,
+  ambitoDeReparto, imputacionesDe, mismoReparto, sentenciasImputacion,
 } from '../jarras.ts';
 import type { Env } from '../env.ts';
 import {
@@ -36,6 +36,8 @@ interface Validado {
   notes: string | null;
   date: number;
   paidBy: string | null;
+  /** NULL = la de su categoria. Solo se escribe al corregir uno suelto. */
+  entityId: string | null;
 }
 
 async function validar(
@@ -97,6 +99,13 @@ async function validar(
   const date = entero(body.date, 'date', { min: 0, max: 4_102_444_800_000 });
 
   // Quien hizo el gasto, que puede no ser quien lo esta cargando.
+  const entityId = idOpcional(body.entityId, 'entityId');
+  if (entityId) {
+    const e = await env.DB.prepare('SELECT id FROM entity WHERE id = ?1 AND household_id = ?2')
+      .bind(entityId, householdId).first();
+    if (!e) return error('Esa entidad no existe', 404);
+  }
+
   const paidBy = idOpcional(body.paidBy, 'paidBy');
   if (paidBy) {
     const m = await env.DB.prepare('SELECT id FROM member WHERE id = ?1 AND household_id = ?2')
@@ -106,7 +115,7 @@ async function validar(
 
   return {
     type, amountMinor, accountId, destAccountId, destAmountMinor, categoryId,
-    jarId, distributeToJars, paidBy,
+    jarId, distributeToJars, paidBy, entityId,
     description: texto(body.description ?? '', 'description', { max: 200 }),
     notes: textoOpcional(body.notes, 'notes', 2000),
     date,
@@ -134,7 +143,9 @@ export async function crear(req: Request, env: Env, sesion: Sesion): Promise<Res
   // sean la misma fila, sin parpadeo ni duplicados si se reintenta.
   const id = idOpcional(body.id, 'id') ?? nuevoId();
 
-  const jars = await jarrasParaRepartir(env, sesion.householdId);
+  // Un cobro de un negocio se reparte entre las jarras de ese negocio, no
+  // entre los frascos de la casa. El ambito resuelve de quien es.
+  const ambito = await ambitoDeReparto(env, sesion.householdId);
 
   // El movimiento y su reparto van juntos: si algo falla no queda un ingreso
   // que las jarras no vieron.
@@ -142,14 +153,15 @@ export async function crear(req: Request, env: Env, sesion: Sesion): Promise<Res
     env.DB.prepare(
       `INSERT INTO tx (id, household_id, type, amount_minor, account_id, dest_account_id,
                        dest_amount_minor, category_id, jar_id, distribute_to_jars,
-                       description, notes, date, created_by, paid_by, created_at, updated_at)
-       VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?16)`,
+                       description, notes, date, created_by, paid_by, entity_id,
+                       created_at, updated_at)
+       VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?17)`,
     ).bind(
       id, sesion.householdId, v.type, v.amountMinor, v.accountId, v.destAccountId,
       v.destAmountMinor, v.categoryId, v.jarId, v.distributeToJars ? 1 : 0,
-      v.description, v.notes, v.date, sesion.memberId, v.paidBy, t,
+      v.description, v.notes, v.date, sesion.memberId, v.paidBy, v.entityId, t,
     ),
-    ...sentenciasImputacion(env, sesion.householdId, id, v, jars, t),
+    ...sentenciasImputacion(env, sesion.householdId, id, v, ambito.jarrasPara(v), t),
   ]);
 
   const tx = await movimientoPorId(env, sesion.householdId, id);
@@ -182,12 +194,13 @@ export async function editar(
   const actualizar = env.DB.prepare(
     `UPDATE tx SET type=?1, amount_minor=?2, account_id=?3, dest_account_id=?4,
                    dest_amount_minor=?5, category_id=?6, jar_id=?7, distribute_to_jars=?8,
-                   description=?9, notes=?10, date=?11, paid_by=?12, updated_at=?13
-     WHERE id=?14 AND household_id=?15`,
+                   description=?9, notes=?10, date=?11, paid_by=?12, entity_id=?13,
+                   updated_at=?14
+     WHERE id=?15 AND household_id=?16`,
   ).bind(
     v.type, v.amountMinor, v.accountId, v.destAccountId, v.destAmountMinor,
     v.categoryId, v.jarId, v.distributeToJars ? 1 : 0, v.description, v.notes,
-    v.date, v.paidBy, t, id, sesion.householdId,
+    v.date, v.paidBy, v.entityId, t, id, sesion.householdId,
   );
 
   // Solo se vuelve a congelar si de verdad cambio el reparto. Corregir una
@@ -195,10 +208,10 @@ export async function editar(
   // porcentajes de hoy: eso reescribiria en silencio un reparto viejo.
   const cambio = !mismoReparto(existente, v);
   if (cambio) {
-    const jars = await jarrasParaRepartir(env, sesion.householdId);
+    const ambito = await ambitoDeReparto(env, sesion.householdId);
     await env.DB.batch([
       actualizar,
-      ...sentenciasImputacion(env, sesion.householdId, id, v, jars, t),
+      ...sentenciasImputacion(env, sesion.householdId, id, v, ambito.jarrasPara(v), t),
     ]);
   } else {
     await actualizar.run();
@@ -253,9 +266,9 @@ export async function crearLote(req: Request, env: Env, sesion: Sesion): Promise
   const guardados: Transaction[] = [];
   const rechazados: { indice: number; motivo: string }[] = [];
   const t = ahora();
-  // Una sola lectura de jarras para todo el lote: los porcentajes no cambian
-  // en el medio.
-  const jars = await jarrasParaRepartir(env, sesion.householdId);
+  // Una sola lectura de jarras, categorias y entidades para todo el lote: no
+  // cambian en el medio.
+  const ambito = await ambitoDeReparto(env, sesion.householdId);
 
   for (const [i, item] of items.entries()) {
     if (typeof item !== 'object' || item === null) {
@@ -279,14 +292,15 @@ export async function crearLote(req: Request, env: Env, sesion: Sesion): Promise
       env.DB.prepare(
         `INSERT OR IGNORE INTO tx (id, household_id, type, amount_minor, account_id, dest_account_id,
                         dest_amount_minor, category_id, jar_id, distribute_to_jars,
-                        description, notes, date, created_by, paid_by, created_at, updated_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?16)`,
+                        description, notes, date, created_by, paid_by, entity_id,
+                        created_at, updated_at)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?17)`,
       ).bind(
         id, sesion.householdId, v.type, v.amountMinor, v.accountId, v.destAccountId,
         v.destAmountMinor, v.categoryId, v.jarId, v.distributeToJars ? 1 : 0,
-        v.description, v.notes, v.date, sesion.memberId, v.paidBy, t,
+        v.description, v.notes, v.date, sesion.memberId, v.paidBy, v.entityId, t,
       ),
-      ...sentenciasImputacion(env, sesion.householdId, id, v, jars, t),
+      ...sentenciasImputacion(env, sesion.householdId, id, v, ambito.jarrasPara(v), t),
     ]);
 
     const fila = await env.DB.prepare('SELECT * FROM tx WHERE id = ?1').bind(id).first<Record<string, unknown>>();

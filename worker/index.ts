@@ -13,6 +13,7 @@ import { ErrorValidacion, error, json } from './http.ts';
 import * as auth from './routes/auth.ts';
 import * as data from './routes/data.ts';
 import * as adjustments from './routes/adjustments.ts';
+import * as entities from './routes/entities.ts';
 import * as jarTransfers from './routes/jarTransfers.ts';
 import * as recurring from './routes/recurring.ts';
 import * as tx from './routes/transactions.ts';
@@ -40,6 +41,7 @@ const RUTAS: Record<string, Partial<Record<string, Handler>>> = {
   '/api/adjustments': { GET: adjustments.listar, POST: adjustments.crear },
   '/api/jar-transfers': { GET: jarTransfers.listar, POST: jarTransfers.crear },
   '/api/jars/poner-al-dia': { POST: jarTransfers.ponerAlDia },
+  '/api/entities': { GET: entities.listar, POST: entities.crear },
 };
 
 /** Rutas con un id al final: /api/algo/:id */
@@ -50,6 +52,7 @@ const RUTAS_CON_ID: { prefijo: string; metodos: Partial<Record<string, HandlerCo
   { prefijo: '/api/budgets/', metodos: { DELETE: data.borrarPresupuesto } },
   { prefijo: '/api/recurring/', metodos: { PUT: recurring.editar, DELETE: recurring.borrar } },
   { prefijo: '/api/jar-transfers/', metodos: { DELETE: jarTransfers.borrar } },
+  { prefijo: '/api/entities/', metodos: { PUT: entities.editar, DELETE: entities.borrar } },
 ];
 
 export default {

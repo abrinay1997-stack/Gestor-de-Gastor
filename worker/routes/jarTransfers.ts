@@ -10,7 +10,7 @@ import type { Sesion } from '../auth.ts';
 import {
   aJarTransfer, listarCuentas, listarImputaciones, listarJarras, listarTraspasos,
 } from '../db.ts';
-import { sentenciasImputacion } from '../jarras.ts';
+import { ambitoDeReparto, sentenciasImputacion } from '../jarras.ts';
 import { validarJarras } from '../../shared/domain.ts';
 import { TxType } from '../../shared/types.ts';
 import type { Env } from '../env.ts';
@@ -87,29 +87,28 @@ export async function borrar(
  *
  * Salta los que ya apuntan a una jarra: esos ya tomaron una decision y
  * repartirlos ahora la borraria.
+ *
+ * Cada ingreso cae en las jarras de SU entidad. Un cobro viejo de PanaClaw no
+ * va a los frascos de la casa por el hecho de ser viejo.
  */
 export async function ponerAlDia(_r: Request, env: Env, sesion: Sesion): Promise<Response> {
   const jars = await listarJarras(env, sesion.householdId);
   if (jars.length === 0) return error('No hay jarras configuradas', 400);
 
-  const { ok, sumaBp } = validarJarras(jars);
-  if (!ok) {
-    return error(
-      `Antes de repartir, los porcentajes tienen que sumar 100%. Ahora suman ${(sumaBp / 100).toFixed(2)}%.`,
-      400,
-    );
-  }
+  const ambito = await ambitoDeReparto(env, sesion.householdId);
 
   // Ingresos sin jarra, sin reparto y sin ninguna imputacion escrita.
   const { results } = await env.DB.prepare(
-    `SELECT t.id, t.amount_minor
+    `SELECT t.id, t.amount_minor, t.category_id, t.entity_id
        FROM tx t
       WHERE t.household_id = ?1
         AND t.type = ?2
         AND t.jar_id IS NULL
         AND t.distribute_to_jars = 0
         AND NOT EXISTS (SELECT 1 FROM jar_imputacion i WHERE i.tx_id = t.id)`,
-  ).bind(sesion.householdId, TxType.INGRESO).all<{ id: string; amount_minor: number }>();
+  ).bind(sesion.householdId, TxType.INGRESO).all<{
+    id: string; amount_minor: number; category_id: string | null; entity_id: string | null;
+  }>();
 
   if (results.length === 0) {
     return json({ repartidos: 0, jars });
@@ -117,8 +116,27 @@ export async function ponerAlDia(_r: Request, env: Env, sesion: Sesion): Promise
 
   const t = ahora();
   const sentencias: D1PreparedStatement[] = [];
+  let repartidos = 0;
 
   for (const fila of results) {
+    const suyas = ambito.jarrasPara({
+      entityId: fila.entity_id, categoryId: fila.category_id,
+    });
+    // Sin jarras propias no hay donde ponerlo. Repartirlo en las de otra
+    // entidad seria peor que dejarlo sin asignar, que al menos se ve.
+    if (suyas.length === 0) continue;
+
+    // Los porcentajes tienen que cerrar DENTRO de la entidad. Si los de un
+    // negocio no cierran, se frena todo y se dice cual: repartir a medias
+    // dejaria plata perdida entre el sin asignar y las jarras.
+    const { ok, sumaBp } = validarJarras(suyas);
+    if (!ok) {
+      return error(
+        `Antes de repartir, los porcentajes tienen que sumar 100%. Ahora suman ${(sumaBp / 100).toFixed(2)}%.`,
+        400,
+      );
+    }
+
     sentencias.push(
       env.DB.prepare('UPDATE tx SET distribute_to_jars = 1, updated_at = ?1 WHERE id = ?2')
         .bind(t, fila.id),
@@ -127,9 +145,12 @@ export async function ponerAlDia(_r: Request, env: Env, sesion: Sesion): Promise
         amountMinor: Number(fila.amount_minor),
         distributeToJars: true,
         jarId: null,
-      }, jars, t),
+      }, suyas, t),
     );
+    repartidos += 1;
   }
+
+  if (repartidos === 0) return json({ repartidos: 0, jars });
 
   await env.DB.batch(sentencias);
 
@@ -144,5 +165,5 @@ export async function ponerAlDia(_r: Request, env: Env, sesion: Sesion): Promise
     kind: 'recargar', accounts, jars: jarsNuevas, imputaciones,
   });
 
-  return json({ repartidos: results.length, jars: jarsNuevas });
+  return json({ repartidos, jars: jarsNuevas });
 }

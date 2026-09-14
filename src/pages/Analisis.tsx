@@ -13,9 +13,13 @@ import {
 } from 'recharts';
 import { useStore } from '../store/store.tsx';
 import { formatMonto } from '@shared/money';
-import { balancePorMes, claveMes, porCategoria, porPersona, resumir, transaccionesDelMes } from '@shared/domain';
-import { moverMes, nombreMes } from '../lib/utils.ts';
-import { Icono, Tarjeta, Vacio } from '../components/ui/base.tsx';
+import {
+  balancePorMes, claveMes, filtrarPorEntidad, porCategoria, porPersona,
+  resultadoPorEntidad, resumir, transaccionesDelMes,
+} from '@shared/domain';
+import { cn, moverMes, nombreMes } from '../lib/utils.ts';
+import { Ficha, Icono, Tarjeta, Vacio } from '../components/ui/base.tsx';
+import { SelectorEntidad } from '../components/ui/entidad.tsx';
 import { decimalesDe } from '@shared/money';
 
 /**
@@ -28,11 +32,20 @@ const formatearEje = (v: unknown, moneda: string, decimales: number): string => 
 };
 
 export function Analisis() {
-  const { transactions, categories, members, household } = useStore();
+  const {
+    transactions: todos, categories, entities, entidadActiva, members, household,
+  } = useStore();
   const moneda = household?.currency ?? 'USD';
   const decimales = decimalesDe(moneda);
 
   const [mes, setMes] = useState(() => claveMes(Date.now()));
+
+  // Todo lo de abajo respeta la entidad elegida. En "Todo" no filtra nada,
+  // que es la vista consolidada.
+  const transactions = useMemo(
+    () => filtrarPorEntidad(todos, categories, entidadActiva),
+    [todos, categories, entidadActiva],
+  );
 
   const delMes = useMemo(() => transaccionesDelMes(transactions, mes), [transactions, mes]);
   const resumen = useMemo(() => resumir(delMes), [delMes]);
@@ -91,8 +104,25 @@ export function Analisis() {
 
   const hayDatos = delMes.length > 0;
 
+  /**
+   * Ingresos menos gastos, por economia, en el mes que se esta mirando.
+   *
+   * Es la pregunta que la app no podia responder: no cuanto capital hay, sino
+   * si el negocio da. Solo aparece en la vista consolidada, porque dentro de
+   * una entidad ya lo dice el resumen de arriba.
+   */
+  const porEntidad = useMemo(() => {
+    if (entidadActiva !== null) return [];
+    const nombres = new Map(entities.map((e) => [e.id, e]));
+    return resultadoPorEntidad(transaccionesDelMes(todos, mes), categories)
+      .filter((r) => r.cantidad > 0)
+      .map((r) => ({ ...r, entidad: r.entityId ? nombres.get(r.entityId) : undefined }));
+  }, [entidadActiva, entities, todos, categories, mes]);
+
   return (
     <div className="space-y-4">
+      <SelectorEntidad />
+
       <div className="flex items-center justify-between">
         <button
           onClick={() => setMes(moverMes(mes, -1))}
@@ -111,6 +141,42 @@ export function Analisis() {
           <Icono nombre="chevron-right" size={19} />
         </button>
       </div>
+
+      {porEntidad.length > 1 && (
+        <Tarjeta>
+          <p className="text-xs txt-2 mb-3">Resultado por economía</p>
+          <div className="space-y-2.5">
+            {porEntidad.map((r) => (
+              <div key={r.entityId ?? 'sin'} className="flex items-center gap-3">
+                <Ficha
+                  color={r.entidad?.color ?? '#64748b'}
+                  icono={r.entidad?.icon ?? 'circle-help'}
+                  size={36}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium txt truncate">
+                    {r.entidad?.name ?? 'Sin clasificar'}
+                  </p>
+                  <p className="text-xs txt-3 tabular">
+                    {formatMonto(r.ingresoMinor, moneda, { compacto: true })} entró ·{' '}
+                    {formatMonto(r.gastoMinor, moneda, { compacto: true })} salió
+                  </p>
+                </div>
+                <p className={cn(
+                  'text-base font-semibold tabular shrink-0',
+                  r.resultadoMinor < 0 ? 'text-red-500' : 'text-marca-600 dark:text-marca-500',
+                )}>
+                  {r.resultadoMinor > 0 ? '+' : ''}{formatMonto(r.resultadoMinor, moneda)}
+                </p>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] txt-3 mt-3 leading-relaxed">
+            La entidad sale de la categoría de cada movimiento. Los que no tienen
+            categoría quedan en «Sin clasificar».
+          </p>
+        </Tarjeta>
+      )}
 
       {!hayDatos ? (
         <Tarjeta>

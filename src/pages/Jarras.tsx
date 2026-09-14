@@ -10,25 +10,67 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store/store.tsx';
 import { formatBp, formatMonto, montoPlano, parseMonto } from '@shared/money';
-import { flujoDeJarras, sinAsignar, validarJarras } from '@shared/domain';
+import {
+  entidadDe, entidadPorDefecto, flujoDeJarras, indexarCategorias, jarrasDe, sinAsignar,
+  validarJarras,
+} from '@shared/domain';
 import { describirPeriodo, periodoMes, type Periodo } from '@shared/periodo';
-import type { Jar, Transaction } from '@shared/types';
+import type { Entity, Jar, Transaction } from '@shared/types';
 import { FilaMovimiento } from './Inicio.tsx';
 import {
   Barra, Boton, Campo, Ficha, Hoja, Icono, Selector, Tarjeta, Vacio,
 } from '../components/ui/base.tsx';
 import { SelectorPeriodo } from '../components/ui/periodo.tsx';
+import { SelectorEntidad } from '../components/ui/entidad.tsx';
 import { cn } from '../lib/utils.ts';
 
 
 const COLORES = ['#3b82f6', '#10b981', '#8b5cf6', '#ec4899', '#f59e0b', '#f43f5e', '#06b6d4', '#64748b'];
 
+/** Como se llena la jarra, en una linea. */
+function describirLlenado(j: Jar, moneda: string): string {
+  if (j.fillKind === 'resto') return 'lo que sobre de cada ingreso';
+  if (j.fillKind === 'fijo') return `${formatMonto(j.fillMinor ?? 0, moneda)} de cada ingreso`;
+  return `${formatBp(j.percentageBp)} de cada ingreso`;
+}
+
 export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction) => void }) {
   const {
-    jars, accounts, imputaciones, jarTransfers, transactions, household,
-    guardarJarras, ponerJarrasAlDia, avisar,
+    jars, accounts, imputaciones, jarTransfers, transactions, categories, entities,
+    entidadActiva, household, guardarJarras, ponerJarrasAlDia, avisar,
   } = useStore();
   const moneda = household?.currency ?? 'USD';
+
+  // La casa reparte en frascos y cada negocio en los suyos. En "Todo" se ven
+  // todas juntas, que es la unica vista que cuadra contra las cuentas: la
+  // plata esta mezclada en las mismas cuentas aunque los sobres sean de
+  // dueños distintos.
+  const porDefecto = useMemo(() => entidadPorDefecto(entities), [entities]);
+  const visibles = useMemo(
+    () => (entidadActiva === null ? jars : jars.filter((j) => j.entityId === entidadActiva)),
+    [jars, entidadActiva],
+  );
+
+  const nombreActiva = entities.find((e) => e.id === entidadActiva)?.name ?? '';
+
+  // En "Todo" con mas de una economia, cada tanda lleva su titulo: seis
+  // frascos de la casa y tres de un negocio en una sola lista corrida no se
+  // entienden, y los porcentajes de cada tanda suman 100% por separado.
+  const grupos = useMemo((): { entidad: Entity | null; jarras: Jar[] }[] => {
+    if (entidadActiva !== null) return [{ entidad: null, jarras: visibles }];
+
+    const porEntidad = new Map<string, Jar[]>();
+    for (const j of visibles) {
+      const clave = j.entityId ?? '';
+      porEntidad.set(clave, [...(porEntidad.get(clave) ?? []), j]);
+    }
+    if (porEntidad.size < 2) return [{ entidad: null, jarras: visibles }];
+
+    const porId = new Map(entities.map((e) => [e.id, e]));
+    return [...porEntidad]
+      .map(([clave, jarras]) => ({ entidad: porId.get(clave) ?? null, jarras }))
+      .sort((a, b) => (a.entidad?.displayOrder ?? 999) - (b.entidad?.displayOrder ?? 999));
+  }, [visibles, entities, entidadActiva]);
 
   const [editando, setEditando] = useState(false);
   const [abierta, setAbierta] = useState<Jar | null>(null);
@@ -55,22 +97,34 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
     [jars, imputaciones, jarTransfers],
   );
 
-  const total = useMemo(() => jars.reduce((s, j) => s + j.balanceMinor, 0), [jars]);
+  // El total de la vista, y el sin asignar contra TODAS las jarras: la resta
+  // es entre las cuentas del hogar y todo lo que ya tiene dueño, mire uno lo
+  // que mire.
+  const total = useMemo(() => visibles.reduce((s, j) => s + j.balanceMinor, 0), [visibles]);
   const saldosVida = useMemo(
     () => new Map(jars.map((j) => [j.id, j.balanceMinor])),
     [jars],
   );
   const libre = useMemo(() => sinAsignar(accounts, saldosVida), [accounts, saldosVida]);
-  const enCuentas = total + libre;
+  const enCuentas = useMemo(
+    () => jars.reduce((s, j) => s + j.balanceMinor, 0) + libre,
+    [jars, libre],
+  );
 
   // Ingresos que nunca llegaron a ninguna jarra. Hasta ahora repartir era un
   // interruptor apagado por defecto y no se encendio nunca.
   const huerfanos = useMemo(() => {
     const conImputacion = new Set(imputaciones.map((i) => i.txId));
-    return transactions.filter(
-      (t) => t.type === 2 && !t.jarId && !t.distributeToJars && !conImputacion.has(t.id),
-    );
-  }, [transactions, imputaciones]);
+    const indice = indexarCategorias(categories);
+    return transactions.filter((t) => {
+      if (t.type !== 2 || t.jarId || t.distributeToJars || conImputacion.has(t.id)) return false;
+      // Sin jarras propias no hay donde repartirlo: ofrecerlo seria un boton
+      // que no hace nada. El servidor lo saltea igual.
+      const suyas = jarrasDe(jars, entidadDe(t, indice), porDefecto);
+      if (suyas.length === 0) return false;
+      return entidadActiva === null || suyas[0].entityId === entidadActiva;
+    });
+  }, [transactions, imputaciones, categories, jars, porDefecto, entidadActiva]);
 
   async function alDia() {
     setPoniendoAlDia(true);
@@ -86,6 +140,8 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
 
   return (
     <div className="space-y-4">
+      <SelectorEntidad />
+
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold txt tracking-tight">Jarras</h1>
         {jars.length > 0 && (
@@ -100,12 +156,14 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
         )}
       </div>
 
-      {jars.length === 0 ? (
+      {visibles.length === 0 ? (
         <Tarjeta>
           <Vacio
             icono="piggy-bank"
-            titulo="Sin jarras"
-            texto="Repartí cada ingreso en frascos con un propósito: necesidades, ahorro, diversión. Te da control sin llevar la cuenta a mano."
+            titulo={entidadActiva === null ? 'Sin jarras' : 'Todavía no reparte'}
+            texto={entidadActiva === null
+              ? 'Repartí cada ingreso en frascos con un propósito: necesidades, ahorro, diversión. Te da control sin llevar la cuenta a mano.'
+              : 'Esta economía todavía no tiene jarras. Un negocio suele querer separar impuestos, insumos y publicidad de cada cobro, antes de que la plata se mezcle.'}
             accion={<Boton onClick={() => setEditando(true)}>Crear jarras</Boton>}
           />
         </Tarjeta>
@@ -116,7 +174,9 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
           <Tarjeta>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <p className="text-xs txt-2 mb-1">En jarras</p>
+                <p className="text-xs txt-2 mb-1">
+                  {entidadActiva === null ? 'En jarras' : `En jarras de ${nombreActiva}`}
+                </p>
                 <p className="text-2xl font-bold tabular tracking-tight txt">
                   {formatMonto(total, moneda)}
                 </p>
@@ -134,14 +194,22 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
             <p className="text-xs txt-3 mt-3 leading-relaxed">
               {libre < 0 ? (
                 <>
-                  Las jarras tienen asignado más de lo que hay en las cuentas
+                  {/* El sin asignar es del hogar entero, siempre. Mirando una
+                      economia sola, decir "las jarras" a secas haria pensar
+                      que el rojo es de este negocio. */}
+                  {entidadActiva === null ? 'Las jarras' : 'Todas las jarras juntas'} tienen
+                  asignado más de lo que hay en las cuentas
                   ({formatMonto(enCuentas, moneda)}). Movés plata entre jarras o
                   ajustás un saldo de cuenta.
                 </>
               ) : (
                 <>
-                  Suman {formatMonto(enCuentas, moneda)}, que es exactamente lo que
-                  hay en las cuentas.
+                  {/* Las cuentas no estan separadas por economia, asi que el
+                      sin asignar siempre es del hogar entero. Decirlo evita
+                      que se lea como plata libre de este negocio. */}
+                  {entidadActiva === null
+                    ? <>Suman {formatMonto(enCuentas, moneda)}, que es exactamente lo que hay en las cuentas.</>
+                    : <>Todas las jarras juntas y lo sin asignar suman {formatMonto(enCuentas, moneda)}, que es lo que hay en las cuentas. Las cuentas no están separadas por economía.</>}
                   {libre > 0 && ' Lo de la derecha todavía no tiene trabajo asignado.'}
                 </>
               )}
@@ -168,8 +236,17 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
 
           <SelectorPeriodo periodo={periodo} alCambiar={setPeriodo} />
 
-          <div className="space-y-2.5">
-            {jars.map((j) => {
+          {grupos.map((g) => (
+          <div key={g.entidad?.id ?? 'todas'} className="space-y-2.5">
+            {g.entidad && (
+              <div className="flex items-center gap-2 pt-1" style={{ color: g.entidad.color }}>
+                <Icono nombre={g.entidad.icon} size={15} />
+                <span className="text-xs font-semibold uppercase tracking-wide">
+                  {g.entidad.name}
+                </span>
+              </div>
+            )}
+            {g.jarras.map((j) => {
               const f = flujo.get(j.id) ?? { entroMinor: 0, salioMinor: 0 };
               const vida = flujoVida.get(j.id) ?? { entroMinor: 0, salioMinor: 0 };
               const enRojo = j.balanceMinor < 0;
@@ -190,7 +267,7 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
                     <div className="flex-1 min-w-0">
                       <p className="font-medium txt truncate">{j.name}</p>
                       <p className="text-xs txt-3">
-                        {formatBp(j.percentageBp)} de cada ingreso
+                        {describirLlenado(j, moneda)}
                         {j.acumula && ' · acumula'}
                       </p>
                     </div>
@@ -229,6 +306,7 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
               );
             })}
           </div>
+          ))}
 
           <p className="text-xs txt-3 text-center px-4 leading-relaxed">
             Al registrar un ingreso, marcá "Repartir entre las jarras" y el
@@ -273,7 +351,7 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
 function HojaTraspaso({ abierta, alCerrar, desde }: {
   abierta: boolean; alCerrar: () => void; desde?: string;
 }) {
-  const { jars, household, traspasarEntreJarras, avisar } = useStore();
+  const { jars: todas, entities, entidadActiva, household, traspasarEntreJarras, avisar } = useStore();
   const moneda = household?.currency ?? 'USD';
 
   const [origen, setOrigen] = useState('');
@@ -281,6 +359,25 @@ function HojaTraspaso({ abierta, alCerrar, desde }: {
   const [montoTexto, setMontoTexto] = useState('');
   const [nota, setNota] = useState('');
   const [guardando, setGuardando] = useState(false);
+
+  // Un traspaso re-etiqueta plata dentro de una misma economia. Sacar de los
+  // impuestos de PanaClaw para tapar la comida de la casa no es mover un
+  // sobre: es que el negocio le paso plata a la casa, y eso es un movimiento
+  // con su fecha y su monto, no un ajuste silencioso.
+  const jars = useMemo(() => {
+    const ancla = todas.find((j) => j.id === (desde ?? origen));
+    const entidad = ancla?.entityId ?? entidadActiva ?? null;
+    if (entidad === null) return todas;
+    return todas.filter((j) => j.entityId === entidad);
+  }, [todas, desde, origen, entidadActiva]);
+
+  const variasEconomias = useMemo(
+    () => new Set(todas.map((j) => j.entityId ?? '')).size > 1,
+    [todas],
+  );
+  const nombreAmbito = entities.find(
+    (e) => e.id === todas.find((j) => j.id === origen)?.entityId,
+  )?.name;
 
   useEffect(() => {
     if (!abierta) return;
@@ -292,7 +389,9 @@ function HojaTraspaso({ abierta, alCerrar, desde }: {
     setDestino(enRojo && enRojo.id !== (desde ?? conMas?.id) ? enRojo.id : '');
     setMontoTexto(enRojo ? montoPlano(-enRojo.balanceMinor, moneda) : '');
     setNota('');
-  }, [abierta, desde, jars, moneda]);
+    // Solo al abrir: recalcular con cada tecla pisaria lo que se esta eligiendo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abierta, desde, moneda]);
 
   const monto = parseMonto(montoTexto, moneda);
   const jarraOrigen = jars.find((j) => j.id === origen);
@@ -322,6 +421,8 @@ function HojaTraspaso({ abierta, alCerrar, desde }: {
         <p className="text-xs txt-3 leading-relaxed">
           No se mueve plata de ninguna cuenta. Solo cambia para qué está
           guardada.
+          {variasEconomias && nombreAmbito
+            && ` Se mueve entre las jarras de ${nombreAmbito}: pasar plata de una economía a otra es un movimiento, no un traspaso.`}
         </p>
 
         <Selector etiqueta="De" value={origen} onChange={(e) => setOrigen(e.target.value)}>
@@ -417,7 +518,7 @@ function MovimientosDeJarra({ jarra, alCerrar, alVerMovimiento }: {
           )}>
             {formatMonto(jarra.balanceMinor, moneda)}
           </p>
-          <p className="text-xs txt-3 mt-1">{formatBp(jarra.percentageBp)} de cada ingreso</p>
+          <p className="text-xs txt-3 mt-1">{describirLlenado(jarra, moneda)}</p>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -475,42 +576,75 @@ interface Borrador {
   color: string;
   icon: string;
   acumula: boolean;
+  fillKind: 'porcentaje' | 'fijo' | 'resto';
+  fillMinor: number | null;
 }
+
+/** Los seis frascos de siempre, para una economia personal que arranca. */
+const FRASCOS_CASA: Omit<Borrador, 'id'>[] = [
+  { name: 'Necesidades', percentageBp: 5500, color: '#3b82f6', icon: 'house', acumula: false, fillKind: 'porcentaje', fillMinor: null },
+  { name: 'Ahorro largo plazo', percentageBp: 1000, color: '#10b981', icon: 'piggy-bank', acumula: true, fillKind: 'porcentaje', fillMinor: null },
+  { name: 'Educación', percentageBp: 1000, color: '#8b5cf6', icon: 'graduation-cap', acumula: false, fillKind: 'porcentaje', fillMinor: null },
+  { name: 'Diversión', percentageBp: 1000, color: '#ec4899', icon: 'party-popper', acumula: false, fillKind: 'porcentaje', fillMinor: null },
+  { name: 'Libertad financiera', percentageBp: 1000, color: '#f59e0b', icon: 'trending-up', acumula: true, fillKind: 'porcentaje', fillMinor: null },
+  { name: 'Donaciones', percentageBp: 500, color: '#f43f5e', icon: 'heart-handshake', acumula: false, fillKind: 'porcentaje', fillMinor: null },
+];
+
+/**
+ * Lo que un negocio suele querer apartar de cada cobro antes de que la plata
+ * se mezcle. La ultima es de resto, asi que la suma cierra sola y el cobro
+ * puede ser de $50 o de $5.000 sin tocar nada.
+ */
+const FRASCOS_NEGOCIO: Omit<Borrador, 'id'>[] = [
+  { name: 'Impuestos', percentageBp: 2000, color: '#f43f5e', icon: 'landmark', acumula: true, fillKind: 'porcentaje', fillMinor: null },
+  { name: 'Insumos', percentageBp: 1000, color: '#f59e0b', icon: 'package', acumula: false, fillKind: 'porcentaje', fillMinor: null },
+  { name: 'Publicidad', percentageBp: 1000, color: '#8b5cf6', icon: 'megaphone', acumula: false, fillKind: 'porcentaje', fillMinor: null },
+  { name: 'Para repartir', percentageBp: 0, color: '#10b981', icon: 'hand-coins', acumula: true, fillKind: 'resto', fillMinor: null },
+];
 
 function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
   abierta: boolean;
   alCerrar: () => void;
   jarras: Jar[];
-  alGuardar: (jars: Borrador[]) => Promise<void>;
+  alGuardar: (jars: Partial<Jar>[]) => Promise<void>;
 }) {
+  const { entities, entidadActiva, household } = useStore();
+  const moneda = household?.currency ?? 'USD';
+
+  const economias = useMemo(() => entities.filter((e) => !e.archived), [entities]);
+  const porDefecto = useMemo(() => entidadPorDefecto(entities), [entities]);
+
+  // Se edita UNA economia por vez. Los porcentajes suman 100% dentro de cada
+  // una, asi que mezclarlas en una sola lista mostraria un 200% que no
+  // significa nada.
+  const [entidad, setEntidad] = useState<string | null>(null);
   const [borradores, setBorradores] = useState<Borrador[]>([]);
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
     if (!abierta) return;
+    setEntidad(entidadActiva ?? porDefecto);
+  }, [abierta, entidadActiva, porDefecto]);
+
+  useEffect(() => {
+    if (!abierta) return;
+    const suyas = jarras.filter((j) => j.entityId === entidad);
+    const clase = economias.find((e) => e.id === entidad)?.kind;
     setBorradores(
-      jarras.length > 0
-        ? jarras.map((j) => ({
+      suyas.length > 0
+        ? suyas.map((j) => ({
           id: j.id, name: j.name, percentageBp: j.percentageBp, color: j.color,
-          icon: j.icon, acumula: j.acumula,
+          icon: j.icon, acumula: j.acumula, fillKind: j.fillKind, fillMinor: j.fillMinor,
         }))
-        : [
-          { name: 'Necesidades', percentageBp: 5500, color: '#3b82f6', icon: 'house', acumula: false },
-          { name: 'Ahorro largo plazo', percentageBp: 1000, color: '#10b981', icon: 'piggy-bank', acumula: true },
-          { name: 'Educación', percentageBp: 1000, color: '#8b5cf6', icon: 'graduation-cap', acumula: false },
-          { name: 'Diversión', percentageBp: 1000, color: '#ec4899', icon: 'party-popper', acumula: false },
-          { name: 'Libertad financiera', percentageBp: 1000, color: '#f59e0b', icon: 'trending-up', acumula: true },
-          { name: 'Donaciones', percentageBp: 500, color: '#f43f5e', icon: 'heart-handshake', acumula: false },
-        ],
+        : (clase === 'negocio' ? FRASCOS_NEGOCIO : FRASCOS_CASA).map((b) => ({ ...b })),
     );
-  }, [abierta, jarras]);
+  }, [abierta, jarras, entidad, economias]);
 
   const sumaBp = borradores.reduce((s, b) => s + b.percentageBp, 0);
-  const { ok } = validarJarras(
-    borradores.map((b) => ({ ...b, percentageBp: b.percentageBp } as Jar)),
-  );
+  const { ok, motivo } = validarJarras(borradores as Jar[]);
+  const hayResto = borradores.some((b) => b.fillKind === 'resto');
 
-  const cambiar = (i: number, campo: keyof Borrador, valor: string | number | boolean) => {
+  const cambiar = (i: number, campo: keyof Borrador, valor: string | number | boolean | null) => {
     setBorradores((prev) => prev.map((b, k) => (k === i ? { ...b, [campo]: valor } : b)));
   };
 
@@ -520,19 +654,25 @@ function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
    * el numero cierre.
    */
   const emparejar = () => {
-    if (borradores.length === 0) return;
+    // Solo se reparten las de porcentaje: una jarra fija o de resto no tiene
+    // porcentaje que ajustar.
+    const indices = borradores
+      .map((b, i) => (b.fillKind === 'porcentaje' ? i : -1))
+      .filter((i) => i >= 0);
+    if (indices.length === 0) return;
+
     const objetivo = 10_000;
-    const actual = sumaBp || 1;
+    const actual = indices.reduce((t, i) => t + borradores[i].percentageBp, 0) || 1;
 
     let acumulado = 0;
-    const ajustadas = borradores.map((b, i) => {
-      if (i === borradores.length - 1) {
+    const ajustadas = [...borradores];
+    indices.forEach((idx, k) => {
+      const nuevo = k === indices.length - 1
         // La ultima se lleva exactamente lo que falta: la suma cierra siempre.
-        return { ...b, percentageBp: objetivo - acumulado };
-      }
-      const nuevo = Math.round((b.percentageBp / actual) * objetivo);
+        ? objetivo - acumulado
+        : Math.round((borradores[idx].percentageBp / actual) * objetivo);
       acumulado += nuevo;
-      return { ...b, percentageBp: nuevo };
+      ajustadas[idx] = { ...ajustadas[idx], percentageBp: nuevo };
     });
 
     setBorradores(ajustadas);
@@ -541,21 +681,49 @@ function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
   return (
     <Hoja abierta={abierta} alCerrar={alCerrar} titulo="Ajustar jarras">
       <div className="space-y-3">
+        {economias.length > 1 && (
+          <>
+            <Selector
+              etiqueta="Economía"
+              value={entidad ?? ''}
+              onChange={(e) => setEntidad(e.target.value || null)}
+            >
+              {economias.map((e) => (
+                <option key={e.id} value={e.id}>{e.name}</option>
+              ))}
+            </Selector>
+            <p className="text-xs txt-3 -mt-1 px-1 leading-relaxed">
+              Cada economía reparte sus propios ingresos. Los porcentajes suman
+              100% acá adentro, no entre todas.
+            </p>
+          </>
+        )}
+
         <div className={cn(
           'rounded-2xl p-3.5 text-sm flex items-center gap-2.5',
           ok ? 'bg-marca-50 text-marca-700 dark:bg-marca-500/10 dark:text-marca-500' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-500',
         )}>
           <Icono nombre={ok ? 'circle-check' : 'triangle-alert'} size={17} />
           <span className="flex-1">
-            Suman {(sumaBp / 100).toFixed(2)}%
-            {!ok && ' · tienen que sumar 100%'}
+            {/* Con una jarra de resto la suma no tiene que dar 100%: lo que
+                falte lo absorbe ella. Decir "suman 40%" ahi asustaria sin
+                motivo. */}
+            {hayResto
+              ? <>Los porcentajes suman {(sumaBp / 100).toFixed(2)}% · el resto va a la última</>
+              : <>Suman {(sumaBp / 100).toFixed(2)}%{!ok && ' · tienen que sumar 100%'}</>}
           </span>
-          {!ok && (
+          {!ok && !hayResto && (
             <button onClick={emparejar} className="font-medium underline shrink-0">
               Emparejar
             </button>
           )}
         </div>
+
+        {!ok && motivo && (
+          <p className="text-xs text-amber-700 dark:text-amber-500 px-1 leading-relaxed">
+            {motivo}
+          </p>
+        )}
 
         {borradores.map((b, i) => (
           <div key={b.id ?? `nueva-${i}`} className="superficie-2 rounded-2xl p-3 space-y-3">
@@ -576,21 +744,77 @@ function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
               </button>
             </div>
 
-            <div className="flex items-center gap-3">
-              <input
-                type="range"
-                min={0}
-                max={10000}
-                step={50}
-                value={b.percentageBp}
-                onChange={(e) => cambiar(i, 'percentageBp', Number(e.target.value))}
-                className="flex-1 accent-marca-600"
-                aria-label={`Porcentaje de ${b.name}`}
-              />
-              <span className="text-sm font-semibold tabular txt w-16 text-right shrink-0">
-                {formatBp(b.percentageBp)}
-              </span>
+            {/* Como se llena. Un frasco de la casa va por porcentaje porque el
+                sueldo es parejo; un cobro de agencia va de $50 a $5.000 y ahi
+                "$100 de publicidad" dice mas que un 3%. */}
+            <div className="flex gap-1.5">
+              {([
+                ['porcentaje', '%'],
+                ['fijo', 'Monto fijo'],
+                ['resto', 'Lo que sobre'],
+              ] as const).map(([clase, etiqueta]) => (
+                <button
+                  key={clase}
+                  onClick={() => {
+                    cambiar(i, 'fillKind', clase);
+                    // Solo una jarra puede quedarse con el resto: dos se lo
+                    // repartirian sin ninguna regla.
+                    if (clase === 'resto') {
+                      setBorradores((prev) => prev.map((o, k) => (
+                        k !== i && o.fillKind === 'resto'
+                          ? { ...o, fillKind: 'porcentaje' as const }
+                          : o
+                      )));
+                    }
+                  }}
+                  className={cn(
+                    'flex-1 min-h-9 rounded-xl text-xs font-medium border transition-colors',
+                    b.fillKind === clase
+                      ? 'bg-marca-600 text-white border-transparent'
+                      : 'superficie borde txt-2',
+                  )}
+                >
+                  {etiqueta}
+                </button>
+              ))}
             </div>
+
+            {b.fillKind === 'porcentaje' && (
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={0}
+                  max={10000}
+                  step={50}
+                  value={b.percentageBp}
+                  onChange={(e) => cambiar(i, 'percentageBp', Number(e.target.value))}
+                  className="flex-1 accent-marca-600"
+                  aria-label={`Porcentaje de ${b.name}`}
+                />
+                <span className="text-sm font-semibold tabular txt w-16 text-right shrink-0">
+                  {formatBp(b.percentageBp)}
+                </span>
+              </div>
+            )}
+
+            {b.fillKind === 'fijo' && (
+              <Campo
+                etiqueta="Monto de cada ingreso"
+                value={b.fillMinor === null ? '' : montoPlano(b.fillMinor, moneda)}
+                onChange={(e) => cambiar(
+                  i, 'fillMinor', parseMonto(e.target.value, moneda),
+                )}
+                placeholder="0.00"
+                inputMode="decimal"
+              />
+            )}
+
+            {b.fillKind === 'resto' && (
+              <p className="text-xs txt-3 px-1 leading-relaxed">
+                Se lleva lo que quede después de las demás, y absorbe el
+                redondeo. Así la suma cierra al centavo cobre lo que cobre.
+              </p>
+            )}
 
             <div className="flex gap-1.5 flex-wrap">
               {COLORES.map((c) => (
@@ -632,7 +856,7 @@ function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
           variante="secundario"
           onClick={() => setBorradores((p) => [...p, {
             name: 'Nueva jarra', percentageBp: 0, color: COLORES[p.length % COLORES.length],
-            icon: 'piggy-bank', acumula: false,
+            icon: 'piggy-bank', acumula: false, fillKind: 'porcentaje', fillMinor: null,
           }])}
           className="w-full"
         >
@@ -644,7 +868,20 @@ function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
           <Boton
             onClick={async () => {
               setGuardando(true);
-              await alGuardar(borradores.filter((b) => b.name.trim() !== ''));
+              // El PUT recibe la lista COMPLETA y borra lo que no venga, asi
+              // que las jarras de las otras economias viajan intactas. Sin
+              // esto, ajustar los frascos de la casa borraria los del negocio.
+              const otras = jarras
+                .filter((j) => j.entityId !== entidad)
+                .map((j) => ({
+                  id: j.id, name: j.name, percentageBp: j.percentageBp, color: j.color,
+                  icon: j.icon, acumula: j.acumula, entityId: j.entityId,
+                  fillKind: j.fillKind, fillMinor: j.fillMinor,
+                }));
+              const propias = borradores
+                .filter((b) => b.name.trim() !== '')
+                .map((b) => ({ ...b, entityId: entidad }));
+              await alGuardar([...otras, ...propias]);
               setGuardando(false);
             }}
             disabled={!ok || guardando}
@@ -654,7 +891,7 @@ function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
           </Boton>
         </div>
 
-        {!ok && (
+        {!ok && !motivo && (
           <p className="text-xs txt-3 text-center">
             Los porcentajes deben sumar 100% para poder repartir un ingreso.
           </p>

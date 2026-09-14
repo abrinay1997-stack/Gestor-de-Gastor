@@ -19,8 +19,8 @@ import { api, ApiError } from '../api/client.ts';
 import { live, type EstadoLive } from '../api/live.ts';
 import { calcularJarras, calcularSaldos } from '@shared/domain';
 import type {
-  Account, Budget, Category, Jar, JarImputacion, JarTransfer, LiveEvent, Member,
-  Recurring, SeccionInicio, Snapshot, Transaction, TransactionInput,
+  Account, Budget, Category, Entity, Jar, JarImputacion, JarTransfer, LiveEvent,
+  Member, Recurring, SeccionInicio, Snapshot, Transaction, TransactionInput,
 } from '@shared/types';
 
 const CLAVE_COLA = 'gg_cola_v1';
@@ -34,6 +34,13 @@ interface Estado {
   household: Snapshot['household'] | null;
   accounts: Account[];
   categories: Category[];
+  entities: Entity[];
+  /**
+   * Que economia se esta mirando. null = todo junto, con etiquetas.
+   * Vive en el estado y no en la URL porque se cambia decenas de veces por
+   * sesion y no tiene sentido llenar el historial del navegador con eso.
+   */
+  entidadActiva: string | null;
   jars: Jar[];
   budgets: Budget[];
   transactions: Transaction[];
@@ -52,7 +59,8 @@ interface Estado {
 
 const inicial: Estado = {
   cargando: true, autenticado: false, instalado: true, me: null, members: [],
-  household: null, accounts: [], categories: [], jars: [], budgets: [],
+  household: null, accounts: [], categories: [], entities: [], entidadActiva: null,
+  jars: [], budgets: [],
   transactions: [], recurring: [], imputaciones: [], jarTransfers: [],
   enVuelo: new Set(), cola: [], online: [],
   estadoLive: 'desconectado', aviso: null,
@@ -69,6 +77,10 @@ type Accion =
   | { t: 'account:upsert'; account: Account }
   | { t: 'account:delete'; id: string }
   | { t: 'category:upsert'; category: Category }
+  | { t: 'entities'; entities: Entity[] }
+  | { t: 'entity:upsert'; entity: Entity }
+  | { t: 'entity:delete'; id: string }
+  | { t: 'entidadActiva'; id: string | null }
   | { t: 'jars'; jars: Jar[] }
   | { t: 'jar:upsert'; jar: Jar }
   | { t: 'budget:upsert'; budget: Budget }
@@ -104,6 +116,7 @@ function reducer(s: Estado, a: Accion): Estado {
         ...s, cargando: false, autenticado: true, instalado: true,
         me: a.snap.me, members: a.snap.members, household: a.snap.household,
         accounts: a.snap.accounts, categories: a.snap.categories,
+        entities: a.snap.entities,
         jars: a.snap.jars, budgets: a.snap.budgets, recurring: a.snap.recurring,
         transactions: ordenar(a.snap.transactions),
         imputaciones: a.snap.imputaciones, jarTransfers: a.snap.jarTransfers,
@@ -170,6 +183,29 @@ function reducer(s: Estado, a: Accion): Estado {
         ),
       };
     }
+
+    case 'entities':
+      return { ...s, entities: a.entities };
+
+    case 'entity:upsert': {
+      const resto = s.entities.filter((e) => e.id !== a.entity.id);
+      return {
+        ...s,
+        entities: [...resto, a.entity].sort((x, y) => x.displayOrder - y.displayOrder),
+      };
+    }
+
+    case 'entity:delete':
+      return {
+        ...s,
+        entities: s.entities.filter((e) => e.id !== a.id),
+        // Si estabas mirando la que se fue, se vuelve al consolidado en vez de
+        // dejar la pantalla filtrando por algo que ya no existe.
+        entidadActiva: s.entidadActiva === a.id ? null : s.entidadActiva,
+      };
+
+    case 'entidadActiva':
+      return { ...s, entidadActiva: a.id };
 
     case 'jars':
       return { ...s, jars: a.jars };
@@ -275,6 +311,9 @@ interface Acciones {
   archivarCuenta: (id: string) => Promise<void>;
   ajustarSaldo: (id: string, saldoMinor: number, nota?: string) => Promise<void>;
   guardarCategoria: (c: Partial<Category>, id?: string) => Promise<void>;
+  guardarEntidad: (e: Partial<Entity>, id?: string) => Promise<void>;
+  archivarEntidad: (id: string) => Promise<void>;
+  verEntidad: (id: string | null) => void;
   guardarJarras: (jars: Partial<Jar>[]) => Promise<void>;
   traspasarEntreJarras: (d: {
     fromJarId: string; toJarId: string; amountMinor: number; note?: string;
@@ -380,6 +419,8 @@ export function Store({ children }: { children: ReactNode }) {
         // cambio de jarra hasta recargar: ni un porcentaje, ni un nombre.
         case 'jar:upsert': dispatch({ t: 'jar:upsert', jar: ev.jar }); break;
         case 'jars': dispatch({ t: 'jars', jars: ev.jars }); break;
+        case 'entity:upsert': dispatch({ t: 'entity:upsert', entity: ev.entity }); break;
+        case 'entity:delete': dispatch({ t: 'entity:delete', id: ev.id }); break;
         case 'imputaciones':
           dispatch({ t: 'imputaciones', txId: ev.txId, imputaciones: ev.imputaciones });
           break;
@@ -526,6 +567,19 @@ export function Store({ children }: { children: ReactNode }) {
       const r = id ? await api.editarCategoria(id, c) : await api.crearCategoria(c);
       dispatch({ t: 'category:upsert', category: r.category });
     },
+
+    guardarEntidad: async (e, id) => {
+      const r = id ? await api.editarEntidad(id, e) : await api.crearEntidad(e);
+      dispatch({ t: 'entity:upsert', entity: r.entity });
+    },
+
+    archivarEntidad: async (id) => {
+      const r = await api.archivarEntidad(id);
+      if (r.entity) dispatch({ t: 'entity:upsert', entity: r.entity });
+      else dispatch({ t: 'entity:delete', id });
+    },
+
+    verEntidad: (id) => dispatch({ t: 'entidadActiva', id }),
 
     guardarJarras: async (jars) => {
       const r = await api.guardarJarras(jars);

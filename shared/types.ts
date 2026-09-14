@@ -73,6 +73,12 @@ export interface Transaction {
   paidBy: string | null;
   /** Si nacio de un pago habitual, cual. */
   recurringId: string | null;
+  /**
+   * De quien es este movimiento. NULL = la de su categoria, que es el caso
+   * normal. Solo se escribe cuando se corrige a mano uno suelto, o cuando no
+   * hay categoria (una transferencia).
+   */
+  entityId: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -82,6 +88,29 @@ export type TransactionInput = Omit<
   Transaction,
   'id' | 'householdId' | 'createdBy' | 'createdAt' | 'updatedAt'
 > & { id?: string };
+
+// ---------------------------------------------------------------------------
+// Entidades
+// ---------------------------------------------------------------------------
+
+/**
+ * De quien es la plata: la casa o uno de los negocios.
+ *
+ * Un solo libro con tres dueños, no tres apps: lo valioso es justamente poder
+ * cruzarlos. `kind` no cambia ninguna logica, solo el vocabulario de la
+ * pantalla y las jarras que se proponen al crearla.
+ */
+export interface Entity {
+  id: string;
+  householdId: string;
+  name: string;
+  kind: 'personal' | 'negocio';
+  color: string;
+  icon: string;
+  displayOrder: number;
+  archived: boolean;
+  createdAt: number;
+}
 
 // ---------------------------------------------------------------------------
 // Cuentas
@@ -154,6 +183,12 @@ export interface Account {
   displayOrder: number;
   createdAt: number;
   updatedAt: number;
+  /**
+   * De que negocio es esta cuenta. NULL = mezclada, que hoy son todas.
+   * Solo sirve como valor por defecto al cargar y para saber de quien era el
+   * efectivo cuando una entidad le paga algo a otra.
+   */
+  entityId: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -172,6 +207,18 @@ export interface Category {
   archived: boolean;
   displayOrder: number;
   createdAt: number;
+  /**
+   * De quien es lo que se gasta o se cobra con esta categoria.
+   *
+   * Aca es donde vive la entidad, y no en el movimiento. Ellos ya venian
+   * clasificando asi con el unico campo que tenian: crearon categorias
+   * llamadas "PanaClaw" y "BukoFlow". Poner la entidad aca convierte 44
+   * decisiones en 13 y no agrega ninguna pregunta al cargar un gasto.
+   *
+   * Ademas la hace reversible: si se equivocan, cambian la categoria y toda su
+   * historia se reclasifica sola, sin reescribir un solo movimiento.
+   */
+  entityId: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -200,6 +247,16 @@ export interface Jar {
   createdAt: number;
   /** Derivado de las imputaciones, igual que el saldo de cuenta. */
   balanceMinor: number;
+  /** De que economia es esta jarra. Los porcentajes suman 100% por entidad. */
+  entityId: string | null;
+  /**
+   * Como se llena. Los frascos de una casa van por porcentaje porque el
+   * ingreso es parejo; un cobro de agencia que va de $50 a $5.000 se
+   * presupuesta mejor con montos fijos y una jarra que absorba el resto.
+   */
+  fillKind: 'porcentaje' | 'fijo' | 'resto';
+  /** Centavos, solo cuando fillKind es 'fijo'. */
+  fillMinor: number | null;
 }
 
 /**
@@ -242,6 +299,8 @@ export interface JarTransfer {
 export interface Budget {
   id: string;
   householdId: string;
+  /** El presupuesto de publicidad de un negocio no come el de comida. */
+  entityId: string | null;
   /** null = presupuesto global del mes. */
   categoryId: string | null;
   amountMinor: number;
@@ -305,6 +364,7 @@ export interface Recurring {
   dayOfWeek: number | null;
   monthOfYear: number | null;
   active: boolean;
+  entityId: string | null;
   /** Cuando toca el proximo. Avanzar esto es lo que evita duplicados. */
   nextRun: number;
   lastRun: number | null;
@@ -366,6 +426,7 @@ export interface Snapshot {
   categories: Category[];
   jars: Jar[];
   budgets: Budget[];
+  entities: Entity[];
   transactions: Transaction[];
   recurring: Recurring[];
   /** Lo que cada movimiento le hizo a cada jarra, congelado. */
@@ -383,6 +444,8 @@ export type LiveEvent =
   | { kind: 'account:upsert'; account: Account; by: string }
   | { kind: 'account:delete'; id: string; by: string }
   | { kind: 'category:upsert'; category: Category; by: string }
+  | { kind: 'entity:upsert'; entity: Entity; by: string }
+  | { kind: 'entity:delete'; id: string; by: string }
   | { kind: 'jar:upsert'; jar: Jar; by: string }
   /**
    * Las jarras cambiaron enteras (porcentajes, nombres, altas y bajas). Se

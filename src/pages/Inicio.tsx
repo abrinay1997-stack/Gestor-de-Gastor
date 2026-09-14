@@ -17,6 +17,7 @@ import { SECCIONES_INICIO, TxType, type SeccionInicio, type Transaction } from '
 import { describirRegla } from '@shared/recurrencia';
 import { fechaCorta, moverMes, nombreMes } from '../lib/utils.ts';
 import { Avatar, Barra, Boton, Ficha, Icono, Tarjeta, Vacio } from '../components/ui/base.tsx';
+import { EtiquetaEntidad, SelectorEntidad } from '../components/ui/entidad.tsx';
 import { cn } from '../lib/utils.ts';
 
 export function Inicio({ alVerMovimiento, alAgregar }: {
@@ -210,6 +211,7 @@ export function Inicio({ alVerMovimiento, alAgregar }: {
 
   return (
     <div className="space-y-4">
+      <SelectorEntidad />
       <div className="flex items-center justify-between">
         <button
           onClick={() => setMes(moverMes(mes, -1))}
@@ -236,10 +238,17 @@ export function Inicio({ alVerMovimiento, alAgregar }: {
 
 /** Una fila de la lista de movimientos. Se reusa en varias pantallas. */
 export function FilaMovimiento({ tx, alTocar }: { tx: Transaction; alTocar: () => void }) {
-  const { categories, accounts, members, household, enVuelo } = useStore();
+  const {
+    categories, accounts, members, household, enVuelo, entities, entidadActiva,
+  } = useStore();
   const moneda = household?.currency ?? 'USD';
 
   const cat = categories.find((c) => c.id === tx.categoryId);
+  // En el consolidado cada movimiento dice de quien es. Dentro de una entidad
+  // la etiqueta seria ruido: ya lo dice el selector de arriba.
+  const entidad = entidadActiva === null && entities.length > 1
+    ? entities.find((e) => e.id === (tx.entityId ?? cat?.entityId ?? null))
+    : undefined;
   const cuenta = accounts.find((c) => c.id === tx.accountId);
   const quien = members.find((m) => m.id === autorDe(tx));
   const subiendo = enVuelo.has(tx.id);
@@ -267,6 +276,9 @@ export function FilaMovimiento({ tx, alTocar }: { tx: Transaction; alTocar: () =
             <Icono nombre="repeat" size={11} className="inline-block ml-1.5 txt-3 align-middle" />
           )}
         </p>
+        {entidad && (
+          <span className="inline-block mt-0.5"><EtiquetaEntidad entidad={entidad} /></span>
+        )}
         <p className="text-xs txt-3 truncate">
           {fechaCorta(tx.date)}
           {cuenta && ` · ${cuenta.name}`}

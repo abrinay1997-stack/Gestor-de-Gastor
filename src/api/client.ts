@@ -4,8 +4,8 @@
 
 import { derivarClave } from '@shared/kdf';
 import type {
-  Account, Adjustment, Budget, Category, Jar, JarImputacion, JarTransfer, Member,
-  Recurring, SeccionInicio, Snapshot, Transaction, TransactionInput,
+  Account, Adjustment, Budget, Category, Entity, Jar, JarImputacion, JarTransfer,
+  Member, Recurring, SeccionInicio, Snapshot, Transaction, TransactionInput,
 } from '@shared/types';
 
 export class ApiError extends Error {
@@ -152,6 +152,11 @@ export const api = {
 
   ajustesDeCuenta: (accountId: string) =>
     get<{ adjustments: Adjustment[] }>(`/api/adjustments?account=${encodeURIComponent(accountId)}`),
+
+  crearEntidad: (e: Partial<Entity>) => post<{ entity: Entity }>('/api/entities', e),
+  editarEntidad: (id: string, e: Partial<Entity>) =>
+    put<{ entity: Entity }>(`/api/entities/${id}`, e),
+  archivarEntidad: (id: string) => del<{ ok: true; entity?: Entity }>(`/api/entities/${id}`),
 
   crearCategoria: (c: Partial<Category>) => post<{ category: Category }>('/api/categories', c),
   editarCategoria: (id: string, c: Partial<Category>) =>

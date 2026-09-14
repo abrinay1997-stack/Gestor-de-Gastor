@@ -2,14 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { formatMonto, parseMonto, repartir } from './money.ts';
 import {
   autorDe, balancePorMes, calcularJarras, calcularPatrimonio, calcularSaldos,
-  efectoEnCuenta, flujoDeJarras, imputacionJarras, porPersona, resumir,
-  sinAsignar, validarJarras,
+  efectoEnCuenta, entidadDe, entidadPorDefecto, flujoDeJarras, imputacionJarras,
+  indexarCategorias, jarrasDe, porPersona, repartirEnJarras, resultadoPorEntidad,
+  resumir, sinAsignar, validarJarras,
 } from './domain.ts';
 import { periodoMes } from './periodo.ts';
 import { leer } from './parser.ts';
 import {
-  AccountCategory, type Account, type Category, type Jar, type JarImputacion,
-  type JarTransfer, type Member, type Transaction, TxType,
+  AccountCategory, type Account, type Category, type Entity, type Jar,
+  type JarImputacion, type JarTransfer, type Member, type Transaction, TxType,
 } from './types.ts';
 
 // --- helpers -------------------------------------------------------------
@@ -19,19 +20,20 @@ const tx = (p: Partial<Transaction>): Transaction => ({
   accountId: 'a1', destAccountId: null, destAmountMinor: null, categoryId: null,
   jarId: null, distributeToJars: false, description: '', notes: null,
   date: Date.now(), createdBy: 'u1', paidBy: null, recurringId: null,
-  createdAt: 0, updatedAt: 0, ...p,
+  entityId: null, createdAt: 0, updatedAt: 0, ...p,
 });
 
 const cuenta = (p: Partial<Account>): Account => ({
   id: 'a1', householdId: 'h', name: 'Cuenta', category: AccountCategory.EFECTIVO,
   currency: 'USD', initialBalanceMinor: 0, balanceMinor: 0, color: '#000',
   icon: 'wallet', owner: 'compartida', archived: false, displayOrder: 0,
-  createdAt: 0, updatedAt: 0, ...p,
+  createdAt: 0, updatedAt: 0, entityId: null, ...p,
 });
 
-const jarra = (id: string, bp: number, orden: number, acumula = false): Jar => ({
+const jarra = (id: string, bp: number, orden: number, acumula = false, extra: Partial<Jar> = {}): Jar => ({
   id, householdId: 'h', name: id, percentageBp: bp, color: '#000', icon: 'jar',
   displayOrder: orden, createdAt: 0, balanceMinor: 0, acumula,
+  entityId: null, fillKind: 'porcentaje', fillMinor: null, ...extra,
 });
 
 /**
@@ -49,6 +51,12 @@ const fechasDe = (movs: Transaction[]) => {
   const mapa = new Map(movs.map((m) => [m.id, m.date]));
   return (txId: string) => mapa.get(txId);
 };
+
+const categoria = (p: Partial<Category>): Category => ({
+  id: 'c1', householdId: 'h', name: 'Categoría', type: 'gasto', parentId: null,
+  icon: 'tag', color: '#000', archived: false, displayOrder: 0, createdAt: 0,
+  entityId: null, ...p,
+});
 
 const traspaso = (p: Partial<JarTransfer>): JarTransfer => ({
   id: crypto.randomUUID(), householdId: 'h', fromJarId: 'j1', toJarId: 'j2',
@@ -471,8 +479,8 @@ describe('balancePorMes', () => {
 
 describe('leer', () => {
   const categorias: Category[] = [
-    { id: 'c1', householdId: 'h', name: 'Comida', type: 'gasto', parentId: null, icon: 'x', color: '#000', archived: false, displayOrder: 0, createdAt: 0 },
-    { id: 'c2', householdId: 'h', name: 'Sueldo', type: 'ingreso', parentId: null, icon: 'x', color: '#000', archived: false, displayOrder: 0, createdAt: 0 },
+    { id: 'c1', householdId: 'h', name: 'Comida', type: 'gasto', parentId: null, icon: 'x', color: '#000', archived: false, displayOrder: 0, createdAt: 0, entityId: null },
+    { id: 'c2', householdId: 'h', name: 'Sueldo', type: 'ingreso', parentId: null, icon: 'x', color: '#000', archived: false, displayOrder: 0, createdAt: 0, entityId: null },
   ];
   const vacio = { categories: categorias, historial: [] as Transaction[] };
 
@@ -558,5 +566,296 @@ describe('calcularPatrimonio con tarjeta de credito', () => {
 
     const conSaldos = cuentas.map((c) => ({ ...c, balanceMinor: saldos.get(c.id)! }));
     expect(calcularPatrimonio(conSaldos)).toBe(55_000);
+  });
+});
+
+// --- entidades -----------------------------------------------------------
+
+describe('entidadDe', () => {
+  const cats = [
+    categoria({ id: 'video', name: 'Video musical', type: 'gasto', entityId: 'buko' }),
+    categoria({ id: 'panaclaw', name: 'PanaClaw', type: 'ingreso', entityId: 'pc' }),
+    categoria({ id: 'comida', name: 'Alimentos', type: 'gasto', entityId: 'familia' }),
+    categoria({ id: 'suelta', name: 'Sin dueño', type: 'gasto', entityId: null }),
+  ];
+  const indice = indexarCategorias(cats);
+
+  it('la hereda de la categoria', () => {
+    expect(entidadDe(tx({ categoryId: 'video' }), indice)).toBe('buko');
+  });
+
+  it('el movimiento manda si la tiene puesta a mano', () => {
+    expect(entidadDe(tx({ categoryId: 'video', entityId: 'familia' }), indice)).toBe('familia');
+  });
+
+  it('sin categoria y sin entidad, no hay dueño', () => {
+    expect(entidadDe(tx({ categoryId: null }), indice)).toBe(null);
+  });
+
+  it('una categoria sin entidad tampoco lo asigna', () => {
+    expect(entidadDe(tx({ categoryId: 'suelta' }), indice)).toBe(null);
+  });
+
+  it('CAMBIAR LA CATEGORIA RECLASIFICA LA HISTORIA SIN TOCAR MOVIMIENTOS', () => {
+    // La razon de poner la entidad en la categoria: corregirse no exige
+    // reescribir 44 registros.
+    const movs = [tx({ categoryId: 'video', amountMinor: 55_924, type: TxType.GASTO })];
+    const antes = resultadoPorEntidad(movs, cats).find((r) => r.entityId === 'buko');
+    expect(antes?.gastoMinor).toBe(55_924);
+
+    const corregidas = cats.map((c) => (c.id === 'video' ? { ...c, entityId: 'pc' } : c));
+    const despues = resultadoPorEntidad(movs, corregidas);
+    expect(despues.find((r) => r.entityId === 'buko')).toBeUndefined();
+    expect(despues.find((r) => r.entityId === 'pc')?.gastoMinor).toBe(55_924);
+    // Y el movimiento quedo igual.
+    expect(movs[0].entityId).toBe(null);
+  });
+});
+
+describe('resultadoPorEntidad', () => {
+  // Las cifras reales del hogar, con la clasificacion que confirmaron.
+  const cats = [
+    categoria({ id: 'video', name: 'Video musical', type: 'gasto', entityId: 'buko' }),
+    categoria({ id: 'susc', name: 'Suscripciones', type: 'gasto', entityId: 'pc' }),
+    categoria({ id: 'pcIng', name: 'PanaClaw', type: 'ingreso', entityId: 'pc' }),
+    categoria({ id: 'quincena', name: 'Quincena', type: 'ingreso', entityId: 'familia' }),
+    categoria({ id: 'comida', name: 'Alimentos', type: 'gasto', entityId: 'familia' }),
+  ];
+  const movs = [
+    tx({ type: TxType.GASTO, amountMinor: 55_924, categoryId: 'video' }),
+    tx({ type: TxType.GASTO, amountMinor: 756, categoryId: 'susc' }),
+    tx({ type: TxType.INGRESO, amountMinor: 50_000, categoryId: 'pcIng' }),
+    tx({ type: TxType.INGRESO, amountMinor: 20_000, categoryId: 'quincena' }),
+    tx({ type: TxType.GASTO, amountMinor: 14_736, categoryId: 'comida' }),
+  ];
+
+  it('separa las tres economias', () => {
+    const r = resultadoPorEntidad(movs, cats);
+    const de = (e: string) => r.find((x) => x.entityId === e)!;
+    expect(de('pc').resultadoMinor).toBe(49_244);
+    expect(de('buko').resultadoMinor).toBe(-55_924);
+    expect(de('familia').resultadoMinor).toBe(5_264);
+  });
+
+  it('los tres resultados suman el total, sin perder nada', () => {
+    const suma = resultadoPorEntidad(movs, cats).reduce((a, r) => a + r.resultadoMinor, 0);
+    expect(suma).toBe(resumir(movs).flujoMinor);
+  });
+
+  it('lo que no tiene entidad se junta aparte y sigue contando', () => {
+    const conHuerfano = [...movs, tx({ type: TxType.GASTO, amountMinor: 525, categoryId: null })];
+    const r = resultadoPorEntidad(conHuerfano, cats);
+    expect(r.find((x) => x.entityId === null)?.gastoMinor).toBe(525);
+    expect(r.reduce((a, x) => a + x.resultadoMinor, 0)).toBe(resumir(conHuerfano).flujoMinor);
+  });
+
+  it('las transferencias entre cuentas propias no inflan ningun resultado', () => {
+    const conTransfer = [...movs, tx({ type: TxType.TRANSFERENCIA, amountMinor: 20_500, categoryId: 'comida' })];
+    const r = resultadoPorEntidad(conTransfer, cats).find((x) => x.entityId === 'familia')!;
+    expect(r.resultadoMinor).toBe(5_264);
+  });
+});
+
+describe('repartirEnJarras', () => {
+  it('con todo en porcentaje da lo mismo que antes', () => {
+    const jars = [jarra('j1', 5500, 0), jarra('j2', 3000, 1), jarra('j3', 1500, 2)];
+    const r = repartirEnJarras(100_000, jars);
+    expect(r.get('j1')).toBe(55_000);
+    expect(r.get('j2')).toBe(30_000);
+    expect(r.get('j3')).toBe(15_000);
+  });
+
+  it('el porcentaje se toma del bruto, no de lo que sobra', () => {
+    // "20% de impuestos" tiene que ser el 20% de lo que se cobro.
+    const jars = [
+      jarra('imp', 2000, 0),
+      jarra('pub', 0, 1, false, { fillKind: 'fijo', fillMinor: 10_000 }),
+      jarra('ope', 0, 2, false, { fillKind: 'resto' }),
+    ];
+    const r = repartirEnJarras(100_000, jars);
+    expect(r.get('imp')).toBe(20_000);
+    expect(r.get('pub')).toBe(10_000);
+    expect(r.get('ope')).toBe(70_000);
+  });
+
+  it('si el cobro es chico, el fijo toma lo que hay y nadie queda en negativo', () => {
+    const jars = [
+      jarra('imp', 2000, 0),
+      jarra('pub', 0, 1, false, { fillKind: 'fijo', fillMinor: 10_000 }),
+      jarra('ope', 0, 2, false, { fillKind: 'resto' }),
+    ];
+    const r = repartirEnJarras(5_000, jars);
+    expect(r.get('imp')).toBe(1_000);
+    expect(r.get('pub')).toBe(4_000);
+    expect(r.get('ope') ?? 0).toBe(0);
+    expect([...r.values()].every((v) => v >= 0)).toBe(true);
+  });
+
+  it('la suma da SIEMPRE el total exacto, con cualquier mezcla', () => {
+    const jars = [
+      jarra('a', 3333, 0),
+      jarra('b', 3333, 1),
+      jarra('c', 0, 2, false, { fillKind: 'fijo', fillMinor: 777 }),
+      jarra('d', 0, 3, false, { fillKind: 'resto' }),
+    ];
+    for (let total = 0; total < 2000; total++) {
+      const suma = [...repartirEnJarras(total, jars).values()].reduce((a, b) => a + b, 0);
+      expect(suma).toBe(total);
+    }
+  });
+});
+
+describe('validarJarras con reglas de llenado', () => {
+  it('sin jarra de resto, los porcentajes deben dar 100%', () => {
+    expect(validarJarras([jarra('a', 5000, 0), jarra('b', 5000, 1)]).ok).toBe(true);
+    expect(validarJarras([jarra('a', 5000, 0), jarra('b', 4000, 1)]).ok).toBe(false);
+  });
+
+  it('con jarra de resto alcanza con no pasarse de 100%', () => {
+    const jars = [jarra('a', 2000, 0), jarra('b', 0, 1, false, { fillKind: 'resto' })];
+    expect(validarJarras(jars).ok).toBe(true);
+  });
+
+  it('rechaza pasarse de 100% aunque haya resto', () => {
+    const jars = [jarra('a', 11_000, 0), jarra('b', 0, 1, false, { fillKind: 'resto' })];
+    expect(validarJarras(jars).ok).toBe(false);
+  });
+
+  it('un monto fijo sin jarra de resto no cierra', () => {
+    const jars = [
+      jarra('a', 10_000, 0),
+      jarra('b', 0, 1, false, { fillKind: 'fijo', fillMinor: 5_000 }),
+    ];
+    const r = validarJarras(jars);
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toContain('resto');
+  });
+
+  it('no puede haber dos jarras de resto', () => {
+    const jars = [
+      jarra('a', 0, 0, false, { fillKind: 'resto' }),
+      jarra('b', 0, 1, false, { fillKind: 'resto' }),
+    ];
+    expect(validarJarras(jars).ok).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cada economia reparte lo suyo
+// ---------------------------------------------------------------------------
+
+const entidad = (id: string, orden: number, p: Partial<Entity> = {}): Entity => ({
+  id, householdId: 'h', name: id, kind: 'personal', color: '#000', icon: 'house',
+  displayOrder: orden, archived: false, createdAt: 0, ...p,
+});
+
+describe('entidadPorDefecto', () => {
+  it('es la primera de la lista, que es la casa', () => {
+    const ents = [entidad('pc', 1), entidad('familia', 0), entidad('buko', 2)];
+    expect(entidadPorDefecto(ents)).toBe('familia');
+  });
+
+  it('saltea las archivadas', () => {
+    const ents = [entidad('vieja', 0, { archived: true }), entidad('familia', 1)];
+    expect(entidadPorDefecto(ents)).toBe('familia');
+  });
+
+  it('sin entidades no hay ninguna', () => {
+    expect(entidadPorDefecto([])).toBe(null);
+  });
+});
+
+describe('jarrasDe', () => {
+  const jars = [
+    jarra('casa-1', 5000, 0, false, { entityId: 'familia' }),
+    jarra('casa-2', 5000, 1, false, { entityId: 'familia' }),
+    jarra('pc-imp', 2000, 0, true, { entityId: 'pc' }),
+    jarra('pc-resto', 0, 1, false, { entityId: 'pc', fillKind: 'resto' }),
+  ];
+
+  it('un cobro del negocio no toca los frascos de la casa', () => {
+    expect(jarrasDe(jars, 'pc', 'familia').map((j) => j.id))
+      .toEqual(['pc-imp', 'pc-resto']);
+  });
+
+  it('sin entidad cae en la casa, que es lo que pasaba antes de los negocios', () => {
+    expect(jarrasDe(jars, null, 'familia').map((j) => j.id))
+      .toEqual(['casa-1', 'casa-2']);
+  });
+
+  it('una economia sin jarras no reparte en las de otra', () => {
+    expect(jarrasDe(jars, 'buko', 'familia')).toEqual([]);
+  });
+});
+
+describe('el reparto respeta la economia del movimiento', () => {
+  const jars = [
+    jarra('casa-nec', 5500, 0, false, { entityId: 'familia' }),
+    jarra('casa-ahorro', 4500, 1, true, { entityId: 'familia' }),
+    jarra('pc-imp', 2000, 0, true, { entityId: 'pc' }),
+    jarra('pc-resto', 0, 1, true, { entityId: 'pc', fillKind: 'resto' }),
+  ];
+  const cats = [
+    categoria({ id: 'cobro-pc', name: 'PanaClaw', type: 'ingreso', entityId: 'pc' }),
+    categoria({ id: 'sueldo', name: 'Sueldo', type: 'ingreso', entityId: 'familia' }),
+  ];
+  const indice = indexarCategorias(cats);
+
+  /** Lo mismo que hace el Worker: resolver la economia y repartir ahi. */
+  const repartoDe = (t: Transaction) => imputacionJarras(
+    t, jarrasDe(jars, entidadDe(t, indice), 'familia'),
+  );
+
+  it('un cobro de PanaClaw se parte entre las jarras de PanaClaw', () => {
+    const partes = repartoDe(tx({
+      type: TxType.INGRESO, amountMinor: 100_000, distributeToJars: true,
+      categoryId: 'cobro-pc',
+    }));
+    expect([...partes]).toEqual([['pc-imp', 20_000], ['pc-resto', 80_000]]);
+  });
+
+  it('un sueldo de la casa se parte entre los frascos de la casa', () => {
+    const partes = repartoDe(tx({
+      type: TxType.INGRESO, amountMinor: 100_000, distributeToJars: true,
+      categoryId: 'sueldo',
+    }));
+    expect([...partes]).toEqual([['casa-nec', 55_000], ['casa-ahorro', 45_000]]);
+  });
+
+  it('un ingreso sin categoria sigue cayendo en la casa', () => {
+    const partes = repartoDe(tx({
+      type: TxType.INGRESO, amountMinor: 100_000, distributeToJars: true,
+    }));
+    expect([...partes]).toEqual([['casa-nec', 55_000], ['casa-ahorro', 45_000]]);
+  });
+
+  it('NINGUNA ECONOMIA SE QUEDA CON PLATA DE OTRA', () => {
+    // Lo que no puede pasar nunca: que un cobro del negocio aparezca sumado
+    // en un frasco de la casa. Se prueba con los dos repartos juntos.
+    const delNegocio = repartoDe(tx({
+      type: TxType.INGRESO, amountMinor: 33_333, distributeToJars: true,
+      categoryId: 'cobro-pc',
+    }));
+    const deLaCasa = repartoDe(tx({
+      type: TxType.INGRESO, amountMinor: 77_777, distributeToJars: true,
+      categoryId: 'sueldo',
+    }));
+
+    const suma = (m: Map<string, number>, pref: string) =>
+      [...m].filter(([id]) => id.startsWith(pref)).reduce((t, [, v]) => t + v, 0);
+
+    // Cada reparto entrega su total exacto, y solo dentro de su economia.
+    expect(suma(delNegocio, 'pc-')).toBe(33_333);
+    expect(suma(delNegocio, 'casa-')).toBe(0);
+    expect(suma(deLaCasa, 'casa-')).toBe(77_777);
+    expect(suma(deLaCasa, 'pc-')).toBe(0);
+  });
+
+  it('cada economia valida su 100% por separado', () => {
+    // Las cuatro jarras juntas suman 120%, que no querria decir nada. Por
+    // separado, cada tanda cierra.
+    expect(validarJarras(jars).ok).toBe(false);
+    expect(validarJarras(jarrasDe(jars, 'familia', null)).ok).toBe(true);
+    expect(validarJarras(jarrasDe(jars, 'pc', null)).ok).toBe(true);
   });
 });

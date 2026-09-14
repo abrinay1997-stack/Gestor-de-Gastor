@@ -8,11 +8,12 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../store/store.tsx';
 import { formatMonto } from '@shared/money';
-import { autorDe, resumir } from '@shared/domain';
+import { autorDe, filtrarPorEntidad, resumir } from '@shared/domain';
 import { dentroDe, periodoMes, type Periodo } from '@shared/periodo';
 import { TxType, type Transaction } from '@shared/types';
 import { fechaCorta } from '../lib/utils.ts';
 import { Boton, Campo, Icono, Tarjeta, Vacio } from '../components/ui/base.tsx';
+import { SelectorEntidad } from '../components/ui/entidad.tsx';
 import { SelectorPeriodo } from '../components/ui/periodo.tsx';
 import { FilaMovimiento } from './Inicio.tsx';
 import { cn } from '../lib/utils.ts';
@@ -24,7 +25,15 @@ export function Movimientos({ alVerMovimiento, alAgregar }: {
   alVerMovimiento: (tx: Transaction) => void;
   alAgregar: () => void;
 }) {
-  const { transactions, categories, accounts, members, household } = useStore();
+  const {
+    transactions: todos, categories, accounts, members, household, entidadActiva,
+  } = useStore();
+
+  // La lista respeta la economia elegida. En "Todo" no filtra nada.
+  const transactions = useMemo(
+    () => filtrarPorEntidad(todos, categories, entidadActiva),
+    [todos, categories, entidadActiva],
+  );
   const moneda = household?.currency ?? 'USD';
 
   const [periodo, setPeriodo] = useState<Periodo>(() => periodoMes(Date.now()));
@@ -81,6 +90,7 @@ export function Movimientos({ alVerMovimiento, alAgregar }: {
 
   return (
     <div className="space-y-4">
+      <SelectorEntidad />
       <SelectorPeriodo periodo={periodo} alCambiar={setPeriodo} />
 
       <div className="flex gap-2">

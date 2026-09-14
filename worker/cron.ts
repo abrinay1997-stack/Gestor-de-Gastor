@@ -12,7 +12,7 @@
  */
 
 import { aRecurring, listarCuentas, listarImputaciones, listarJarras } from './db.ts';
-import { jarrasParaRepartir, sentenciasImputacion } from './jarras.ts';
+import { ambitoDeReparto, sentenciasImputacion } from './jarras.ts';
 import type { Env } from './env.ts';
 import { fechasVencidas, reglaDe, siguienteFecha } from '../shared/recurrencia.ts';
 
@@ -53,11 +53,18 @@ export async function correrPagosHabituales(env: Env): Promise<{ creados: number
 
     const proxima = siguienteFecha(reglaDe(r), fechas[fechas.length - 1]);
 
-    // Las jarras del hogar, para congelar el reparto de cada movimiento que se
-    // cree. Antes esta consulta no existia y el INSERT escribia
-    // distribute_to_jars = 0 a mano: un sueldo que entraba por aca no podia
-    // llegar a ninguna jarra por mas que se configurara.
-    const jars = r.distributeToJars ? await jarrasParaRepartir(env, r.householdId) : [];
+    // Las jarras que le tocan a este pago habitual, para congelar el reparto de
+    // cada movimiento que se cree. Antes esta consulta no existia y el INSERT
+    // escribia distribute_to_jars = 0 a mano: un sueldo que entraba por aca no
+    // podia llegar a ninguna jarra por mas que se configurara.
+    //
+    // Salen de la entidad del pago habitual, que a su vez sale de su categoria:
+    // un cobro de PanaClaw que se repite todos los meses va a las jarras de
+    // PanaClaw, no a los frascos de la casa.
+    const jars = r.distributeToJars
+      ? (await ambitoDeReparto(env, r.householdId))
+        .jarrasPara({ entityId: r.entityId, categoryId: r.categoryId })
+      : [];
 
     // Todo junto: los movimientos, sus imputaciones y el avance de la fecha. Si
     // algo falla, no queda ni un movimiento creado con la fecha sin avanzar

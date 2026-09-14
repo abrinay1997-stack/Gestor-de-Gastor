@@ -16,8 +16,8 @@
  */
 
 import type {
-  Account, Adjustment, Budget, Category, Household, Jar, JarImputacion, JarTransfer,
-  Member, Recurring, SeccionInicio,
+  Account, Adjustment, Budget, Category, Entity, Household, Jar, JarImputacion,
+  JarTransfer, Member, Recurring, SeccionInicio,
   Snapshot, Transaction,
 } from '../shared/types.ts';
 import { SECCIONES_INICIO } from '../shared/types.ts';
@@ -50,6 +50,7 @@ export const aAccount = (f: Fila): Account => ({
   displayOrder: int(f.display_order),
   createdAt: int(f.created_at),
   updatedAt: int(f.updated_at),
+  entityId: strOpt(f.entity_id),
 });
 
 export const aCategory = (f: Fila): Category => ({
@@ -63,6 +64,7 @@ export const aCategory = (f: Fila): Category => ({
   archived: bool(f.archived),
   displayOrder: int(f.display_order),
   createdAt: int(f.created_at),
+  entityId: strOpt(f.entity_id),
 });
 
 export const aJar = (f: Fila): Jar => ({
@@ -75,7 +77,24 @@ export const aJar = (f: Fila): Jar => ({
   displayOrder: int(f.display_order),
   createdAt: int(f.created_at),
   acumula: bool(f.acumula),
+  entityId: strOpt(f.entity_id),
+  fillKind: (['porcentaje', 'fijo', 'resto'] as const).includes(f.fill_kind as 'fijo')
+    ? (f.fill_kind as 'porcentaje' | 'fijo' | 'resto')
+    : 'porcentaje',
+  fillMinor: intOpt(f.fill_minor),
   balanceMinor: 0, // se completa despues con calcularJarras
+});
+
+export const aEntity = (f: Fila): Entity => ({
+  id: str(f.id),
+  householdId: str(f.household_id),
+  name: str(f.name),
+  kind: f.kind === 'negocio' ? 'negocio' : 'personal',
+  color: str(f.color),
+  icon: str(f.icon),
+  displayOrder: int(f.display_order),
+  archived: bool(f.archived),
+  createdAt: int(f.created_at),
 });
 
 export const aJarImputacion = (f: Fila): JarImputacion => ({
@@ -120,6 +139,7 @@ export const aTransaction = (f: Fila): Transaction => ({
   recurringId: strOpt(f.recurring_id),
   createdAt: int(f.created_at),
   updatedAt: int(f.updated_at),
+  entityId: strOpt(f.entity_id),
 });
 
 export const aBudget = (f: Fila): Budget => ({
@@ -130,6 +150,7 @@ export const aBudget = (f: Fila): Budget => ({
   period: str(f.period),
   createdAt: int(f.created_at),
   updatedAt: int(f.updated_at),
+  entityId: strOpt(f.entity_id),
 });
 
 export const aMember = (f: Fila): Member => ({
@@ -185,6 +206,7 @@ export const aRecurring = (f: Fila): Recurring => ({
   lastRun: intOpt(f.last_run),
   createdAt: int(f.created_at),
   updatedAt: int(f.updated_at),
+  entityId: strOpt(f.entity_id),
 });
 
 export const aAdjustment = (f: Fila): Adjustment => ({
@@ -337,6 +359,13 @@ export async function movimientoPorId(
  * tocan los centavos sobrantes. Se usa la MISMA funcion que el cliente
  * (shared/domain.ts), asi que los dos llegan siempre al mismo numero.
  */
+export async function listarEntidades(env: Env, householdId: string): Promise<Entity[]> {
+  const { results } = await env.DB.prepare(
+    'SELECT * FROM entity WHERE household_id = ?1 ORDER BY display_order ASC, created_at ASC',
+  ).bind(householdId).all<Fila>();
+  return results.map(aEntity);
+}
+
 export async function listarImputaciones(
   env: Env, householdId: string,
 ): Promise<JarImputacion[]> {
@@ -392,7 +421,7 @@ export async function snapshot(
   if (!filaHogar) return null;
 
   const [accounts, categories, budgets, members, transactions, recurring,
-         imputaciones, jarTransfers] = await Promise.all([
+         imputaciones, jarTransfers, entities] = await Promise.all([
     listarCuentas(env, householdId),
     listarCategorias(env, householdId),
     listarPresupuestos(env, householdId),
@@ -401,6 +430,7 @@ export async function snapshot(
     listarRecurrentes(env, householdId),
     listarImputaciones(env, householdId),
     listarTraspasos(env, householdId),
+    listarEntidades(env, householdId),
   ]);
 
   // Se reusa lo ya traido en vez de volver a consultarlo.
@@ -412,6 +442,6 @@ export async function snapshot(
   return {
     household: aHousehold(filaHogar),
     members, me, accounts, categories, jars, budgets, transactions, recurring,
-    imputaciones, jarTransfers,
+    imputaciones, jarTransfers, entities,
   };
 }

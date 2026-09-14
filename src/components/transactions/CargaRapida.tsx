@@ -13,7 +13,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../store/store.tsx';
 import { leer } from '@shared/parser';
 import { formatMonto, montoPlano, parseMonto } from '@shared/money';
-import { imputacionJarras } from '@shared/domain';
+import {
+  entidadDe, entidadPorDefecto, imputacionJarras, indexarCategorias, jarrasDe,
+} from '@shared/domain';
 import { TxType, type Transaction, type TransactionInput } from '@shared/types';
 import { aInputDate, deInputDate, vibrar } from '../../lib/utils.ts';
 import { Avatar, Boton, Campo, Ficha, Hoja, Icono, Selector } from '../ui/base.tsx';
@@ -44,7 +46,9 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
   alCerrar: () => void;
   editando?: Transaction | null;
 }) {
-  const { accounts, categories, jars, transactions, members, me, household, guardarTx } = useStore();
+  const {
+    accounts, categories, jars, entities, transactions, members, me, household, guardarTx,
+  } = useStore();
   const moneda = household?.currency ?? 'USD';
 
   const activas = useMemo(() => accounts.filter((c) => !c.archived), [accounts]);
@@ -58,7 +62,10 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
   const [categoryId, setCategoryId] = useState('');
   const [jarId, setJarId] = useState('');
   const [paidBy, setPaidBy] = useState('');
-  const [repartir, setRepartir] = useState(false);
+  // Encendido por defecto. Estuvo apagado los primeros 44 movimientos y no lo
+  // prendio nadie: las jarras solo veian gastos y quedaban en rojo. Un ingreso
+  // que no se reparte es la excepcion, no la regla.
+  const [repartir, setRepartir] = useState(true);
   const [fecha, setFecha] = useState(aInputDate(Date.now()));
   const [notas, setNotas] = useState('');
   const [guardando, setGuardando] = useState(false);
@@ -91,7 +98,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
       setCategoryId('');
       setJarId('');
       setPaidBy(me?.id ?? '');
-      setRepartir(false);
+      setRepartir(true);
       setFecha(aInputDate(Date.now()));
       setNotas('');
       setFrase('');
@@ -130,17 +137,30 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
     (!esTransferencia || (destAccountId !== '' && destAccountId !== accountId)) &&
     !guardando;
 
+  /**
+   * Las jarras que reparten ESTE movimiento: las de su economia, que sale de
+   * la categoria elegida. Un cobro de PanaClaw no cae en los frascos de la
+   * casa.
+   */
+  const jarrasPropias = useMemo(() => {
+    const suya = entidadDe(
+      { entityId: editando?.entityId ?? null, categoryId: categoryId || null },
+      indexarCategorias(categories),
+    );
+    return jarrasDe(jars, suya, entidadPorDefecto(entities));
+  }, [jars, categories, entities, categoryId, editando]);
+
   /** A donde iria a parar el ingreso si se guarda asi. */
   const vistaPrevia = useMemo(() => {
     if (!repartir || tipo !== TxType.INGRESO || montoMinor === null || montoMinor <= 0) return [];
     const partes = imputacionJarras(
       { type: TxType.INGRESO, amountMinor: montoMinor, distributeToJars: true, jarId: null },
-      jars,
+      jarrasPropias,
     );
-    return jars
+    return jarrasPropias
       .map((jarra) => ({ jarra, monto: partes.get(jarra.id) ?? 0 }))
       .filter((x) => x.monto !== 0);
-  }, [repartir, tipo, montoMinor, jars]);
+  }, [repartir, tipo, montoMinor, jarrasPropias]);
 
   /** Si este gasto deja la jarra en rojo, cuanto queda. */
   const sobregiro = useMemo(() => {
@@ -176,6 +196,9 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
       // "el mismo", y guardarlo asi mantiene los datos limpios.
       paidBy: paidBy && paidBy !== me?.id ? paidBy : null,
       recurringId: editando?.recurringId ?? null,
+      // Null = la de su categoria, que es el caso normal. Solo se escribe al
+      // corregir uno suelto desde el detalle.
+      entityId: editando?.entityId ?? null,
     };
 
     try {
@@ -308,13 +331,30 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           </Selector>
         )}
 
+        {/* Las de su economia primero, que es lo que se va a elegir el 99% de
+            las veces. Las otras quedan abajo y agrupadas: sacar plata de los
+            impuestos de un negocio para pagar la comida se puede, pero tiene
+            que costar un scroll y verse escrito de quien es. */}
         {!esTransferencia && !repartir && jars.length > 0 && (
           <Selector etiqueta="Jarra" value={jarId} onChange={(e) => setJarId(e.target.value)}>
             <option value="">Sin jarra</option>
-            {jars.map((j) => (
+            {jarrasPropias.map((j) => (
               <option key={j.id} value={j.id}>
                 {j.name} · {formatMonto(j.balanceMinor, moneda, { compacto: true })}
               </option>
+            ))}
+            {entities.filter((e) => (
+              !e.archived
+              && e.id !== (jarrasPropias[0]?.entityId ?? null)
+              && jars.some((j) => j.entityId === e.id)
+            )).map((e) => (
+              <optgroup key={e.id} label={e.name}>
+                {jars.filter((j) => j.entityId === e.id).map((j) => (
+                  <option key={j.id} value={j.id}>
+                    {j.name} · {formatMonto(j.balanceMinor, moneda, { compacto: true })}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </Selector>
         )}
@@ -350,7 +390,10 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           </div>
         )}
 
-        {tipo === TxType.INGRESO && jars.length > 0 && (
+        {/* Solo si la economia de este movimiento tiene jarras. Si PanaClaw
+            todavia no reparte, el interruptor seria un boton que no hace
+            nada. */}
+        {tipo === TxType.INGRESO && jarrasPropias.length > 0 && (
           <button
             onClick={() => { setRepartir(!repartir); if (!repartir) setJarId(''); }}
             className={cn(

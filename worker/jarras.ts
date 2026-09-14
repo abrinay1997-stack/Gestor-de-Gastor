@@ -11,9 +11,11 @@
  * jarras no ven.
  */
 
-import { aJarImputacion, listarJarras } from './db.ts';
+import { aJar, aJarImputacion, listarCategorias, listarEntidades, listarJarras } from './db.ts';
 import type { Env } from './env.ts';
-import { imputacionJarras } from '../shared/domain.ts';
+import {
+  entidadDe, entidadPorDefecto, imputacionJarras, indexarCategorias, jarrasDe,
+} from '../shared/domain.ts';
 import type { JarImputacion, Jar, Transaction } from '../shared/types.ts';
 
 /** Lo que define el reparto. Si nada de esto cambia, no se vuelve a congelar. */
@@ -76,19 +78,44 @@ export async function jarrasParaRepartir(env: Env, householdId: string): Promise
   const { results } = await env.DB.prepare(
     'SELECT * FROM jar WHERE household_id = ?1 ORDER BY display_order ASC, created_at ASC',
   ).bind(householdId).all<Record<string, unknown>>();
-  // listarJarras haria el trabajo de calcular saldos que aca no se usa.
-  return results.map((f) => ({
-    id: String(f.id),
-    householdId: String(f.household_id),
-    name: String(f.name),
-    percentageBp: Number(f.percentage_bp ?? 0),
-    color: String(f.color),
-    icon: String(f.icon),
-    displayOrder: Number(f.display_order ?? 0),
-    createdAt: Number(f.created_at ?? 0),
-    acumula: Number(f.acumula ?? 0) === 1,
-    balanceMinor: 0,
-  }));
+  // aJar deja el saldo en cero, que es justo lo que hace falta: para congelar
+  // un reparto solo importan los porcentajes y el orden. Pedir los saldos
+  // obligaria a leer todas las imputaciones en cada alta.
+  return results.map(aJar);
+}
+
+/** Lo minimo para saber de quien es un movimiento y a que jarras va. */
+export interface AmbitoDeReparto {
+  jarrasPara(tx: { entityId: string | null; categoryId: string | null }): Jar[];
+  /** Todas, para cuando hace falta la lista completa (poner al dia). */
+  todas: Jar[];
+}
+
+/**
+ * El ambito con el que se congela un reparto: jarras, categorias y entidades,
+ * leidas UNA vez.
+ *
+ * Se resuelve aca y no en cada alta porque un lote de 100 movimientos no puede
+ * hacer 100 consultas para averiguar de que entidad es cada uno. Las tres
+ * tablas son chicas —jarras, categorias y entidades se cuentan por decenas—,
+ * asi que leerlas enteras sale mas barato que cruzarlas en SQL por fila.
+ */
+export async function ambitoDeReparto(
+  env: Env, householdId: string,
+): Promise<AmbitoDeReparto> {
+  const [jarras, categorias, entidades] = await Promise.all([
+    jarrasParaRepartir(env, householdId),
+    listarCategorias(env, householdId),
+    listarEntidades(env, householdId),
+  ]);
+
+  const indice = indexarCategorias(categorias);
+  const porDefecto = entidadPorDefecto(entidades);
+
+  return {
+    todas: jarras,
+    jarrasPara: (tx) => jarrasDe(jarras, entidadDe(tx, indice), porDefecto),
+  };
 }
 
 export { listarJarras };

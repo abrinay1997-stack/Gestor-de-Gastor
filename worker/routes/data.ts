@@ -16,6 +16,7 @@ import { AccountCategory, SECCIONES_INICIO, type Jar } from '../../shared/types.
 import { validarJarras } from '../../shared/domain.ts';
 
 const CATEGORIAS_CUENTA = Object.values(AccountCategory);
+const FORMAS_DE_LLENAR = ['porcentaje', 'fijo', 'resto'] as const;
 
 // --- snapshot ------------------------------------------------------------
 
@@ -167,12 +168,14 @@ export async function crearCategoria(req: Request, env: Env, sesion: Sesion): Pr
   const id = idOpcional(body.id, 'id') ?? nuevoId();
 
   await env.DB.prepare(
-    `INSERT INTO category (id, household_id, name, type, parent_id, icon, color, archived, display_order, created_at)
-     VALUES (?1,?2,?3,?4,?5,?6,?7,0,?8,?9)`,
+    `INSERT INTO category (id, household_id, name, type, parent_id, icon, color,
+                           archived, display_order, created_at, entity_id)
+     VALUES (?1,?2,?3,?4,?5,?6,?7,0,?8,?9,?10)`,
   ).bind(
     id, sesion.householdId, name, type, parentId,
     texto(body.icon ?? 'tag', 'icon', { max: 40 }), color(body.color, '#64748b'),
     entero(body.displayOrder ?? 0, 'displayOrder', { min: 0, max: 9999 }), t,
+    idOpcional(body.entityId, 'entityId'),
   ).run();
 
   const fila = await env.DB.prepare('SELECT * FROM category WHERE id = ?1').bind(id)
@@ -195,14 +198,18 @@ export async function editarCategoria(
   const body = await cuerpo(req);
 
   await env.DB.prepare(
-    `UPDATE category SET name=?1, icon=?2, color=?3, archived=?4, display_order=?5
-     WHERE id=?6 AND household_id=?7`,
+    `UPDATE category SET name=?1, icon=?2, color=?3, archived=?4, display_order=?5,
+                         entity_id=?6
+     WHERE id=?7 AND household_id=?8`,
   ).bind(
     texto(body.name ?? actual.name, 'name', { max: 60, min: 1 }),
     texto(body.icon ?? actual.icon, 'icon', { max: 40 }),
     color(body.color, actual.color),
     booleano(body.archived ?? actual.archived) ? 1 : 0,
     entero(body.displayOrder ?? actual.displayOrder, 'displayOrder', { min: 0, max: 9999 }),
+    // Cambiar esto reclasifica toda la historia de la categoria de una vez,
+    // sin tocar un solo movimiento. Es el punto de tenerla aca.
+    body.entityId === undefined ? actual.entityId : idOpcional(body.entityId, 'entityId'),
     id, sesion.householdId,
   ).run();
 
@@ -248,15 +255,28 @@ export async function guardarJarras(req: Request, env: Env, sesion: Sesion): Pro
       displayOrder: i,
       createdAt: t,
       acumula: booleano(o.acumula ?? false),
+      entityId: idOpcional(o.entityId, 'entityId'),
+      fillKind: unoDe(o.fillKind ?? 'porcentaje', FORMAS_DE_LLENAR, 'fillKind'),
+      fillMinor: o.fillMinor === undefined || o.fillMinor === null
+        ? null
+        : entero(o.fillMinor, 'fillMinor', { min: 0, max: 999_999_999_999 }),
       balanceMinor: 0,
     });
   }
 
-  if (jarras.length > 0) {
-    const { ok, sumaBp } = validarJarras(jarras);
+  // Se valida por entidad: cada economia tiene su propio 100%. Mezclar las
+  // jarras de la casa con las de un negocio en una sola suma no querria decir
+  // nada.
+  const porEntidad = new Map<string, Jar[]>();
+  for (const j of jarras) {
+    const clave = j.entityId ?? '';
+    porEntidad.set(clave, [...(porEntidad.get(clave) ?? []), j]);
+  }
+  for (const grupo of porEntidad.values()) {
+    const { ok, sumaBp, motivo } = validarJarras(grupo);
     if (!ok) {
       return error(
-        `Los porcentajes deben sumar 100%. Ahora suman ${(sumaBp / 100).toFixed(2)}%.`,
+        motivo ?? `Los porcentajes deben sumar 100%. Ahora suman ${(sumaBp / 100).toFixed(2)}%.`,
         400,
       );
     }
@@ -276,14 +296,17 @@ export async function guardarJarras(req: Request, env: Env, sesion: Sesion): Pro
     ...jarras.map((j) =>
       env.DB.prepare(
         `INSERT INTO jar (id, household_id, name, percentage_bp, color, icon,
-                          display_order, acumula, created_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
+                          display_order, acumula, entity_id, fill_kind, fill_minor, created_at)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)
          ON CONFLICT(id) DO UPDATE SET
            name=excluded.name, percentage_bp=excluded.percentage_bp,
            color=excluded.color, icon=excluded.icon,
-           display_order=excluded.display_order, acumula=excluded.acumula`,
+           display_order=excluded.display_order, acumula=excluded.acumula,
+           entity_id=excluded.entity_id, fill_kind=excluded.fill_kind,
+           fill_minor=excluded.fill_minor`,
       ).bind(j.id, sesion.householdId, j.name, j.percentageBp, j.color, j.icon,
-             j.displayOrder, j.acumula ? 1 : 0, j.createdAt),
+             j.displayOrder, j.acumula ? 1 : 0, j.entityId, j.fillKind, j.fillMinor,
+             j.createdAt),
     ),
   ];
 
@@ -318,11 +341,16 @@ export async function guardarPresupuesto(req: Request, env: Env, sesion: Sesion)
   // El indice unico (hogar, periodo, categoria) hace que volver a guardar el
   // mismo presupuesto lo actualice en lugar de duplicarlo.
   await env.DB.prepare(
-    `INSERT INTO budget (id, household_id, category_id, amount_minor, period, created_at, updated_at)
-     VALUES (?1,?2,?3,?4,?5,?6,?6)
+    `INSERT INTO budget (id, household_id, category_id, amount_minor, period,
+                         created_at, updated_at, entity_id)
+     VALUES (?1,?2,?3,?4,?5,?6,?6,?7)
      ON CONFLICT(household_id, period, IFNULL(category_id, '')) DO UPDATE SET
-       amount_minor = excluded.amount_minor, updated_at = excluded.updated_at`,
-  ).bind(id, sesion.householdId, categoryId, amountMinor, period, t).run();
+       amount_minor = excluded.amount_minor, updated_at = excluded.updated_at,
+       entity_id = excluded.entity_id`,
+  ).bind(
+    id, sesion.householdId, categoryId, amountMinor, period, t,
+    idOpcional(body.entityId, 'entityId'),
+  ).run();
 
   const fila = await env.DB.prepare(
     `SELECT * FROM budget WHERE household_id = ?1 AND period = ?2 AND IFNULL(category_id,'') = ?3`,

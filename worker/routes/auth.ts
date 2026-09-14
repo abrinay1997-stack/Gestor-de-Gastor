@@ -70,12 +70,24 @@ export async function setup(req: Request, env: Env): Promise<Response> {
 function sentenciasSemilla(env: Env, householdId: string, t: number) {
   const out = [];
 
+  // La entidad Familia, y todo lo que se siembra cuelga de ella. El id es
+  // deterministico igual que en la migracion 0005, para que un hogar creado
+  // antes y uno creado despues se vean iguales.
+  const familiaId = `${householdId}:familia`;
+  out.push(
+    env.DB.prepare(
+      `INSERT INTO entity (id, household_id, name, kind, color, icon, display_order, archived, created_at)
+       VALUES (?1, ?2, 'Familia', 'personal', '#14655a', 'house', 0, 0, ?3)`,
+    ).bind(familiaId, householdId, t),
+  );
+
   for (const [i, c] of CATEGORIAS_INICIALES.entries()) {
     out.push(
       env.DB.prepare(
-        `INSERT INTO category (id, household_id, name, type, parent_id, icon, color, archived, display_order, created_at)
-         VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?6, 0, ?7, ?8)`,
-      ).bind(nuevoId(), householdId, c.name, c.type, c.icon, c.color, i, t),
+        `INSERT INTO category (id, household_id, name, type, parent_id, icon, color,
+                               archived, display_order, created_at, entity_id)
+         VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?6, 0, ?7, ?8, ?9)`,
+      ).bind(nuevoId(), householdId, c.name, c.type, c.icon, c.color, i, t, familiaId),
     );
   }
 
@@ -83,10 +95,10 @@ function sentenciasSemilla(env: Env, householdId: string, t: number) {
     out.push(
       env.DB.prepare(
         `INSERT INTO jar (id, household_id, name, percentage_bp, color, icon,
-                          display_order, acumula, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+                          display_order, acumula, created_at, entity_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
       ).bind(nuevoId(), householdId, j.name, j.percentageBp, j.color, j.icon, i,
-             j.acumula ? 1 : 0, t),
+             j.acumula ? 1 : 0, t, familiaId),
     );
   }
 
