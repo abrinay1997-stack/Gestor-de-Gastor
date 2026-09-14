@@ -73,3 +73,49 @@ export function EtiquetaEntidad({ entidad }: { entidad: Entity | undefined }) {
     </span>
   );
 }
+
+/**
+ * Las opciones de un desplegable, agrupadas por economia.
+ *
+ * Existe porque con dos economias hay dos "Suscripciones" y dos "Publicidad", y
+ * en un desplegable nativo se ven exactamente iguales: elegir la equivocada
+ * manda el gasto a la economia equivocada, y de ahi a las jarras equivocadas.
+ *
+ * `<optgroup>` es la forma nativa de resolverlo: el sistema operativo lo dibuja
+ * con el titulo del grupo, en iOS y en Android, sin inventar nada.
+ *
+ * Con una sola economia no agrupa: un unico titulo repetido no dice nada.
+ */
+export function OpcionesPorEconomia<T extends { id: string; name: string; entityId: string | null }>(
+  { items }: { items: T[] },
+) {
+  const { entities } = useStore();
+  const economias = entities.filter((e) => !e.archived);
+
+  if (economias.length < 2) {
+    return <>{items.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</>;
+  }
+
+  const grupos = economias
+    .map((e) => ({ economia: e, suyos: items.filter((x) => x.entityId === e.id) }))
+    .filter((g) => g.suyos.length > 0);
+
+  // Los que no cuelgan de ninguna economia viva van al final, dichos por su
+  // nombre: esconderlos los volveria imposibles de arreglar.
+  const sueltos = items.filter((x) => !economias.some((e) => e.id === x.entityId));
+
+  return (
+    <>
+      {grupos.map(({ economia, suyos }) => (
+        <optgroup key={economia.id} label={economia.name}>
+          {suyos.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+        </optgroup>
+      ))}
+      {sueltos.length > 0 && (
+        <optgroup label="Sin economía">
+          {sueltos.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+        </optgroup>
+      )}
+    </>
+  );
+}

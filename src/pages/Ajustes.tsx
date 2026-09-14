@@ -19,6 +19,7 @@ import {
   SelectorIcono, Selector, Tarjeta,
 } from '../components/ui/base.tsx';
 import { SelectorEmoji } from '../components/ui/emoji.tsx';
+import { OpcionesPorEconomia } from '../components/ui/entidad.tsx';
 import { useConfirmar } from '../components/ui/confirmar.tsx';
 import { PagosHabituales } from './ajustes/PagosHabituales.tsx';
 import { cn } from '../lib/utils.ts';
@@ -833,7 +834,7 @@ function HojaPresupuesto({ abierta, alCerrar, editando }: {
           disabled={Boolean(editando)}
         >
           <option value="">Todo el mes (global)</option>
-          {gastos.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          <OpcionesPorEconomia items={gastos} />
         </Selector>
 
         {economias.length > 1 && (categoryId ? (

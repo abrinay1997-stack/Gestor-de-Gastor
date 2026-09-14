@@ -15,6 +15,7 @@ import {
   reglaDe, type Frecuencia,
 } from '@shared/recurrencia';
 import { Boton, Campo, Ficha, Hoja, Icono, Selector, Tarjeta } from '../../components/ui/base.tsx';
+import { OpcionesPorEconomia } from '../../components/ui/entidad.tsx';
 import { useConfirmar } from '../../components/ui/confirmar.tsx';
 import { etiquetaCuenta } from '../../components/transactions/CargaRapida.tsx';
 import { cn } from '../../lib/utils.ts';
@@ -125,7 +126,9 @@ const etiquetaDia = (d: number) => (d === 31 ? '31 · último día' : String(d))
 function FormularioPago({ abierto, alCerrar, editando }: {
   abierto: boolean; alCerrar: () => void; editando: Recurring | null;
 }) {
-  const { accounts, categories, jars, members, household, guardarRecurrente, avisar } = useStore();
+  const {
+    accounts, categories, jars, entities, members, household, guardarRecurrente, avisar,
+  } = useStore();
   const moneda = household?.currency ?? 'USD';
   const activas = useMemo(() => accounts.filter((a) => !a.archived), [accounts]);
 
@@ -185,6 +188,14 @@ function FormularioPago({ abierto, alCerrar, editando }: {
   const montoMinor = parseMonto(montoTexto, moneda);
   const tipoCategoria = tipo === TxType.INGRESO ? 'ingreso' : 'gasto';
   const categoriasVisibles = categories.filter((c) => !c.archived && c.type === tipoCategoria);
+
+  // De que economia es lo que se eligio. El pago habitual la hereda de su
+  // categoria igual que un movimiento, asi que decirlo aca es decir a donde va
+  // a caer la plata cada mes.
+  const economias = entities.filter((e) => !e.archived);
+  const suEconomia = entities.find(
+    (e) => e.id === categories.find((c) => c.id === categoryId)?.entityId,
+  );
 
   // Si el primer dia se mueve encima del segundo, se corre el segundo: es
   // menos molesto que bloquear el boton y dejar a la persona adivinando.
@@ -339,16 +350,29 @@ function FormularioPago({ abierto, alCerrar, editando }: {
         </Selector>
 
         {categoriasVisibles.length > 0 && (
-          <Selector etiqueta="Categoría" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-            <option value="">Sin categoría</option>
-            {categoriasVisibles.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </Selector>
+          <div className="space-y-1.5">
+            <Selector etiqueta="Categoría" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+              <option value="">Sin categoría</option>
+              <OpcionesPorEconomia items={categoriasVisibles} />
+            </Selector>
+            {/* Con el desplegable cerrado, "Suscripciones" a secas no dice cual
+                de las dos es. Y de eso depende a que economia va el gasto. */}
+            {economias.length > 1 && (
+              <p className="text-xs px-1 leading-relaxed" style={{ color: suEconomia?.color }}>
+                {suEconomia
+                  ? `Va a ${suEconomia.name}`
+                  : categoryId
+                    ? 'Esta categoría no tiene economía asignada'
+                    : 'Sin categoría no pertenece a ninguna economía'}
+              </p>
+            )}
+          </div>
         )}
 
         {jars.length > 0 && !repartir && (
           <Selector etiqueta="Jarra" value={jarId} onChange={(e) => setJarId(e.target.value)}>
             <option value="">Sin jarra</option>
-            {jars.map((j) => <option key={j.id} value={j.id}>{j.name}</option>)}
+            <OpcionesPorEconomia items={jars} />
           </Selector>
         )}
 

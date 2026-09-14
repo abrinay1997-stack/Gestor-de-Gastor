@@ -154,8 +154,12 @@ export function Movimientos({ alVerMovimiento, alAgregar }: {
             ]}
           />
 
+          {/* Cuando hay varias economias, la ficha dice de cual es: sin eso,
+              dos "Suscripciones" se ven identicas y el filtro parece roto. */}
           <div className="flex gap-2 overflow-x-auto sin-barra pb-1">
-            {categories.filter((c) => !c.archived).map((c) => (
+            {categories.filter((c) => (
+              !c.archived && (entidadActiva === null || c.entityId === entidadActiva)
+            )).map((c) => (
               <button
                 key={c.id}
                 onClick={() => setCategoria(categoria === c.id ? '' : c.id)}
@@ -166,7 +170,21 @@ export function Movimientos({ alVerMovimiento, alAgregar }: {
                 style={categoria === c.id ? { background: c.color } : undefined}
               >
                 <Icono nombre={c.icon} size={13} />
-                {c.name}
+                <span className="flex flex-col items-start leading-tight">
+                  {c.name}
+                  {entidadActiva === null && entities.filter((e) => !e.archived).length > 1 && (
+                    <span
+                      className="text-[9px] font-normal"
+                      style={{
+                        color: categoria === c.id
+                          ? 'rgb(255 255 255 / 0.75)'
+                          : (entities.find((e) => e.id === c.entityId)?.color ?? 'var(--texto-3)'),
+                      }}
+                    >
+                      {entities.find((e) => e.id === c.entityId)?.name ?? 'Sin economía'}
+                    </span>
+                  )}
+                </span>
               </button>
             ))}
           </div>
