@@ -11,8 +11,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store/store.tsx';
 import { formatBp, formatMonto, montoPlano, parseMonto } from '@shared/money';
 import {
-  entidadDe, entidadPorDefecto, flujoDeJarras, indexarCategorias, jarrasDe, sinAsignar,
-  validarJarras,
+  entidadDe, entidadPorDefecto, flujoDeJarras, indexarCategorias, jarrasDe,
+  repartirEnJarras, sinAsignar, validarJarras,
 } from '@shared/domain';
 import { describirPeriodo, periodoMes, type Periodo } from '@shared/periodo';
 import type { Entity, Jar, Transaction } from '@shared/types';
@@ -351,19 +351,33 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
 function HojaTraspaso({ abierta, alCerrar, desde }: {
   abierta: boolean; alCerrar: () => void; desde?: string;
 }) {
-  const { jars: todas, entities, entidadActiva, household, traspasarEntreJarras, avisar } = useStore();
+  const {
+    jars: todas, entities, entidadActiva, household,
+    traspasarEntreJarras, pagarAOtraEconomia, avisar,
+  } = useStore();
   const moneda = household?.currency ?? 'USD';
 
   const [origen, setOrigen] = useState('');
   const [destino, setDestino] = useState('');
+  // Vacio = mover adentro de la misma economia. Con valor = pagarle a otra.
+  const [economiaDestino, setEconomiaDestino] = useState('');
   const [montoTexto, setMontoTexto] = useState('');
   const [nota, setNota] = useState('');
   const [guardando, setGuardando] = useState(false);
 
-  // Un traspaso re-etiqueta plata dentro de una misma economia. Sacar de los
+  const variasEconomias = useMemo(
+    () => new Set(todas.map((j) => j.entityId ?? '')).size > 1,
+    [todas],
+  );
+
+  // Un traspaso re-etiqueta plata dentro de una misma economia: por eso el
+  // destino se limita a las hermanas de la jarra de origen. Sacar de los
   // impuestos de PanaClaw para tapar la comida de la casa no es mover un
-  // sobre: es que el negocio le paso plata a la casa, y eso es un movimiento
-  // con su fecha y su monto, no un ajuste silencioso.
+  // sobre, es que el negocio le pago a la casa — y para eso esta el modo pago,
+  // abajo en "A".
+  //
+  // El origen, en cambio, muestra TODAS: si no, elegir una jarra de un negocio
+  // dejaba encerrado ahi y no habia forma de volver a las de la casa.
   const jars = useMemo(() => {
     const ancla = todas.find((j) => j.id === (desde ?? origen));
     const entidad = ancla?.entityId ?? entidadActiva ?? null;
@@ -371,13 +385,17 @@ function HojaTraspaso({ abierta, alCerrar, desde }: {
     return todas.filter((j) => j.entityId === entidad);
   }, [todas, desde, origen, entidadActiva]);
 
-  const variasEconomias = useMemo(
-    () => new Set(todas.map((j) => j.entityId ?? '')).size > 1,
-    [todas],
-  );
   const nombreAmbito = entities.find(
     (e) => e.id === todas.find((j) => j.id === origen)?.entityId,
   )?.name;
+
+  /** Las jarras agrupadas por economia, para el selector de origen. */
+  const porEconomia = useMemo(() => {
+    if (!variasEconomias) return null;
+    return entities
+      .filter((e) => todas.some((j) => j.entityId === e.id))
+      .map((e) => ({ economia: e, jarras: todas.filter((j) => j.entityId === e.id) }));
+  }, [entities, todas, variasEconomias]);
 
   useEffect(() => {
     if (!abierta) return;
@@ -387,6 +405,7 @@ function HojaTraspaso({ abierta, alCerrar, desde }: {
     const conMas = [...jars].sort((a, b) => b.balanceMinor - a.balanceMinor)[0];
     setOrigen(desde ?? conMas?.id ?? '');
     setDestino(enRojo && enRojo.id !== (desde ?? conMas?.id) ? enRojo.id : '');
+    setEconomiaDestino('');
     setMontoTexto(enRojo ? montoPlano(-enRojo.balanceMinor, moneda) : '');
     setNota('');
     // Solo al abrir: recalcular con cada tecla pisaria lo que se esta eligiendo.
@@ -394,17 +413,45 @@ function HojaTraspaso({ abierta, alCerrar, desde }: {
   }, [abierta, desde, moneda]);
 
   const monto = parseMonto(montoTexto, moneda);
-  const jarraOrigen = jars.find((j) => j.id === origen);
-  const puede = origen !== '' && destino !== '' && origen !== destino
+  const jarraOrigen = todas.find((j) => j.id === origen);
+  const esPago = economiaDestino !== '';
+
+  // Las economias que podrian cobrar: las que no son la del origen y tienen
+  // jarras donde poner la plata.
+  const puedenCobrar = useMemo(() => entities.filter((e) => (
+    !e.archived
+    && e.id !== (jarraOrigen?.entityId ?? null)
+    && todas.some((j) => j.entityId === e.id)
+  )), [entities, todas, jarraOrigen]);
+
+  // Como caeria el pago, con las reglas de la economia que cobra.
+  const repartoDelPago = useMemo(() => {
+    if (!esPago || monto === null || monto <= 0) return [];
+    const destinoJarras = todas.filter((j) => j.entityId === economiaDestino);
+    const partes = repartirEnJarras(monto, destinoJarras);
+    return destinoJarras
+      .map((jarra) => ({ jarra, parte: partes.get(jarra.id) ?? 0 }))
+      .filter((x) => x.parte !== 0);
+  }, [esPago, monto, todas, economiaDestino]);
+
+  const puede = origen !== ''
+    && (esPago ? repartoDelPago.length > 0 : destino !== '' && origen !== destino)
     && monto !== null && monto > 0 && !guardando;
 
   async function guardar() {
     if (!puede || monto === null) return;
     setGuardando(true);
     try {
-      await traspasarEntreJarras({
-        fromJarId: origen, toJarId: destino, amountMinor: monto, note: nota.trim() || undefined,
-      });
+      if (esPago) {
+        await pagarAOtraEconomia({
+          fromJarId: origen, toEntityId: economiaDestino, amountMinor: monto,
+          note: nota.trim() || undefined,
+        });
+      } else {
+        await traspasarEntreJarras({
+          fromJarId: origen, toJarId: destino, amountMinor: monto, note: nota.trim() || undefined,
+        });
+      }
       alCerrar();
     } catch (e) {
       avisar(e instanceof Error ? e.message : 'No se pudo mover');
@@ -416,31 +463,81 @@ function HojaTraspaso({ abierta, alCerrar, desde }: {
   if (!abierta) return null;
 
   return (
-    <Hoja abierta alCerrar={alCerrar} titulo="Mover entre jarras">
+    <Hoja abierta alCerrar={alCerrar} titulo={esPago ? 'Pagarle a otra economía' : 'Mover entre jarras'}>
       <div className="space-y-4">
         <p className="text-xs txt-3 leading-relaxed">
-          No se mueve plata de ninguna cuenta. Solo cambia para qué está
-          guardada.
-          {variasEconomias && nombreAmbito
-            && ` Se mueve entre las jarras de ${nombreAmbito}: pasar plata de una economía a otra es un movimiento, no un traspaso.`}
+          {esPago ? (
+            <>
+              No se mueve plata de ninguna cuenta: ya está ahí, lo que cambia es
+              de quién es. Por eso no cuenta como ingreso —el negocio ya lo contó
+              cuando cobró— y el total del hogar no se mueve.
+            </>
+          ) : (
+            <>
+              No se mueve plata de ninguna cuenta. Solo cambia para qué está
+              guardada.
+              {variasEconomias && nombreAmbito
+                && ` Estas son las jarras de ${nombreAmbito}; para pasarle plata a otra economía, elegila abajo en "A".`}
+            </>
+          )}
         </p>
 
-        <Selector etiqueta="De" value={origen} onChange={(e) => setOrigen(e.target.value)}>
+        <Selector
+          etiqueta="De"
+          value={origen}
+          onChange={(e) => {
+            setOrigen(e.target.value);
+            // El destino viejo puede ser de otra economia: se limpia para no
+            // mandar un traspaso que cruza sin querer.
+            setDestino('');
+            setEconomiaDestino('');
+          }}
+        >
           <option value="">Elegí una jarra</option>
-          {jars.map((j) => (
-            <option key={j.id} value={j.id}>
-              {j.name} · {formatMonto(j.balanceMinor, moneda)}
-            </option>
-          ))}
+          {porEconomia
+            ? porEconomia.map(({ economia, jarras }) => (
+              <optgroup key={economia.id} label={economia.name}>
+                {jarras.map((j) => (
+                  <option key={j.id} value={j.id}>
+                    {j.name} · {formatMonto(j.balanceMinor, moneda)}
+                  </option>
+                ))}
+              </optgroup>
+            ))
+            : todas.map((j) => (
+              <option key={j.id} value={j.id}>
+                {j.name} · {formatMonto(j.balanceMinor, moneda)}
+              </option>
+            ))}
         </Selector>
 
-        <Selector etiqueta="A" value={destino} onChange={(e) => setDestino(e.target.value)}>
-          <option value="">Elegí una jarra</option>
+        {/* El destino: otra jarra de la misma economia, o directamente otra
+            economia. Lo segundo es el escalon que usan ellos —el negocio le
+            paga a la casa— y se ve distinto porque es otra cosa. */}
+        <Selector
+          etiqueta="A"
+          value={esPago ? `e:${economiaDestino}` : destino}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v.startsWith('e:')) { setEconomiaDestino(v.slice(2)); setDestino(''); }
+            else { setEconomiaDestino(''); setDestino(v); }
+          }}
+        >
+          <option value="">Elegí a dónde va</option>
           {jars.filter((j) => j.id !== origen).map((j) => (
             <option key={j.id} value={j.id}>
               {j.name} · {formatMonto(j.balanceMinor, moneda)}
             </option>
           ))}
+          {puedenCobrar.length > 0 && (
+            <optgroup label="Pagarle a otra economía">
+              {puedenCobrar.map((e) => (
+                <option key={e.id} value={`e:${e.id}`}>
+                  {e.name} · se reparte en sus jarras
+                </option>
+              ))}
+            </optgroup>
+          )}
         </Selector>
 
         <Campo
@@ -460,16 +557,37 @@ function HojaTraspaso({ abierta, alCerrar, desde }: {
           </p>
         )}
 
+        {/* Como cae el pago, antes de hacerlo. Con las reglas de quien cobra,
+            no las de quien paga. */}
+        {esPago && repartoDelPago.length > 0 && (
+          <div className="superficie-2 rounded-2xl p-3 space-y-1.5 -mt-1">
+            <p className="text-xs txt-2 mb-1.5">
+              Entra repartido en las jarras de{' '}
+              {entities.find((e) => e.id === economiaDestino)?.name}:
+            </p>
+            {repartoDelPago.map(({ jarra, parte }) => (
+              <div key={jarra.id} className="flex items-center justify-between gap-2 text-xs">
+                <span className="txt-2 truncate">{jarra.name}</span>
+                <span className="tabular font-medium txt shrink-0">
+                  {formatMonto(parte, moneda)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
         <Campo
           etiqueta="Por qué (opcional)"
           value={nota}
           onChange={(e) => setNota(e.target.value)}
-          placeholder="Me pasé con la comida..."
+          placeholder={esPago ? 'Lo que me tocó de septiembre...' : 'Me pasé con la comida...'}
           maxLength={200}
         />
 
         <Boton onClick={() => void guardar()} disabled={!puede} className="w-full min-h-12">
-          {guardando ? 'Moviendo...' : 'Mover'}
+          {guardando
+            ? (esPago ? 'Pagando...' : 'Moviendo...')
+            : (esPago ? 'Pagar' : 'Mover')}
         </Boton>
       </div>
     </Hoja>

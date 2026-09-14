@@ -318,6 +318,9 @@ interface Acciones {
   traspasarEntreJarras: (d: {
     fromJarId: string; toJarId: string; amountMinor: number; note?: string;
   }) => Promise<void>;
+  pagarAOtraEconomia: (d: {
+    fromJarId: string; toEntityId: string; amountMinor: number; note?: string;
+  }) => Promise<void>;
   borrarTraspaso: (id: string) => Promise<void>;
   ponerJarrasAlDia: () => Promise<number>;
   guardarPresupuesto: (b: { categoryId: string | null; amountMinor: number; period: string }) => Promise<void>;
@@ -589,6 +592,14 @@ export function Store({ children }: { children: ReactNode }) {
     traspasarEntreJarras: async (d) => {
       const r = await api.traspasarEntreJarras(d);
       dispatch({ t: 'jarTransfer:upsert', transfer: r.transfer });
+    },
+
+    pagarAOtraEconomia: async (d) => {
+      const r = await api.pagarAOtraEconomia(d);
+      // Son varios traspasos de una vez: se aplican todos y se toman los
+      // saldos ya recalculados que devuelve el servidor.
+      for (const transfer of r.transfers) dispatch({ t: 'jarTransfer:upsert', transfer });
+      dispatch({ t: 'jars', jars: r.jars });
     },
 
     borrarTraspaso: async (id) => {

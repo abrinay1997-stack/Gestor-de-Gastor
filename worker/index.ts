@@ -42,6 +42,8 @@ const RUTAS: Record<string, Partial<Record<string, Handler>>> = {
   '/api/adjustments': { GET: adjustments.listar, POST: adjustments.crear },
   '/api/jar-transfers': { GET: jarTransfers.listar, POST: jarTransfers.crear },
   '/api/jars/poner-al-dia': { POST: jarTransfers.ponerAlDia },
+  // Un negocio le paga a la casa: sale de una jarra suya y entra repartido.
+  '/api/jar-transfers/pago': { POST: jarTransfers.pagar },
   '/api/entities': { GET: entities.listar, POST: entities.crear },
   // Los numeros ya calculados, para auditar sin leer el codigo. Ver resumen.ts.
   '/api/resumen': { GET: resumen.traer },

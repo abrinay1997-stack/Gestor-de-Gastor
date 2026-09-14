@@ -226,6 +226,13 @@ pertenecen a una economía de forma dura, porque los porcentajes tienen que
 sumar 100% dentro de un ámbito: un cobro de un negocio se reparte entre las
 jarras de ese negocio, y a la casa la plata le llega después.
 
+**Cuando el negocio le paga a la casa, no se mueve ninguna cuenta.** Las
+cuentas están mezcladas: no hay una que sea de PanaClaw. La plata ya está ahí,
+lo que cambia es de quién es. Por eso el pago sale de una jarra del negocio y
+entra repartido en las de la casa, con las reglas de la casa, y **no cuenta
+como ingreso**: el negocio ya lo contó cuando cobró, y contarlo dos veces
+inflaría el total del hogar.
+
 ## Auditar las cuentas con una IA
 
 `GET /api/resumen` devuelve los números de tu hogar **ya calculados** —resultado

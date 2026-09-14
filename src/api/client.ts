@@ -172,6 +172,15 @@ export const api = {
     fromJarId: string; toJarId: string; amountMinor: number; note?: string;
   }) => post<{ transfer: JarTransfer; jars: Jar[] }>('/api/jar-transfers', d),
 
+  /**
+   * Un negocio le paga a la casa. Sale de una jarra suya y entra repartido
+   * entre las de la otra economia, con las reglas de esa economia. No toca
+   * ninguna cuenta: la plata ya estaba ahi, lo que cambia es de quien es.
+   */
+  pagarAOtraEconomia: (d: {
+    fromJarId: string; toEntityId: string; amountMinor: number; note?: string;
+  }) => post<{ transfers: JarTransfer[]; jars: Jar[] }>('/api/jar-transfers/pago', d),
+
   borrarTraspaso: (id: string) =>
     del<{ ok: true; jars: Jar[] }>(`/api/jar-transfers/${id}`),
 

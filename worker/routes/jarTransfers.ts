@@ -11,7 +11,7 @@ import {
   aJarTransfer, listarCuentas, listarImputaciones, listarJarras, listarTraspasos,
 } from '../db.ts';
 import { ambitoDeReparto, sentenciasImputacion } from '../jarras.ts';
-import { validarJarras } from '../../shared/domain.ts';
+import { repartirEnJarras, validarJarras } from '../../shared/domain.ts';
 import { TxType } from '../../shared/types.ts';
 import type { Env } from '../env.ts';
 import {
@@ -59,6 +59,83 @@ export async function crear(req: Request, env: Env, sesion: Sesion): Promise<Res
     kind: 'jarTransfer:upsert', transfer, by: sesion.memberId,
   });
   return json({ transfer, jars: await listarJarras(env, sesion.householdId) }, { status: 201 });
+}
+
+/**
+ * Un negocio le paga a la casa (o a otro negocio).
+ *
+ * Es el escalon que faltaba del modelo que usan: esta el negocio, el negocio
+ * le paga a Abrinay o a Avalon, y esa plata recien ahi se reparte en los seis
+ * frascos de la casa.
+ *
+ * No toca ninguna cuenta, y no puede: las cuentas estan mezcladas, no hay una
+ * que sea de PanaClaw. La plata ya esta ahi adentro; lo que cambia es de quien
+ * es. Por eso NO es un ingreso ni un gasto —contarlo como tal duplicaria el
+ * total del hogar, porque el negocio ya lo conto cuando cobro—, y por eso
+ * tampoco puede ser una transferencia entre cuentas.
+ *
+ * Sale de una jarra del negocio y entra repartido en las de la casa, con las
+ * reglas de la casa. Son varios traspasos con la misma nota, escritos en un
+ * solo batch: borrarlos deshace el pago entero, igual que borrar un
+ * movimiento devuelve su saldo.
+ */
+export async function pagar(req: Request, env: Env, sesion: Sesion): Promise<Response> {
+  const body = await cuerpo(req);
+
+  const fromJarId = texto(body.fromJarId, 'fromJarId', { max: 64, min: 1 });
+  const toEntityId = texto(body.toEntityId, 'toEntityId', { max: 64, min: 1 });
+  const amountMinor = entero(body.amountMinor, 'amountMinor', { min: 1, max: MAX_MONTO });
+  const note = textoOpcional(body.note, 'note', 200);
+  const date = entero(body.date ?? ahora(), 'date', { min: 0, max: 4_102_444_800_000 });
+
+  const todas = await listarJarras(env, sesion.householdId);
+  const origen = todas.find((j) => j.id === fromJarId);
+  if (!origen) return error('La jarra de origen no existe', 404);
+
+  const destino = todas.filter((j) => j.entityId === toEntityId);
+  if (destino.length === 0) {
+    return error('Esa economía todavía no tiene jarras donde poner la plata', 400);
+  }
+  if (origen.entityId === toEntityId) {
+    return error('Para mover dentro de la misma economía usá un traspaso', 400);
+  }
+
+  // Los porcentajes del destino tienen que cerrar: si no, el pago entraria a
+  // medias y la diferencia quedaria flotando entre las jarras y el sin asignar.
+  const { ok, sumaBp, motivo } = validarJarras(destino);
+  if (!ok) {
+    return error(
+      motivo ?? `Antes de cobrar, los porcentajes de esa economía tienen que sumar 100%. Ahora suman ${(sumaBp / 100).toFixed(2)}%.`,
+      400,
+    );
+  }
+
+  const partes = repartirEnJarras(amountMinor, destino);
+  const t = ahora();
+  const filas = [...partes].filter(([, monto]) => monto > 0).map(([toJarId, monto]) => ({
+    id: nuevoId(), toJarId, monto,
+  }));
+  if (filas.length === 0) return error('El monto es muy chico para repartirlo', 400);
+
+  await env.DB.batch(filas.map((f) => env.DB.prepare(
+    `INSERT INTO jar_transfer (id, household_id, from_jar_id, to_jar_id, amount_minor,
+                               note, date, created_by, created_at)
+     VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)`,
+  ).bind(f.id, sesion.householdId, fromJarId, f.toJarId, f.monto, note, date, sesion.memberId, t)));
+
+  // Se recarga entero: son varios traspasos de una vez y mandar uno por uno
+  // seria una tormenta de eventos por algo que el otro telefono lee como una
+  // sola cosa.
+  const [accounts, jars, jarTransfers] = await Promise.all([
+    listarCuentas(env, sesion.householdId),
+    listarJarras(env, sesion.householdId),
+    listarTraspasos(env, sesion.householdId),
+  ]);
+  await difundir(env, sesion.householdId, { kind: 'recargar', accounts, jars });
+
+  return json({ transfers: jarTransfers.filter(
+    (x) => filas.some((f) => f.id === x.id),
+  ), jars }, { status: 201 });
 }
 
 export async function borrar(

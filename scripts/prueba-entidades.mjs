@@ -200,7 +200,63 @@ async function main() {
      snap.jars.find((j) => j.name === 'Impuestos').balanceMinor === antes,
      `${antes} -> ${snap.jars.find((j) => j.name === 'Impuestos').balanceMinor}`);
 
-  console.log('\n7. El resumen para auditar sin leer el codigo');
+  console.log('\n7. EL NEGOCIO LE PAGA A LA CASA');
+  snap = (await pedir('/api/snapshot')).datos;
+  const antesCuentas = snap.accounts.filter((c) => !c.archived)
+    .reduce((a, c) => a + c.balanceMinor, 0);
+  const antesTodas = snap.jars.reduce((a, j) => a + j.balanceMinor, 0);
+  const operacion = snap.jars.find((j) => j.name === 'Operación');
+  const antesOperacion = operacion.balanceMinor;
+  const antesFamilia = snap.jars.filter((j) => j.entityId === familia)
+    .reduce((a, j) => a + j.balanceMinor, 0);
+
+  const pago = await pedir('/api/jar-transfers/pago', { method: 'POST', body: JSON.stringify({
+    fromJarId: operacion.id, toEntityId: familia, amountMinor: 70000,
+    note: 'Lo que me tocó de septiembre' }) });
+  ok('el pago se registra', pago.status === 201, JSON.stringify(pago.datos).slice(0, 200));
+  ok('entra repartido en las seis de la casa', pago.datos.transfers?.length === 6,
+     pago.datos.transfers?.length);
+
+  snap = (await pedir('/api/snapshot')).datos;
+  const despuesCuentas = snap.accounts.filter((c) => !c.archived)
+    .reduce((a, c) => a + c.balanceMinor, 0);
+  ok('NO TOCA NINGUNA CUENTA', despuesCuentas === antesCuentas,
+     `${antesCuentas} -> ${despuesCuentas}`);
+  ok('el total en jarras no cambia: la plata solo cambio de dueño',
+     snap.jars.reduce((a, j) => a + j.balanceMinor, 0) === antesTodas);
+  ok('sale de la jarra del negocio',
+     snap.jars.find((j) => j.name === 'Operación').balanceMinor === antesOperacion - 70000,
+     snap.jars.find((j) => j.name === 'Operación').balanceMinor);
+  ok('entra entero en las de la casa, al centavo',
+     snap.jars.filter((j) => j.entityId === familia).reduce((a, j) => a + j.balanceMinor, 0)
+       === antesFamilia + 70000);
+
+  // Lo mas importante: el pago NO es un ingreso. Si lo fuera, el hogar se
+  // contaria la misma plata dos veces.
+  ok('no crea ningun movimiento', snap.transactions.length === 6, snap.transactions.length);
+  const rFinal = resultados(snap);
+  ok('el resultado de la casa no se mueve por cobrar',
+     (rFinal.get(familia)?.ingreso ?? 0) === 0, JSON.stringify(rFinal.get(familia)));
+
+  // Y deshacerlo lo devuelve todo.
+  for (const t of pago.datos.transfers) {
+    await pedir(`/api/jar-transfers/${t.id}`, { method: 'DELETE' });
+  }
+  snap = (await pedir('/api/snapshot')).datos;
+  ok('BORRARLO DEVUELVE TODO A COMO ESTABA',
+     snap.jars.find((j) => j.name === 'Operación').balanceMinor === antesOperacion
+     && snap.jars.filter((j) => j.entityId === familia)
+       .reduce((a, j) => a + j.balanceMinor, 0) === antesFamilia);
+
+  const aSiMismo = await pedir('/api/jar-transfers/pago', { method: 'POST', body: JSON.stringify({
+    fromJarId: operacion.id, toEntityId: pc.id, amountMinor: 1000 }) });
+  ok('rechaza pagarse a si mismo', aSiMismo.status === 400, aSiMismo.status);
+
+  const aNadie = await pedir('/api/jar-transfers/pago', { method: 'POST', body: JSON.stringify({
+    fromJarId: operacion.id, toEntityId: bk.id, amountMinor: 1000 }) });
+  ok('rechaza pagarle a una economia sin jarras', aNadie.status === 400, aNadie.status);
+
+  console.log('\n8. El resumen para auditar sin leer el codigo');
   const sinSesion = await fetch(BASE + '/api/resumen');
   ok('exige sesion', sinSesion.status === 401, sinSesion.status);
 
@@ -235,7 +291,7 @@ async function main() {
      JSON.stringify(R).length < JSON.stringify(snapAhora).length,
      `${JSON.stringify(R).length} vs ${JSON.stringify(snapAhora).length}`);
 
-  console.log('\n8. Archivar no borra historia');
+  console.log('\n9. Archivar no borra historia');
   await pedir(`/api/entities/${bk.id}`, { method: 'DELETE' });
   snap = (await pedir('/api/snapshot')).datos;
   ok('queda archivada', snap.entities.find((e) => e.id === bk.id)?.archived === true);
