@@ -75,7 +75,7 @@ export async function resumenDelHogar(
 
   const saldosJarras = new Map(jars.map((j) => [j.id, j.balanceMinor]));
   const libre = sinAsignar(activas, saldosJarras);
-  const flujoVida = flujoDeJarras(jars, snap.imputaciones, snap.jarTransfers);
+  const flujoVida = flujoDeJarras(jars, snap.imputaciones, snap.jarTransfers, snap.jarAportes);
 
   // Los ultimos N meses, del mas viejo al mas nuevo.
   const hoy = new Date();

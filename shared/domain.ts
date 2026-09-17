@@ -220,9 +220,17 @@ export function calcularJarras(
   jars: Jar[],
   imputaciones: JarImputacion[],
   transfers: JarTransfer[],
+  /**
+   * Obligatorio y ANTES de los opcionales a proposito. Cuando tenia un `= []`
+   * al final, tres de los cuatro lugares que llamaban a estas funciones se lo
+   * olvidaban y el numero salia mal sin que nada avisara: la pantalla de
+   * jarras mostraba "entro $200, salio $559" en una jarra con $150 adentro, y
+   * el resumen que lee el consejero le pasaba esos mismos numeros rotos.
+   * Siendo obligatorio, olvidarselo no compila.
+   */
+  aportes: JarAporte[],
   fechaDe?: (txId: string) => number | undefined,
   periodo?: Periodo,
-  aportes: JarAporte[] = [],
 ): Map<string, number> {
   const saldos = new Map<string, number>(jars.map((j) => [j.id, 0]));
   const suma = (jarId: string, delta: number) => {
@@ -267,9 +275,10 @@ export function flujoDeJarras(
   jars: Jar[],
   imputaciones: JarImputacion[],
   transfers: JarTransfer[],
+  /** Obligatorio: ver la nota en calcularJarras. */
+  aportes: JarAporte[],
   fechaDe?: (txId: string) => number | undefined,
   periodo?: Periodo,
-  aportes: JarAporte[] = [],
 ): Map<string, FlujoJarra> {
   const out = new Map<string, FlujoJarra>(jars.map((j) => [j.id, { entroMinor: 0, salioMinor: 0 }]));
   const anotar = (jarId: string, delta: number) => {

@@ -36,8 +36,8 @@ function describirLlenado(j: Jar, moneda: string): string {
 
 export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction) => void }) {
   const {
-    jars, accounts, imputaciones, jarTransfers, transactions, categories, entities,
-    entidadActiva, household, guardarJarras, ponerJarrasAlDia, avisar,
+    jars, accounts, imputaciones, jarTransfers, jarAportes, transactions, categories,
+    entities, entidadActiva, household, guardarJarras, ponerJarrasAlDia, avisar,
   } = useStore();
   const moneda = household?.currency ?? 'USD';
 
@@ -93,16 +93,22 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
 
   // Lo que entro y salio en el periodo elegido. El saldo grande sigue siendo
   // el de toda la vida: es el que dice si se puede gastar.
+  //
+  // Los APORTES van adentro. El saldo siempre los conto y el flujo no, asi que
+  // una jarra con $150 de saldo mostraba "entro $200, salio $559" y la barra
+  // salia roja entera: le faltaban los $509 que se le habian repartido a mano
+  // desde el sin asignar. Repartir a una jarra es plata que entra, igual que
+  // un ingreso.
   const flujo = useMemo(
-    () => flujoDeJarras(jars, imputaciones, jarTransfers, fechaDe, periodo),
-    [jars, imputaciones, jarTransfers, fechaDe, periodo],
+    () => flujoDeJarras(jars, imputaciones, jarTransfers, jarAportes, fechaDe, periodo),
+    [jars, imputaciones, jarTransfers, fechaDe, periodo, jarAportes],
   );
   // La barra mide cuanto de lo que la jarra recibio EN TODA SU VIDA ya se
   // gasto. Medirlo contra el mes daria la barra llena en cuanto el ingreso
   // entre el mes anterior, aunque la jarra siga casi intacta.
   const flujoVida = useMemo(
-    () => flujoDeJarras(jars, imputaciones, jarTransfers),
-    [jars, imputaciones, jarTransfers],
+    () => flujoDeJarras(jars, imputaciones, jarTransfers, jarAportes),
+    [jars, imputaciones, jarTransfers, jarAportes],
   );
 
   // El sin asignar se mide contra TODAS las jarras, mire uno lo que mire: la
@@ -292,8 +298,12 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
                     <Icono nombre="chevron-right" size={16} className="txt-3 shrink-0 -mr-1" />
                   </div>
 
-                  {/* Cuanto de lo que entro en el periodo ya se gasto. */}
-                  <Barra ratio={gastado} color={j.color} alerta />
+                  {/* Cuanto de lo que entro ya se gasto, en el color de la
+                      jarra. Sin `alerta`: viraba a ambar pasando el 60% y a
+                      rojo pasando el 100%, asi que una jarra sana que uso el
+                      70% de lo suyo se veia como un problema. El rojo queda
+                      para lo unico que si lo es: que no quede nada. */}
+                  <Barra ratio={gastado} color={enRojo ? '#ef4444' : j.color} />
 
                   {/* La frase que se viene a buscar: cuanto se puede gastar
                       todavia, o cuanto se gasto de mas. El saldo de arriba ya
@@ -664,8 +674,13 @@ function MovimientosDeJarra({ jarra, alCerrar, alVerMovimiento }: {
 
   if (!jarra) return null;
 
-  const entro = movimientos.filter((m) => m.delta > 0).reduce((a, m) => a + m.delta, 0);
-  const salio = movimientos.filter((m) => m.delta < 0).reduce((a, m) => a - m.delta, 0);
+  // Los aportes cuentan como lo que son: plata que entro a la jarra. Sin esto
+  // "Entro" mostraba solo lo que vino de movimientos y quedaba mas chico que
+  // "Salio" en jarras que estaban perfectamente en positivo.
+  const entro = movimientos.filter((m) => m.delta > 0).reduce((a, m) => a + m.delta, 0)
+    + aportes.filter((a) => a.amountMinor > 0).reduce((t, a) => t + a.amountMinor, 0);
+  const salio = movimientos.filter((m) => m.delta < 0).reduce((a, m) => a - m.delta, 0)
+    + aportes.filter((a) => a.amountMinor < 0).reduce((t, a) => t - a.amountMinor, 0);
 
   return (
     <Hoja abierta alCerrar={alCerrar} titulo={jarra.name}>

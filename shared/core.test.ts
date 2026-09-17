@@ -240,7 +240,7 @@ describe('calcularJarras', () => {
     jarra('j4', 1000, 3), jarra('j5', 1000, 4), jarra('j6', 250, 5), jarra('j7', 250, 6),
   ];
   const saldos = (movs: Transaction[], transfers: JarTransfer[] = []) =>
-    calcularJarras(jarras, imputar(movs, jarras), transfers);
+    calcularJarras(jarras, imputar(movs, jarras), transfers, []);
 
   it('reparte un ingreso sin perder ni un centavo', () => {
     const movs = [tx({ type: TxType.INGRESO, amountMinor: 333_333, distributeToJars: true })];
@@ -271,13 +271,13 @@ describe('calcularJarras', () => {
     // el saldo se movia sin que nadie cargara nada.
     const enero = [tx({ type: TxType.INGRESO, amountMinor: 100_000, distributeToJars: true })];
     const congeladas = imputar(enero, jarras);
-    const antes = calcularJarras(jarras, congeladas, []).get('j2');
+    const antes = calcularJarras(jarras, congeladas, [], []).get('j2');
 
     const nuevoReparto = [
       jarra('j1', 4500, 0), jarra('j2', 2000, 1), jarra('j3', 1000, 2),
       jarra('j4', 1000, 3), jarra('j5', 1000, 4), jarra('j6', 250, 5), jarra('j7', 250, 6),
     ];
-    const despues = calcularJarras(nuevoReparto, congeladas, []).get('j2');
+    const despues = calcularJarras(nuevoReparto, congeladas, [], []).get('j2');
 
     expect(antes).toBe(10_000);
     expect(despues).toBe(antes);
@@ -299,7 +299,7 @@ describe('calcularJarras', () => {
     const huerfana: JarImputacion = {
       id: 'x', householdId: 'h', txId: 't', jarId: 'borrada', amountMinor: 5_000, createdAt: 0,
     };
-    const r = calcularJarras(jarras, [huerfana], []);
+    const r = calcularJarras(jarras, [huerfana], [], []);
     expect(r.has('borrada')).toBe(false);
     expect([...r.values()].every((v) => v === 0)).toBe(true);
   });
@@ -316,24 +316,24 @@ describe('calcularJarras', () => {
     const fechas = fechasDe(movs);
 
     it('el saldo de toda la vida suma los dos meses', () => {
-      const r = calcularJarras(jarras, imp, [], fechas);
+      const r = calcularJarras(jarras, imp, [], [], fechas);
       expect([...r.values()].reduce((a, b) => a + b, 0)).toBe(300_000 - 5_000);
     });
 
     it('el mes solo cuenta lo suyo', () => {
-      const r = calcularJarras(jarras, imp, [], fechas, periodoMes(febrero));
+      const r = calcularJarras(jarras, imp, [], [], fechas, periodoMes(febrero));
       expect([...r.values()].reduce((a, b) => a + b, 0)).toBe(200_000 - 5_000);
     });
 
     it('lo que sobra del mes anterior NO se tira: sigue en el acumulado', () => {
       // Leer por mes es una forma de mirar, no un borron.
-      const mes = calcularJarras(jarras, imp, [], fechas, periodoMes(febrero)).get('j1')!;
-      const vida = calcularJarras(jarras, imp, [], fechas).get('j1')!;
+      const mes = calcularJarras(jarras, imp, [], [], fechas, periodoMes(febrero)).get('j1')!;
+      const vida = calcularJarras(jarras, imp, [], [], fechas).get('j1')!;
       expect(vida).toBeGreaterThan(mes);
     });
 
     it('separa lo que entro de lo que salio', () => {
-      const f = flujoDeJarras(jarras, imp, [], fechas, periodoMes(febrero)).get('j1')!;
+      const f = flujoDeJarras(jarras, imp, [], [], fechas, periodoMes(febrero)).get('j1')!;
       expect(f.entroMinor).toBe(110_000);
       expect(f.salioMinor).toBe(5_000);
     });
@@ -346,7 +346,7 @@ describe('sinAsignar', () => {
   it('es la plata que existe menos la que ya tiene trabajo', () => {
     const cuentas = [cuenta({ id: 'a1', balanceMinor: 100_000 })];
     const movs = [tx({ type: TxType.INGRESO, amountMinor: 40_000, distributeToJars: true })];
-    const s = calcularJarras(jarras, imputar(movs, jarras), []);
+    const s = calcularJarras(jarras, imputar(movs, jarras), [], []);
     expect(sinAsignar(cuentas, s)).toBe(60_000);
   });
 
@@ -368,7 +368,7 @@ describe('sinAsignar', () => {
       ],
     ];
     for (const movs of casos) {
-      const s = calcularJarras(jarras, imputar(movs, jarras), []);
+      const s = calcularJarras(jarras, imputar(movs, jarras), [], []);
       const enJarras = [...s.values()].reduce((a, b) => a + b, 0);
       expect(enJarras + sinAsignar(cuentas, s)).toBe(74_555);
     }
@@ -378,9 +378,9 @@ describe('sinAsignar', () => {
     const cuentas = [cuenta({ id: 'a1', balanceMinor: 100_000 })];
     const movs = [tx({ type: TxType.INGRESO, amountMinor: 40_000, distributeToJars: true })];
     const imp = imputar(movs, jarras);
-    const antes = sinAsignar(cuentas, calcularJarras(jarras, imp, []));
+    const antes = sinAsignar(cuentas, calcularJarras(jarras, imp, [], []));
     const t = [traspaso({ fromJarId: 'j1', toJarId: 'j2', amountMinor: 8_000 })];
-    expect(sinAsignar(cuentas, calcularJarras(jarras, imp, t))).toBe(antes);
+    expect(sinAsignar(cuentas, calcularJarras(jarras, imp, t, []))).toBe(antes);
   });
 
   it('las cuentas archivadas no respaldan jarras', () => {
@@ -394,7 +394,7 @@ describe('sinAsignar', () => {
   it('avisa cuando asignaron mas de lo que tienen', () => {
     const cuentas = [cuenta({ id: 'a1', balanceMinor: 10_000 })];
     const movs = [tx({ type: TxType.INGRESO, amountMinor: 40_000, distributeToJars: true })];
-    expect(sinAsignar(cuentas, calcularJarras(jarras, imputar(movs, jarras), []))).toBeLessThan(0);
+    expect(sinAsignar(cuentas, calcularJarras(jarras, imputar(movs, jarras), [], []))).toBeLessThan(0);
   });
 });
 

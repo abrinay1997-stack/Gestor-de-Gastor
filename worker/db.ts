@@ -428,7 +428,7 @@ export async function listarJarras(
     transfers ?? listarTraspasos(env, householdId),
     aportes ?? listarAportes(env, householdId),
   ]);
-  const saldos = calcularJarras(jarras, imp, tra, undefined, undefined, apo);
+  const saldos = calcularJarras(jarras, imp, tra, apo);
 
   return jarras.map((j) => ({ ...j, balanceMinor: saldos.get(j.id) ?? 0 }));
 }

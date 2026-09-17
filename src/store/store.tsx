@@ -479,8 +479,7 @@ export function Store({ children }: { children: ReactNode }) {
   // cambiar un porcentaje no mueva el pasado.
   const jarrasConSaldo = useMemo(() => {
     const saldos = calcularJarras(
-      estado.jars, estado.imputaciones, estado.jarTransfers,
-      undefined, undefined, estado.jarAportes,
+      estado.jars, estado.imputaciones, estado.jarTransfers, estado.jarAportes,
     );
     return estado.jars.map((j) => ({ ...j, balanceMinor: saldos.get(j.id) ?? 0 }));
   }, [estado.jars, estado.imputaciones, estado.jarTransfers, estado.jarAportes]);
