@@ -180,18 +180,42 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
         {children}
       </main>
 
-      {/* Boton flotante, solo en celular */}
+      {/* Boton flotante, solo en celular.
+          Justo encima de la barra, no flotando en el medio: a 128px del piso
+          se posaba sobre la lista y tapaba los botones de la fila que tenia
+          debajo —el check de un pago habitual, por ejemplo, no se podia
+          tocar—. Acompaña a la barra cuando se encoge. */}
       <button
         onClick={alAgregar}
         aria-label="Registrar movimiento"
-        className="md:hidden fixed right-4 bottom-32 w-14 h-14 rounded-full bg-marca-600 text-white border border-white/20 shadow-xl shadow-marca-600/35 flex items-center justify-center active:scale-[0.97] transition-all duration-100 z-30"
+        className={cn(
+          'md:hidden fixed right-4 w-13 h-13 rounded-full bg-marca-600 text-white',
+          'border border-white/20 shadow-lg shadow-marca-600/30 flex items-center justify-center',
+          'active:scale-[0.92] transition-[bottom,transform] duration-[280ms] z-30',
+        )}
+        style={{
+          bottom: compacto
+            ? 'calc(3.75rem + env(safe-area-inset-bottom, 0px))'
+            : 'calc(5rem + env(safe-area-inset-bottom, 0px))',
+          transitionTimingFunction: 'cubic-bezier(.32,.72,0,1)',
+        }}
       >
-        <Plus size={26} />
+        <Plus size={24} />
       </button>
 
-      {/* Barra inferior flotante, solo en celular */}
-      <nav className="md:hidden fixed inset-x-0 flex justify-center px-3 pointer-events-none z-30" style={{ bottom: 'calc(0.25rem + env(safe-area-inset-bottom, 0px))' }}>
-        <div className={cn('barra-flotante pointer-events-auto relative w-full max-w-[430px] rounded-[32px] px-2.5 py-2', compacto && 'py-1.5')}>
+      {/* Barra inferior flotante, solo en celular.
+          Sin etiquetas: eran las que la hacian alta, y cinco iconos de casa,
+          recibo, chanchito, billetera y engranaje no necesitan que les
+          expliquen. Al bajar se encoge entera, como la de Instagram, en vez
+          de esconder un texto que ya no existe. */}
+      <nav
+        className="md:hidden fixed inset-x-0 flex justify-center px-3 pointer-events-none z-30"
+        style={{ bottom: 'calc(0.125rem + env(safe-area-inset-bottom, 0px))' }}
+      >
+        <div className={cn(
+          'barra-flotante pointer-events-auto relative w-full max-w-[430px] rounded-[26px] px-2',
+          compacto ? 'py-0.5' : 'py-1.5',
+        )}>
           <div className="relative flex w-full">
             {enLaBarra && (
               <span
@@ -208,13 +232,20 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
                 key={d.id}
                 onClick={() => irA(d.id)}
                 aria-current={solapa === d.id ? 'page' : undefined}
+                aria-label={d.etiqueta}
                 className={cn(
-                  'relative z-10 flex-1 flex flex-col items-center justify-center min-h-12 min-w-12 rounded-2xl py-2.5 gap-0.5 transition-[transform,opacity,padding] duration-[250ms] active:scale-[0.97]',
+                  'relative z-10 flex-1 flex items-center justify-center min-w-12 rounded-2xl',
+                  'transition-[height,transform,color] duration-[280ms] active:scale-[0.92]',
+                  compacto ? 'h-11' : 'h-13',
                   solapa === d.id ? 'text-marca-600 dark:text-marca-500' : 'txt-3',
                 )}
+                style={{ transitionTimingFunction: 'cubic-bezier(.32,.72,0,1)' }}
               >
-                <Icono nombre={d.icono} size={24} />
-                <span className={cn('text-[11px] font-medium leading-tight transition-[max-height,opacity] duration-[250ms]', compacto ? 'max-h-0 opacity-0 overflow-hidden' : 'max-h-5 opacity-100')}>{d.etiqueta}</span>
+                <Icono
+                  nombre={d.icono}
+                  size={compacto ? 23 : 25}
+                  className="transition-[width,height] duration-[280ms]"
+                />
               </button>
             ))}
           </div>
