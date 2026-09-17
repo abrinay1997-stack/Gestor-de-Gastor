@@ -1,68 +1,110 @@
 /**
- * Selector de entidad, arriba de todo.
+ * Selector de entidad, en la cabecera.
  *
  * Contempla las dos vistas que pidieron: cada economia por separado, y el
  * consolidado con etiquetas. "Todo" no es un filtro apagado, es una vista
  * propia: es donde se ve que la casa esta financiando a los negocios.
+ *
+ * Vivia como una fila de pestañas arriba de cuatro pantallas y se comia 60px
+ * de alto en cada una, por encima de los numeros. Es un estado, no una
+ * seccion: ahora es una pastilla en la cabecera, del color de la economia, y
+ * las opciones se despliegan debajo.
  */
 
+import { useEffect, useRef, useState } from 'react';
 import type { Entity } from '@shared/types';
 import { useStore } from '../../store/store.tsx';
+import { Icono } from './base.tsx';
 
 import { cn } from '../../lib/utils.ts';
 
-export function SelectorEntidad() {
+export function PastillaEntidad({ className }: { className?: string }) {
   const { entities, entidadActiva, verEntidad } = useStore();
+  const [abierto, setAbierto] = useState(false);
+  const caja = useRef<HTMLDivElement>(null);
+
   const visibles = entities.filter((e) => !e.archived);
 
-  // Con una sola economia el selector no dice nada: hasta que no creen un
-  // negocio, la pantalla se queda como estaba.
+  // Cerrar al tocar afuera o al escapar: un menu que se queda abierto tapando
+  // la pantalla es peor que no tenerlo.
+  useEffect(() => {
+    if (!abierto) return;
+    const afuera = (e: MouseEvent) => {
+      if (caja.current && !caja.current.contains(e.target as Node)) setAbierto(false);
+    };
+    const escape = (e: KeyboardEvent) => { if (e.key === 'Escape') setAbierto(false); };
+    document.addEventListener('mousedown', afuera);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('mousedown', afuera);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [abierto]);
+
   if (visibles.length < 2) return null;
 
+  const actual = visibles.find((e) => e.id === entidadActiva);
   const opciones = [
-    { id: null as string | null, nombre: 'Todo', color: null as string | null },
-    ...visibles.map((e) => ({ id: e.id as string | null, nombre: e.name, color: e.color })),
+    { id: null as string | null, nombre: 'Todo', color: null as string | null, icono: 'circle-ellipsis' },
+    ...visibles.map((e) => ({
+      id: e.id as string | null, nombre: e.name, color: e.color as string | null, icono: e.icon,
+    })),
   ];
 
-  // Hasta cinco entran en partes iguales, que es lo que lo hace simetrico y
-  // callado. De ahi en adelante se desliza, porque partirlo en seis dejaria
-  // cada nombre en dos letras.
-  const enPartesIguales = opciones.length <= 5;
-
   return (
-    <div
-      role="tablist"
-      className={cn(
-        'superficie-2 borde border rounded-2xl p-1 gap-1',
-        enPartesIguales ? 'grid' : 'flex overflow-x-auto sin-barra',
+    <div ref={caja} className={cn('relative', className)}>
+      <button
+        onClick={() => setAbierto(!abierto)}
+        aria-haspopup="listbox"
+        aria-expanded={abierto}
+        className="min-h-9 pl-2.5 pr-2 rounded-full flex items-center gap-1.5 text-[13px] font-semibold
+          superficie-2 borde border transition-transform active:scale-[0.96]"
+        style={actual
+          ? {
+            background: `color-mix(in srgb, ${actual.color} 14%, var(--superficie))`,
+            color: actual.color,
+            borderColor: `color-mix(in srgb, ${actual.color} 28%, transparent)`,
+          }
+          : undefined}
+      >
+        {actual && <Icono nombre={actual.icon} size={14} />}
+        <span className="truncate max-w-[9rem]">{actual?.name ?? 'Todo'}</span>
+        <Icono nombre="chevron-down" size={14} className={cn('transition-transform', abierto && 'rotate-180')} />
+      </button>
+
+      {abierto && (
+        <div
+          role="listbox"
+          className="absolute left-0 top-full mt-1.5 z-50 min-w-[11rem] p-1 rounded-2xl
+            superficie borde border shadow-[var(--shadow-flotante)]
+            animate-[caer_.16s_cubic-bezier(.32,.72,0,1)]"
+        >
+          {opciones.map((o) => {
+            const activa = entidadActiva === o.id;
+            return (
+              <button
+                key={o.id ?? 'todo'}
+                role="option"
+                aria-selected={activa}
+                onClick={() => { verEntidad(o.id); setAbierto(false); }}
+                className={cn(
+                  'w-full min-h-10 px-2.5 rounded-xl flex items-center gap-2.5 text-sm font-medium',
+                  'text-left transition-colors active:superficie-2',
+                  activa ? 'txt' : 'txt-2',
+                )}
+                style={activa && o.color
+                  ? { background: `color-mix(in srgb, ${o.color} 14%, var(--superficie))`, color: o.color }
+                  : activa ? { background: 'var(--superficie-2)' } : undefined}
+              >
+                <Icono nombre={o.icono} size={15} style={o.color ? { color: o.color } : undefined} />
+                <span className="flex-1 truncate">{o.nombre}</span>
+                {activa && <Icono nombre="check" size={14} />}
+              </button>
+            );
+          })}
+          <style>{`@keyframes caer { from { opacity: 0; transform: translateY(-6px) } to { opacity: 1; transform: none } }`}</style>
+        </div>
       )}
-      style={enPartesIguales
-        ? { gridTemplateColumns: `repeat(${opciones.length}, minmax(0, 1fr))` }
-        : undefined}
-    >
-      {opciones.map((o) => {
-        const activa = entidadActiva === o.id;
-        return (
-          <button
-            key={o.id ?? 'todo'}
-            role="tab"
-            aria-selected={activa}
-            onClick={() => verEntidad(o.id)}
-            className={cn(
-              'min-h-9 px-2 rounded-xl text-[13px] font-medium truncate transition-colors',
-              !enPartesIguales && 'shrink-0 px-3.5',
-              activa ? 'superficie txt shadow-sm' : 'txt-3',
-            )}
-            style={activa && o.color
-              // Un fondo suave del color de la economia, no el color lleno: se
-              // distingue igual y deja de gritar.
-              ? { background: `color-mix(in srgb, ${o.color} 16%, var(--superficie))`, color: o.color }
-              : undefined}
-          >
-            {o.nombre}
-          </button>
-        );
-      })}
     </div>
   );
 }

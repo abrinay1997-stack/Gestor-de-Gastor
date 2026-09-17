@@ -20,7 +20,6 @@ import {
 import { dentroDe, periodoMes, type Periodo } from '@shared/periodo';
 import { cn, moverMes } from '../lib/utils.ts';
 import { Ficha, Tarjeta, Vacio } from '../components/ui/base.tsx';
-import { SelectorEntidad } from '../components/ui/entidad.tsx';
 import { SelectorPeriodo } from '../components/ui/periodo.tsx';
 import { decimalesDe } from '@shared/money';
 
@@ -131,8 +130,6 @@ export function Analisis() {
 
   return (
     <div className="space-y-4">
-      <SelectorEntidad />
-
       <SelectorPeriodo periodo={periodo} alCambiar={setPeriodo} />
 
       {porEntidad.length > 1 && (

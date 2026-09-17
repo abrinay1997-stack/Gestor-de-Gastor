@@ -16,6 +16,7 @@ import { LogOut, Plus } from 'lucide-react';
 import { useStore } from '../../store/store.tsx';
 import { cn } from '../../lib/utils.ts';
 import { Avatar, Icono } from '../ui/base.tsx';
+import { PastillaEntidad } from '../ui/entidad.tsx';
 
 export type Solapa =
   | 'inicio' | 'cuentas' | 'jarras' | 'movimientos' | 'analisis' | 'consejero' | 'ajustes';
@@ -118,6 +119,8 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
           <span className="font-semibold txt tracking-tight">Nuestros gastos</span>
         </div>
 
+        <PastillaEntidad className="mb-4" />
+
         <nav className="flex-1 space-y-1">
           {DESTINOS.map((d) => (
             <button
@@ -161,12 +164,19 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
 
       {/* Contenido */}
       <main className="flex-1 w-full max-w-3xl mx-auto px-4 pt-4 pb-40 md:pb-8 md:px-8 md:pt-8">
-        {/* Encabezado movil */}
-        <div className="md:hidden flex items-center justify-between mb-4 safe-top">
-          <EstadoConexion estado={estadoLive} pareja={pareja?.displayName} enLinea={parejaEnLinea} />
-          <div className="flex items-center gap-2">
+        {/* Encabezado movil.
+            La economia activa es un estado, no una seccion: vive aca y no
+            arriba de cada pantalla. El estado de la conexion solo aparece
+            cuando hay algo que decir —conectando o sin conexion—; cuando todo
+            anda, el punto verde sobre el avatar de la pareja ya lo dice. */}
+        <div className="md:hidden flex items-center justify-between gap-2 mb-3 safe-top">
+          <PastillaEntidad />
+          <div className="flex items-center gap-2 ml-auto">
+            {estadoLive !== 'conectado' && (
+              <EstadoConexion estado={estadoLive} pareja={pareja?.displayName} enLinea={parejaEnLinea} />
+            )}
             {pareja && (
-              <div className="relative">
+              <div className="relative" title={parejaEnLinea ? `${pareja.displayName} está en línea` : pareja.displayName}>
                 <Avatar nombre={pareja.displayName} color={pareja.color} emoji={pareja.emoji} size={30} />
                 {parejaEnLinea && (
                   <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-marca-500 ring-2 ring-[var(--fondo)]" />

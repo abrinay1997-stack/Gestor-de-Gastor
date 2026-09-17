@@ -136,8 +136,20 @@ export function Vacio({ icono, titulo, texto, accion }: {
  * El viraje arranca al 60% y no antes, porque gastar la mitad del presupuesto
  * a mitad de mes es exactamente lo normal y pintarlo de amarillo seria mentir.
  */
-export function Barra({ ratio, color = '#10b981', alerta = false }: {
-  ratio: number; color?: string; alerta?: boolean;
+/**
+ * `alerta` y `fina` son dos barras distintas a proposito.
+ *
+ * Gruesa con alerta = un TOPE: cuanto queda antes de pasarse, y por eso vira a
+ * rojo. Fina y tenue = una PARTE de un total: cuanto de lo gastado se fue en
+ * esto, donde no hay nada que exceder y el color es solo identidad.
+ *
+ * Se veian iguales, y en el Inicio quedaban pegadas: la barra roja de "Comida
+ * pasandose del presupuesto" y, tres centimetros abajo, la barra roja de "la
+ * categoria Comida es de color rojo". Dos rojos juntos que significaban cosas
+ * distintas.
+ */
+export function Barra({ ratio, color = '#10b981', alerta = false, fina = false }: {
+  ratio: number; color?: string; alerta?: boolean; fina?: boolean;
 }) {
   const pct = Math.min(Math.max(ratio, 0), 1) * 100;
   const excedido = ratio > 1;
@@ -159,10 +171,18 @@ export function Barra({ ratio, color = '#10b981', alerta = false }: {
   }
 
   return (
-    <div className="h-2 rounded-full superficie-2 overflow-hidden shadow-[inset_0_1px_2px_rgb(0_0_0/0.08)]">
+    <div className={cn(
+      'rounded-full superficie-2 overflow-hidden',
+      fina ? 'h-1' : 'h-2 shadow-[inset_0_1px_2px_rgb(0_0_0/0.08)]',
+    )}>
       <div
         className="h-full rounded-full transition-all duration-500"
-        style={{ width: `${pct}%`, background: fondo, boxShadow: 'inset 0 1px 0 rgb(255 255 255 / 0.35)' }}
+        style={{
+          width: `${pct}%`,
+          background: fondo,
+          opacity: fina ? 0.65 : 1,
+          boxShadow: fina ? undefined : 'inset 0 1px 0 rgb(255 255 255 / 0.35)',
+        }}
       />
     </div>
   );

@@ -420,8 +420,15 @@ export interface Member {
 }
 
 /** Secciones que se pueden ordenar y ocultar en el Inicio. */
+/**
+ * El orden de fabrica del Inicio. Cada persona puede cambiarlo en Ajustes.
+ *
+ * El patrimonio va primero porque es lo que se quiere ver al abrir la app:
+ * cuanto hay. El balance del mes es importante pero es una foto del pasado
+ * reciente; el patrimonio es el estado de hoy.
+ */
 export const SECCIONES_INICIO = [
-  'resumen', 'patrimonio', 'quien-gasto', 'presupuestos',
+  'patrimonio', 'resumen', 'quien-gasto', 'presupuestos',
   'por-categoria', 'pagos-habituales', 'ultimos',
 ] as const;
 export type SeccionInicio = (typeof SECCIONES_INICIO)[number];

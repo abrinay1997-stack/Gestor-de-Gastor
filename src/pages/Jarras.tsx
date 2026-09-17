@@ -21,7 +21,6 @@ import {
   Barra, Boton, Campo, Ficha, Hoja, Icono, Selector, SelectorIcono, Tarjeta, Vacio,
 } from '../components/ui/base.tsx';
 import { SelectorPeriodo } from '../components/ui/periodo.tsx';
-import { SelectorEntidad } from '../components/ui/entidad.tsx';
 import { cn, fechaCorta } from '../lib/utils.ts';
 
 
@@ -152,8 +151,6 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
 
   return (
     <div className="space-y-4">
-      <SelectorEntidad />
-
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold txt tracking-tight">Jarras</h1>
         {jars.length > 0 && (

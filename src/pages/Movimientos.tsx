@@ -13,7 +13,6 @@ import { dentroDe, periodoMes, type Periodo } from '@shared/periodo';
 import { TxType, type Transaction } from '@shared/types';
 import { fechaCorta } from '../lib/utils.ts';
 import { Boton, Campo, Icono, Tarjeta, Vacio } from '../components/ui/base.tsx';
-import { SelectorEntidad } from '../components/ui/entidad.tsx';
 import { SelectorPeriodo } from '../components/ui/periodo.tsx';
 import { FilaMovimiento } from './Inicio.tsx';
 import { cn } from '../lib/utils.ts';
@@ -102,7 +101,6 @@ export function Movimientos({ alVerMovimiento, alAgregar }: {
 
   return (
     <div className="space-y-4">
-      <SelectorEntidad />
       <SelectorPeriodo periodo={periodo} alCambiar={setPeriodo} />
 
       {/* El buscador se lleva todo el ancho que sobra y el filtro es un

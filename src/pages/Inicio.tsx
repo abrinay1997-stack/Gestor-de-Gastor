@@ -20,7 +20,7 @@ import {
 import { describirRegla } from '@shared/recurrencia';
 import { fechaCorta, nombreMes } from '../lib/utils.ts';
 import { Avatar, Barra, Boton, Ficha, Icono, Tarjeta, Vacio } from '../components/ui/base.tsx';
-import { EtiquetaEntidad, SelectorEntidad } from '../components/ui/entidad.tsx';
+import { EtiquetaEntidad } from '../components/ui/entidad.tsx';
 import { SelectorPeriodo } from '../components/ui/periodo.tsx';
 import { cn } from '../lib/utils.ts';
 
@@ -59,6 +59,7 @@ export function Inicio({ alVerMovimiento, alAgregar }: {
   // El patrimonio es la excepcion: las cuentas estan mezcladas, no hay una que
   // sea de un negocio. Filtrarlo seria inventar un numero que no existe.
   const patrimonio = useMemo(() => calcularPatrimonio(accounts), [accounts]);
+  const cuantasCuentas = useMemo(() => accounts.filter((c) => !c.archived).length, [accounts]);
   const porPers = useMemo(() => porPersona(delMes, members), [delMes, members]);
   const gastoPorCat = useMemo(() => porCategoria(delMes, categories, 'gasto').slice(0, 5), [delMes, categories]);
   const presupuestos = useMemo(
@@ -89,42 +90,50 @@ export function Inicio({ alVerMovimiento, alAgregar }: {
 
   const secciones: Record<SeccionInicio, React.ReactNode> = {
     'resumen': (
-      <Tarjeta className="bg-linear-to-br from-marca-600 to-marca-700 border-transparent text-white">
-        <p className="text-sm opacity-80 mb-1">
-          {periodo.tipo === 'mes' ? 'Balance del mes' : 'Balance del período'}
-          {nombreActiva && ` · ${nombreActiva}`}
-        </p>
-        <p className="text-4xl font-bold tabular tracking-tight mb-5">{formatMonto(resumen.flujoMinor, moneda)}</p>
+      <Tarjeta>
+        <div className="flex items-baseline justify-between mb-3">
+          <p className="text-xs txt-2">
+            {periodo.tipo === 'mes' ? 'Balance del mes' : 'Balance del período'}
+            {nombreActiva && ` · ${nombreActiva}`}
+          </p>
+          <p className={cn(
+            'text-xl font-semibold tabular tracking-tight',
+            resumen.flujoMinor < 0 ? 'text-red-500' : 'txt',
+          )}>
+            {formatMonto(resumen.flujoMinor, moneda)}
+          </p>
+        </div>
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-white/15 rounded-2xl p-3">
-            <div className="flex items-center gap-1.5 text-xs opacity-80 mb-1">
+          <div className="superficie-2 rounded-2xl p-3">
+            <div className="flex items-center gap-1.5 text-xs txt-3 mb-0.5">
               <Icono nombre="arrow-up-right" size={13} /> Entró
             </div>
-            <p className="font-semibold tabular">{formatMonto(resumen.ingresoMinor, moneda)}</p>
+            <p className="font-semibold tabular txt">{formatMonto(resumen.ingresoMinor, moneda)}</p>
           </div>
-          <div className="bg-white/15 rounded-2xl p-3">
-            <div className="flex items-center gap-1.5 text-xs opacity-80 mb-1">
+          <div className="superficie-2 rounded-2xl p-3">
+            <div className="flex items-center gap-1.5 text-xs txt-3 mb-0.5">
               <Icono nombre="arrow-down-left" size={13} /> Salió
             </div>
-            <p className="font-semibold tabular">{formatMonto(resumen.gastoMinor, moneda)}</p>
+            <p className="font-semibold tabular txt">{formatMonto(resumen.gastoMinor, moneda)}</p>
           </div>
         </div>
       </Tarjeta>
     ),
 
     'patrimonio': (
-      <Tarjeta className="flex items-center justify-between">
-        <div>
-          <p className="text-xs txt-2 mb-0.5">Patrimonio total</p>
-          <p className="text-2xl font-semibold tabular tracking-tight txt">{formatMonto(patrimonio, moneda)}</p>
-          {/* Las cuentas estan mezcladas: no hay una que sea de un negocio.
-              Decirlo evita leer este numero como si fuera de la economia que
-              se esta mirando. */}
-          {nombreActiva && (
-            <p className="text-[11px] txt-3 mt-0.5">De todas las economías juntas</p>
-          )}
-        </div>
-        <Ficha color="#10b981" icono="landmark" size={44} />
+      <Tarjeta className="bg-linear-to-br from-marca-600 to-marca-700 border-transparent text-white">
+        <p className="text-sm opacity-80 mb-1">Lo que tenemos</p>
+        <p className="text-[2.75rem] leading-[1.05] font-bold tabular tracking-tight">
+          {formatMonto(patrimonio, moneda)}
+        </p>
+        {/* Las cuentas estan mezcladas: no hay una que sea de un negocio.
+            Decirlo evita leer este numero como si fuera de la economia que
+            se esta mirando. */}
+        <p className="text-xs opacity-70 mt-1.5">
+          {nombreActiva
+            ? 'Todas las economías juntas · las cuentas no se separan'
+            : `En ${cuantasCuentas} cuenta${cuantasCuentas === 1 ? '' : 's'}`}
+        </p>
       </Tarjeta>
     ),
 
@@ -148,6 +157,7 @@ export function Inicio({ alVerMovimiento, alAgregar }: {
                 <Barra
                   ratio={resumen.gastoMinor > 0 ? r.gastoMinor / resumen.gastoMinor : 0}
                   color={member.color}
+                  fina
                 />
               </div>
             </div>
@@ -199,6 +209,7 @@ export function Inicio({ alVerMovimiento, alAgregar }: {
                 <Barra
                   ratio={resumen.gastoMinor > 0 ? totalMinor / resumen.gastoMinor : 0}
                   color={category?.color ?? '#64748b'}
+                  fina
                 />
               </div>
             </div>
@@ -251,8 +262,6 @@ export function Inicio({ alVerMovimiento, alAgregar }: {
 
   return (
     <div className="space-y-4">
-      <SelectorEntidad />
-
       <SelectorPeriodo periodo={periodo} alCambiar={setPeriodo} />
 
       {orden.map((id) => secciones[id] && <div key={id}>{secciones[id]}</div>)}
