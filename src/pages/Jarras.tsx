@@ -661,16 +661,35 @@ function MovimientosDeJarra({ jarra, alCerrar, alVerMovimiento }: {
     return imputaciones
       .filter((i) => i.jarId === jarra.id && i.amountMinor !== 0)
       .map((i) => ({ tx: porTx.get(i.txId), delta: i.amountMinor }))
-      .filter((x): x is { tx: Transaction; delta: number } => x.tx !== undefined)
-      .sort((a, b) => b.tx.date - a.tx.date);
+      .filter((x): x is { tx: Transaction; delta: number } => x.tx !== undefined);
   }, [jarra, transactions, imputaciones]);
 
-  // Lo asignado a mano. Va aparte porque no viene de ningun movimiento: no se
-  // puede tocar para ver un detalle, se borra y listo.
   const aportes = useMemo(
     () => (jarra ? jarAportes.filter((a) => a.jarId === jarra.id) : []),
     [jarra, jarAportes],
   );
+
+  /**
+   * Todo lo que le paso a la jarra, en una sola linea de tiempo.
+   *
+   * Lo repartido a mano estaba clavado arriba en su propia seccion, como si
+   * fuera otra cosa. No lo es: es plata que entro a la jarra un dia concreto,
+   * igual que un ingreso. Fijado arriba rompia el orden y hacia imposible ver
+   * que paso primero y que despues.
+   */
+  const historia = useMemo(() => {
+    const items: {
+      id: string; fecha: number; delta: number;
+      tx?: Transaction; aporteId?: string; nota?: string;
+    }[] = [
+      ...movimientos.map(({ tx, delta }) => ({ id: tx.id, fecha: tx.date, delta, tx })),
+      ...aportes.map((a) => ({
+        id: `ap-${a.id}`, fecha: a.date, delta: a.amountMinor,
+        aporteId: a.id, nota: a.note ?? 'Repartido desde sin asignar',
+      })),
+    ];
+    return items.sort((a, b) => b.fecha - a.fecha);
+  }, [movimientos, aportes]);
 
   if (!jarra) return null;
 
@@ -699,44 +718,69 @@ function MovimientosDeJarra({ jarra, alCerrar, alVerMovimiento }: {
         <div className="grid grid-cols-2 gap-3">
           <div className="superficie-2 rounded-2xl p-3 text-center">
             <p className="text-[10px] txt-3 mb-0.5">Entró</p>
-            <p className="text-sm font-semibold tabular text-marca-600 dark:text-marca-500">
+            <p className={cn(
+              'text-sm font-semibold tabular',
+              entro > 0 ? 'text-marca-600 dark:text-marca-500' : 'txt-3',
+            )}>
               {formatMonto(entro, moneda)}
             </p>
           </div>
           <div className="superficie-2 rounded-2xl p-3 text-center">
             <p className="text-[10px] txt-3 mb-0.5">Salió</p>
-            <p className="text-sm font-semibold tabular text-red-500">
+            {/* En cero va neutro. Un $0.00 en rojo es una alarma por algo que
+                no pasó, y el rojo tiene que significar una sola cosa. */}
+            <p className={cn(
+              'text-sm font-semibold tabular',
+              salio > 0 ? 'text-red-500' : 'txt-3',
+            )}>
               {formatMonto(salio, moneda)}
             </p>
           </div>
         </div>
 
-        {/* Lo asignado a mano desde el sin asignar. Va arriba y aparte porque
-            no es un movimiento: no se puede abrir para ver un detalle, y se
-            deshace borrandolo. */}
-        {aportes.length > 0 && (
+        {historia.length === 0 ? (
+          <Vacio
+            icono="receipt-text"
+            titulo="Sin movimientos"
+            texto="Esta jarra todavía no recibió ni gastó nada. Repartí un ingreso o imputale un gasto."
+          />
+        ) : (
           <div>
-            <p className="text-xs font-medium txt-3 px-1 mb-1">Asignado a mano</p>
+            <p className="text-xs font-medium txt-3 px-1 mb-1">
+              {historia.length} movimiento{historia.length > 1 ? 's' : ''}
+            </p>
             <div className="divide-y divide-[var(--borde)]">
-              {aportes.map((a) => (
-                <div key={a.id} className="flex items-center gap-3 py-2.5 px-1">
-                  <Ficha color={jarra.color} icono="hand-coins" size={34} />
+              {historia.map((h) => (h.tx ? (
+                <div key={h.id} className="relative">
+                  <FilaMovimiento tx={h.tx} alTocar={() => alVerMovimiento(h.tx!)} />
+                  {/* Lo que entro o salio DE ESTA JARRA, que en un ingreso
+                      repartido no es el monto total del movimiento. */}
+                  <span className={cn(
+                    'absolute right-1 bottom-2 text-[10px] tabular font-medium',
+                    h.delta > 0 ? 'text-marca-600 dark:text-marca-500' : 'text-red-500',
+                  )}>
+                    {h.delta > 0 ? '+' : '−'}{formatMonto(Math.abs(h.delta), moneda, { compacto: true })}
+                  </span>
+                </div>
+              ) : (
+                /* Un aporte no se abre —no hay movimiento detras— pero se
+                   deshace desde su propia fila. */
+                <div key={h.id} className="flex items-center gap-3 py-3 px-1">
+                  <Ficha color={jarra.color} icono="hand-coins" size={40} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm txt truncate">
-                      {a.note ?? 'Repartido desde sin asignar'}
-                    </p>
-                    <p className="text-xs txt-3">{fechaCorta(a.date)}</p>
+                    <p className="text-sm font-medium txt truncate">{h.nota}</p>
+                    <p className="text-xs txt-3">{fechaCorta(h.fecha)}</p>
                   </div>
                   <span className={cn(
-                    'text-sm tabular font-medium shrink-0',
-                    a.amountMinor > 0 ? 'text-marca-600 dark:text-marca-500' : 'text-red-500',
+                    'text-sm tabular font-semibold shrink-0',
+                    h.delta > 0 ? 'text-marca-600 dark:text-marca-500' : 'text-red-500',
                   )}>
-                    {a.amountMinor > 0 ? '+' : '−'}{formatMonto(Math.abs(a.amountMinor), moneda)}
+                    {h.delta > 0 ? '+' : '−'}{formatMonto(Math.abs(h.delta), moneda)}
                   </span>
                   <button
                     onClick={async () => {
                       try {
-                        await borrarAporte(a.id);
+                        await borrarAporte(h.aporteId!);
                       } catch (e) {
                         avisar(e instanceof Error ? e.message : 'No se pudo deshacer');
                       }
@@ -747,38 +791,7 @@ function MovimientosDeJarra({ jarra, alCerrar, alVerMovimiento }: {
                     <Icono nombre="trash-2" size={15} />
                   </button>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {movimientos.length === 0 ? (
-          aportes.length === 0 ? (
-            <Vacio
-              icono="receipt-text"
-              titulo="Sin movimientos"
-              texto="Esta jarra todavía no recibió ni gastó nada. Repartí un ingreso o imputale un gasto."
-            />
-          ) : null
-        ) : (
-          <div>
-            <p className="text-xs font-medium txt-3 px-1 mb-1">
-              {movimientos.length} movimiento{movimientos.length > 1 ? 's' : ''}
-            </p>
-            <div className="divide-y divide-[var(--borde)]">
-              {movimientos.map(({ tx, delta }) => (
-                <div key={tx.id} className="relative">
-                  <FilaMovimiento tx={tx} alTocar={() => alVerMovimiento(tx)} />
-                  {/* Lo que entro o salio DE ESTA JARRA, que en un ingreso
-                      repartido no es el monto total del movimiento. */}
-                  <span className={cn(
-                    'absolute right-1 bottom-2 text-[10px] tabular font-medium',
-                    delta > 0 ? 'text-marca-600 dark:text-marca-500' : 'text-red-500',
-                  )}>
-                    {delta > 0 ? '+' : '−'}{formatMonto(Math.abs(delta), moneda, { compacto: true })}
-                  </span>
-                </div>
-              ))}
+              )))}
             </div>
           </div>
         )}
