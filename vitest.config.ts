@@ -5,5 +5,7 @@ export default defineConfig({
   resolve: {
     alias: { '@shared': path.resolve(import.meta.dirname, 'shared') },
   },
-  test: { environment: 'node', include: ['shared/**/*.test.ts'] },
+  // El worker tambien: `barrerPapelera` borra datos sola, de noche, sin que
+  // nadie la mire. Eso necesita una prueba.
+  test: { environment: 'node', include: ['shared/**/*.test.ts', 'worker/**/*.test.ts'] },
 });

@@ -17,6 +17,7 @@ import {
   Boton, Campo, COLORES, Ficha, Hoja, Icono, Selector, SelectorColor, Tarjeta, Vacio,
 } from '../components/ui/base.tsx';
 import { HeroPatrimonio } from './Inicio.tsx';
+import { useDescartar } from './Ajustes.tsx';
 import { cn } from '../lib/utils.ts';
 
 const ICONOS: Record<AccountCategory, string> = {
@@ -37,7 +38,6 @@ export function Cuentas() {
   const [abierta, setAbierta] = useState(false);
 
   const activas = accounts.filter((c) => !c.archived);
-  const archivadas = accounts.filter((c) => c.archived);
 
   const activos = activas.filter((c) => esActivo(c.category));
   const pasivos = activas.filter((c) => !esActivo(c.category));
@@ -102,9 +102,6 @@ export function Cuentas() {
           {pasivos.length > 0 && (
             <Grupo titulo="Lo que debes" cuentas={pasivos} alTocar={abrirEdicion} members={members} />
           )}
-          {archivadas.length > 0 && (
-            <Grupo titulo="Archivadas" cuentas={archivadas} alTocar={abrirEdicion} members={members} />
-          )}
         </>
       )}
 
@@ -163,7 +160,8 @@ function Grupo({ titulo, cuentas, alTocar, members }: {
 function FormularioCuenta({ abierta, alCerrar, editando }: {
   abierta: boolean; alCerrar: () => void; editando: Account | null;
 }) {
-  const { household, members, guardarCuenta, archivarCuenta, ajustarSaldo, avisar } = useStore();
+  const { household, members, transactions, guardarCuenta, ajustarSaldo, avisar } = useStore();
+  const descartar = useDescartar();
   const moneda = household?.currency ?? 'USD';
 
   const [name, setName] = useState('');
@@ -242,17 +240,15 @@ function FormularioCuenta({ abierta, alCerrar, editando }: {
     }
   }
 
-  async function archivar() {
+  async function tirar() {
     if (!editando) return;
-    setGuardando(true);
-    try {
-      await archivarCuenta(editando.id);
-      alCerrar();
-    } catch (e) {
-      avisar(e instanceof Error ? e.message : 'No se pudo archivar');
-    } finally {
-      setGuardando(false);
-    }
+    // El mismo diálogo que las categorías y las economías: una sola pregunta,
+    // y lo que tenga movimientos se queda guardado en vez de borrarse.
+    const enUso = transactions.filter(
+      (t) => t.accountId === editando.id || t.destAccountId === editando.id,
+    ).length;
+    await descartar('cuenta', editando.id, editando.name, enUso);
+    alCerrar();
   }
 
   return (
@@ -364,9 +360,9 @@ function FormularioCuenta({ abierta, alCerrar, editando }: {
         </div>
 
         <div className="flex gap-2 pt-1">
-          {editando && !editando.archived && (
-            <Boton variante="secundario" onClick={() => void archivar()} disabled={guardando}>
-              Archivar
+          {editando && (
+            <Boton variante="secundario" onClick={() => void tirar()} disabled={guardando}>
+              <Icono nombre="trash-2" size={16} /> A la papelera
             </Boton>
           )}
           <Boton

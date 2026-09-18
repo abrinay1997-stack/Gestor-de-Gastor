@@ -18,7 +18,7 @@ export class ApiError extends Error {
   }
 }
 
-/** Las tres cosas que se pueden mandar a la papelera o al archivo. */
+/** Las tres cosas que se pueden mandar a la papelera. */
 export type Descarte = 'categoria' | 'cuenta' | 'economia';
 
 async function pedir<T>(ruta: string, init: RequestInit = {}): Promise<T> {
@@ -161,19 +161,25 @@ export const api = {
     put<{ entity: Entity }>(`/api/entities/${id}`, e),
   archivarEntidad: (id: string) => del<{ ok: true; entity?: Entity }>(`/api/entities/${id}`),
 
-  // --- papelera y archivo ---
-  /** Que hay en la papelera y que la ata, sin borrar nada. */
+  // --- papelera ---
+  /** Que hay en la papelera, que la ata, y cuanto le queda. */
   revisarPapelera: () =>
-    get<{ items: { tipo: Descarte; id: string; motivo: string | null }[] }>('/api/papelera'),
-  descartar: (tipo: Descarte, id: string, destino: 'papelera' | 'archivo') =>
-    post<{ ok: true }>('/api/papelera', { tipo, id, destino }),
+    get<{
+      items: {
+        tipo: Descarte; id: string; motivo: string | null; diasQueQuedan: number | null;
+      }[];
+      diasHastaBorrar: number;
+    }>('/api/papelera'),
+  descartar: (tipo: Descarte, id: string) =>
+    post<{ ok: true }>('/api/papelera', { tipo, id }),
   restaurar: (tipo: Descarte, id: string) =>
     post<{ ok: true }>('/api/papelera/restaurar', { tipo, id }),
-  vaciarPapelera: (tipo?: Descarte, id?: string) =>
+  /** Sin `items`, vacia todo. Con `items`, solo lo marcado. */
+  vaciarPapelera: (items?: { tipo: Descarte; id: string }[]) =>
     post<{
       ok: true; borrados: number;
       retenidos: { tipo: Descarte; id: string; nombre: string; motivo: string }[];
-    }>('/api/papelera/vaciar', { tipo, id }),
+    }>('/api/papelera/vaciar', items ? { items } : {}),
 
   crearCategoria: (c: Partial<Category>) => post<{ category: Category }>('/api/categories', c),
   editarCategoria: (id: string, c: Partial<Category>) =>

@@ -1,28 +1,38 @@
 /**
- * Papelera y archivo.
+ * La papelera. Una sola, sin archivo al lado.
  *
- * Hasta ahora sacar algo de circulacion era siempre «archivar», y archivar era
- * una bolsa invisible: una categoria creada por error probando y una categoria
- * jubilada con dos años de historia terminaban en el mismo lugar, sin forma de
- * verlas ni de distinguirlas. Asi quedaron 17 categorias de prueba en la base
- * que nadie sabia que estaban ahi.
+ * Antes habia dos destinos, «archivo» y «papelera», y la diferencia no se
+ * sostenia: para decidir hacia cual mandar algo habia que saber de antemano si
+ * su historia iba a importar, que es justo lo que uno no sabe en el momento de
+ * sacarlo de en medio. Terminaban siendo dos cajones para lo mismo.
  *
- * Ahora son dos destinos con sentidos distintos:
+ * Ahora todo va a un solo lugar y el sistema decide lo que se puede decidir
+ * solo:
  *
- *   ARCHIVO   se jubila pero su historia importa. Sale del selector y sigue
- *             contando en los totales del pasado. No se borra nunca solo.
- *   PAPELERA  se tira. Se restaura de un toque, y vaciarla lo borra de verdad.
+ *   - Se restaura de un toque, cuando sea.
+ *   - A los 30 DIAS se borra de verdad lo que no tenga historia.
+ *   - Lo que SI tiene historia —un movimiento, un presupuesto, un pago
+ *     habitual, una categoria hija— no se borra nunca, ni a los 30 dias ni a
+ *     mano. Se queda en la papelera, fuera de los selectores, y la pantalla
+ *     dice por que. Borrar una categoria que usan catorce movimientos dejaria
+ *     catorce movimientos huerfanos, y el historial mentiria.
  *
- * Vaciar NO borra a ciegas: lo que tenga historia —un movimiento, un
- * presupuesto, un pago habitual, una categoria hija— se queda y se dice por
- * que. Borrar una categoria que usan catorce movimientos dejaria catorce
- * movimientos huerfanos, y el historial mentiria.
+ * Eso ultimo es lo que hacia el archivo, pero sin pedirle a nadie que lo
+ * eligiera de antemano.
  */
 
 import type { Sesion } from '../auth.ts';
 import { aAccount, aCategory, aEntity } from '../db.ts';
 import type { Env } from '../env.ts';
 import { ahora, cuerpo, difundir, error, json, unoDe } from '../http.ts';
+
+/**
+ * Cuanto vive algo en la papelera antes de borrarse solo.
+ *
+ * Es el plazo de casi cualquier papelera (fotos, correo, archivos) y por eso
+ * no hay que explicarlo. Solo corre para lo que no tiene historia.
+ */
+export const DIAS_HASTA_BORRAR = 30;
 
 /** Las tres cosas que se pueden sacar de circulacion. */
 const TIPOS = ['categoria', 'cuenta', 'economia'] as const;
@@ -129,34 +139,31 @@ async function avisar(env: Env, sesion: Sesion, tipo: Tipo, id: string): Promise
 const leerTipo = (v: unknown): Tipo => unoDe(v, TIPOS, 'tipo');
 
 /**
- * Sacar algo de circulacion: a la papelera o al archivo.
+ * A la papelera.
  *
- * POST /api/papelera  { tipo, id, destino: 'papelera' | 'archivo' }
+ * `archived` se apaga en la misma sentencia: con un solo cajon no puede haber
+ * una fila que este archivada Y tirada a la vez.
+ *
+ * POST /api/papelera  { tipo, id }
  */
 export async function descartar(req: Request, env: Env, sesion: Sesion): Promise<Response> {
   const body = await cuerpo(req);
   const tipo = leerTipo(body.tipo);
   const id = String(body.id ?? '');
-  const destino = unoDe(body.destino, ['papelera', 'archivo'] as const, 'destino');
   if (!id) return error('Falta el id');
 
-  const t = ahora();
-  const sql = destino === 'papelera'
-    ? `UPDATE ${TABLA[tipo]} SET trashed_at = ?1, trashed_by = ?2 WHERE id = ?3 AND household_id = ?4`
-    : `UPDATE ${TABLA[tipo]} SET archived = 1, trashed_at = NULL, trashed_by = NULL
-        WHERE id = ?3 AND household_id = ?4`;
-
-  const { meta } = await env.DB.prepare(sql)
-    .bind(t, sesion.memberId, id, sesion.householdId).run();
+  const { meta } = await env.DB.prepare(
+    `UPDATE ${TABLA[tipo]} SET trashed_at = ?1, trashed_by = ?2, archived = 0
+      WHERE id = ?3 AND household_id = ?4`,
+  ).bind(ahora(), sesion.memberId, id, sesion.householdId).run();
   if (!meta.changes) return error(`${NOMBRE[tipo]} no existe`, 404);
 
   await avisar(env, sesion, tipo, id);
-  return json({ ok: true, destino });
+  return json({ ok: true });
 }
 
 /**
- * Traer algo de vuelta. Sale de la papelera Y del archivo a la vez: quien
- * restaura quiere volver a usarlo, no moverlo de bolsa.
+ * Traer algo de vuelta.
  *
  * POST /api/papelera/restaurar  { tipo, id }
  */
@@ -179,16 +186,27 @@ export async function restaurar(req: Request, env: Env, sesion: Sesion): Promise
 /**
  * Borrar de verdad lo que hay en la papelera.
  *
- * POST /api/papelera/vaciar  { tipo?, id? }
+ * POST /api/papelera/vaciar  { tipo?, id?, items?: [{ tipo, id }] }
  *
- * Sin tipo ni id, vacia todo. Lo que tenga historia no se toca y vuelve en
- * `retenidos` con el motivo, para poder decirlo en pantalla en vez de fallar
- * en silencio o, peor, borrar y dejar movimientos huerfanos.
+ * Sin nada, vacia todo. Con `items` borra solo esos, que es lo que manda la
+ * pantalla cuando se marcan varios con las casillas. Lo que tenga historia no
+ * se toca y vuelve en `retenidos` con el motivo, para poder decirlo en pantalla
+ * en vez de fallar en silencio o, peor, borrar y dejar movimientos huerfanos.
  */
 export async function vaciar(req: Request, env: Env, sesion: Sesion): Promise<Response> {
   const body = await cuerpo(req);
   const soloTipo = body.tipo === undefined ? null : leerTipo(body.tipo);
   const soloId = body.id === undefined ? null : String(body.id);
+
+  // La seleccion, cuando viene. Se normaliza a un conjunto «tipo:id» para
+  // poder preguntarle por cada fila sin recorrerla entera cada vez.
+  const marcados = Array.isArray(body.items)
+    ? new Set((body.items as unknown[]).map((x) => {
+      const o = (x ?? {}) as Record<string, unknown>;
+      return `${leerTipo(o.tipo)}:${String(o.id ?? '')}`;
+    }))
+    : null;
+  if (marcados && marcados.size === 0) return error('No marcaste nada');
 
   const borrados: { tipo: Tipo; id: string }[] = [];
   const retenidos: { tipo: Tipo; id: string; nombre: string; motivo: string }[] = [];
@@ -203,6 +221,7 @@ export async function vaciar(req: Request, env: Env, sesion: Sesion): Promise<Re
     ).bind(sesion.householdId, soloId).all<{ id: string; name: string }>();
 
     for (const fila of results) {
+      if (marcados && !marcados.has(`${tipo}:${fila.id}`)) continue;
       const razones = await ataduras(env, tipo, fila.id);
       if (razones.length > 0) {
         retenidos.push({
@@ -235,18 +254,31 @@ export async function vaciar(req: Request, env: Env, sesion: Sesion): Promise<Re
  * GET /api/papelera
  */
 export async function revisar(_req: Request, env: Env, sesion: Sesion): Promise<Response> {
-  const items: { tipo: Tipo; id: string; motivo: string | null }[] = [];
+  const items: {
+    tipo: Tipo; id: string; motivo: string | null; diasQueQuedan: number | null;
+  }[] = [];
 
   for (const tipo of TIPOS) {
     const { results } = await env.DB.prepare(
-      `SELECT id FROM ${TABLA[tipo]} WHERE household_id = ?1 AND trashed_at IS NOT NULL`,
-    ).bind(sesion.householdId).all<{ id: string }>();
+      `SELECT id, trashed_at FROM ${TABLA[tipo]}
+        WHERE household_id = ?1 AND trashed_at IS NOT NULL`,
+    ).bind(sesion.householdId).all<{ id: string; trashed_at: number }>();
 
-    for (const { id } of results) {
+    for (const { id, trashed_at } of results) {
       const razones = await ataduras(env, tipo, id);
-      items.push({ tipo, id, motivo: razones.length ? razones.join(', ') : null });
+      items.push({
+        tipo,
+        id,
+        motivo: razones.length ? razones.join(', ') : null,
+        // Lo que tiene historia no se borra nunca, asi que no tiene cuenta
+        // regresiva: poner «faltan 12 dias» al lado de algo que no se va a ir
+        // seria mentir en la pantalla.
+        diasQueQuedan: razones.length > 0
+          ? null
+          : Math.max(0, Math.ceil((trashed_at + DIAS_HASTA_BORRAR * 86_400_000 - ahora()) / 86_400_000)),
+      });
     }
   }
 
-  return json({ items });
+  return json({ items, diasHastaBorrar: DIAS_HASTA_BORRAR });
 }

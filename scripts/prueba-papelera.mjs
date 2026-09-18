@@ -67,13 +67,15 @@ async function main() {
     JSON.stringify({ at: c?.trashedAt, by: c?.trashedBy }));
   ok('sigue existiendo, no se borró sola', c !== undefined);
 
-  console.log('\n2. Archivar es otra cosa');
+  console.log('\n2. Una sola papelera: no hay archivo');
   r = await pedir('/api/papelera', { method: 'POST', body: JSON.stringify({
-    tipo: 'categoria', id: usada.id, destino: 'archivo' }) });
+    tipo: 'categoria', id: usada.id }) });
   snap = (await pedir('/api/snapshot')).datos;
   c = snap.categories.find((x) => x.id === usada.id);
-  ok('archivada queda archived=1 y SIN fecha de papelera',
-    c?.archived === true && c?.trashedAt === null, JSON.stringify(c));
+  ok('la que tiene historia tambien va a la papelera',
+    Boolean(c?.trashedAt), JSON.stringify({ at: c?.trashedAt }));
+  ok('y archived queda apagado: un solo cajon, no dos',
+    c?.archived === false, JSON.stringify({ archived: c?.archived }));
 
   console.log('\n3. Qué se puede borrar y qué no, antes de tocar nada');
   r = await pedir('/api/papelera');
@@ -103,15 +105,51 @@ async function main() {
       || snap.categories.some((x) => x.id === t.categoryId)),
     `movs ${snap.transactions.length} vs ${movsAntes}`);
 
-  console.log('\n5. Restaurar');
+  console.log('\n5. La cuenta regresiva');
+  r = await pedir('/api/papelera');
+  ok('dice el plazo', r.datos.diasHastaBorrar === 30, String(r.datos.diasHastaBorrar));
+  const conHistoria = r.datos.items.find((i) => i.id === usada.id);
+  ok('lo que tiene historia NO tiene cuenta regresiva',
+    conHistoria?.diasQueQuedan === null, JSON.stringify(conHistoria));
+
+  // Una suelta nueva, para mirarle los dias y para borrarla por seleccion.
+  const paraContar = await crearCat('Para contar los dias');
+  await pedir('/api/papelera', { method: 'POST', body: JSON.stringify({
+    tipo: 'categoria', id: paraContar.id }) });
+  r = await pedir('/api/papelera');
+  const recien = r.datos.items.find((i) => i.id === paraContar.id);
+  ok('recien tirada le quedan 30 dias', recien?.diasQueQuedan === 30,
+    JSON.stringify(recien));
+
+  console.log('\n6. Borrar varias de un saque');
+  const a = await crearCat('Marcada A');
+  const b2 = await crearCat('Marcada B');
+  const sinMarcar = await crearCat('Sin marcar');
+  for (const x of [a, b2, sinMarcar]) {
+    await pedir('/api/papelera', { method: 'POST', body: JSON.stringify({
+      tipo: 'categoria', id: x.id }) });
+  }
+  r = await pedir('/api/papelera/vaciar', { method: 'POST', body: JSON.stringify({
+    items: [{ tipo: 'categoria', id: a.id }, { tipo: 'categoria', id: b2.id }] }) });
+  ok('borra solo las marcadas', r.datos.borrados === 2, JSON.stringify(r.datos));
+  snap = (await pedir('/api/snapshot')).datos;
+  ok('la que no se marco sigue en la papelera',
+    snap.categories.some((x) => x.id === sinMarcar.id));
+  ok('las marcadas ya no estan',
+    !snap.categories.some((x) => x.id === a.id || x.id === b2.id));
+
+  r = await pedir('/api/papelera/vaciar', { method: 'POST', body: JSON.stringify({ items: [] }) });
+  ok('una seleccion vacia se rechaza', r.status === 400, String(r.status));
+
+  console.log('\n7. Restaurar');
   r = await pedir('/api/papelera/restaurar', { method: 'POST', body: JSON.stringify({
     tipo: 'categoria', id: usada.id }) });
   snap = (await pedir('/api/snapshot')).datos;
   c = snap.categories.find((x) => x.id === usada.id);
-  ok('vuelve sin papelera y sin archivo', c?.trashedAt === null && c?.archived === false,
+  ok('vuelve sin papelera', c?.trashedAt === null && c?.archived === false,
     JSON.stringify(c));
 
-  console.log('\n6. Entradas inválidas');
+  console.log('\n8. Entradas inválidas');
   r = await pedir('/api/papelera', { method: 'POST', body: JSON.stringify({
     tipo: 'inventado', id: 'x', destino: 'papelera' }) });
   ok('rechaza un tipo que no existe', r.status === 400, String(r.status));

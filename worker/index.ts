@@ -21,6 +21,7 @@ import * as jarTransfers from './routes/jarTransfers.ts';
 import * as recurring from './routes/recurring.ts';
 import * as tx from './routes/transactions.ts';
 import { correrPagosHabituales } from './cron.ts';
+import { barrerPapelera } from './papelera-vieja.ts';
 
 export { HouseholdHub } from './hub.ts';
 
@@ -95,6 +96,16 @@ export default {
           }
         })
         .catch((e) => console.error('Fallo el disparador de pagos habituales', e)),
+    );
+
+    // Y de paso se lleva lo que lleva 30 dias en la papelera. Va aparte para
+    // que si uno falla el otro corra igual.
+    ctx.waitUntil(
+      barrerPapelera(env)
+        .then(({ borrados }) => {
+          if (borrados > 0) console.log(`Papelera: ${borrados} cosa(s) borrada(s)`);
+        })
+        .catch((e) => console.error('Fallo el barrido de la papelera', e)),
     );
   },
 

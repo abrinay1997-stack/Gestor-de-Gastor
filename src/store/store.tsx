@@ -333,11 +333,11 @@ interface Acciones {
   guardarCategoria: (c: Partial<Category>, id?: string) => Promise<void>;
   guardarEntidad: (e: Partial<Entity>, id?: string) => Promise<void>;
   archivarEntidad: (id: string) => Promise<void>;
-  /** Sacar de circulacion: a la papelera (se puede deshacer) o al archivo. */
-  descartar: (tipo: Descarte, id: string, destino: 'papelera' | 'archivo') => Promise<void>;
+  /** A la papelera. Se deshace de un toque, y se borra sola a los 30 dias. */
+  descartar: (tipo: Descarte, id: string) => Promise<void>;
   restaurar: (tipo: Descarte, id: string) => Promise<void>;
   /** Borra de verdad lo de la papelera que no tenga historia. */
-  vaciarPapelera: (tipo?: Descarte, id?: string) => Promise<{
+  vaciarPapelera: (items?: { tipo: Descarte; id: string }[]) => Promise<{
     borrados: number;
     retenidos: { tipo: Descarte; id: string; nombre: string; motivo: string }[];
   }>;
@@ -388,11 +388,10 @@ interface Acciones {
  * Lo que el store calcula y no viene de la API tal cual.
  *
  * `categories`, `accounts` y `entities` del Estado ya vienen sin lo tirado;
- * esto es lo tirado y lo archivado, que solo mira la pantalla de la papelera.
+ * esto es lo tirado, que solo mira la pantalla de la papelera.
  */
 interface Derivados {
   papelera: { categories: Category[]; accounts: Account[]; entities: Entity[] };
-  archivo: { categories: Category[]; accounts: Account[]; entities: Entity[] };
 }
 
 const Ctx = createContext<(Estado & Derivados & Acciones) | null>(null);
@@ -656,8 +655,8 @@ export function Store({ children }: { children: ReactNode }) {
     // La papelera no toca el estado local a mano: el Worker vuelve a
     // difundir la fila y llega por el canal en vivo, igual que si lo hubiera
     // hecho la otra persona. Asi las dos pantallas quedan iguales.
-    descartar: async (tipo, id, destino) => {
-      await api.descartar(tipo, id, destino);
+    descartar: async (tipo, id) => {
+      await api.descartar(tipo, id);
       await cargar();
     },
 
@@ -666,8 +665,8 @@ export function Store({ children }: { children: ReactNode }) {
       await cargar();
     },
 
-    vaciarPapelera: async (tipo, id) => {
-      const r = await api.vaciarPapelera(tipo, id);
+    vaciarPapelera: async (items) => {
+      const r = await api.vaciarPapelera(items);
       await cargar();
       return { borrados: r.borrados, retenidos: r.retenidos };
     },
@@ -786,13 +785,6 @@ export function Store({ children }: { children: ReactNode }) {
     entities: estado.entities.filter((e) => Boolean(e.trashedAt)),
   }), [estado.categories, estado.accounts, estado.entities]);
 
-  /** Lo archivado: jubilado pero con su historia intacta. */
-  const archivo = useMemo(() => ({
-    categories: estado.categories.filter((c) => c.archived && !c.trashedAt),
-    accounts: estado.accounts.filter((c) => c.archived && !c.trashedAt),
-    entities: estado.entities.filter((e) => e.archived && !e.trashedAt),
-  }), [estado.categories, estado.accounts, estado.entities]);
-
   /**
    * El tema de cada persona, estampado en <html>.
    *
@@ -819,10 +811,9 @@ export function Store({ children }: { children: ReactNode }) {
       entities: vivos.entities,
       jars: jarrasConSaldo,
       papelera,
-      archivo,
       ...acciones,
     }),
-    [estado, vivos, jarrasConSaldo, papelera, archivo, acciones],
+    [estado, vivos, jarrasConSaldo, papelera, acciones],
   );
 
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;

@@ -17,7 +17,7 @@ import {
 import { fechaCorta, nombreMes } from '../lib/utils.ts';
 import {
   Avatar, Barra, Boton, Campo, Ficha, Hoja, Icono, SelectorColor,
-  SelectorIcono, Selector, Tarjeta,
+  SelectorIcono, Selector, Tarjeta, Vacio,
 } from '../components/ui/base.tsx';
 import { SelectorEmoji } from '../components/ui/emoji.tsx';
 import { useConfirmar } from '../components/ui/confirmar.tsx';
@@ -34,13 +34,11 @@ export function Ajustes({ alVerConsejero, alVerAnalisis }: {
 }) {
   const {
     me, members, household, categories, entities, budgets, accounts, transactions,
-    recurring, papelera, archivo, salir,
+    recurring, papelera, salir,
   } = useStore();
 
   const enLaPapelera = papelera.categories.length + papelera.accounts.length
     + papelera.entities.length;
-  const archivadas = archivo.categories.length + archivo.accounts.length
-    + archivo.entities.length;
   const moneda = household?.currency ?? 'USD';
 
   const [hoja, setHoja] = useState<Hoja1>(null);
@@ -135,10 +133,8 @@ export function Ajustes({ alVerConsejero, alVerAnalisis }: {
         />
         <Opcion
           icono="trash-2"
-          titulo="Papelera y archivo"
-          detalle={enLaPapelera > 0
-            ? `${enLaPapelera} en la papelera`
-            : archivadas > 0 ? `${archivadas} archivado${archivadas === 1 ? '' : 's'}` : 'Vacía'}
+          titulo="Papelera"
+          detalle={enLaPapelera > 0 ? `${enLaPapelera} adentro` : 'Vacía'}
           alTocar={() => setHoja('papelera')}
         />
         <Opcion icono="grip-vertical" titulo="Ordenar el inicio" alTocar={() => setHoja('inicio')} />
@@ -469,53 +465,112 @@ function HojaOrdenInicio({ abierta, alCerrar }: { abierta: boolean; alCerrar: ()
   );
 }
 
-// --- papelera y archivo ---------------------------------------------------
+// --- papelera -------------------------------------------------------------
+
+const ETIQUETA_DESCARTE: Record<Descarte, string> = {
+  categoria: 'Categoría',
+  cuenta: 'Cuenta',
+  economia: 'Economía',
+};
+
+/** Lo que sabemos de cada cosa tirada, ya cruzado con lo que dice el Worker. */
+interface Tirado {
+  tipo: Descarte;
+  id: string;
+  nombre: string;
+  color: string;
+  icon: string;
+  trashedAt: number | null;
+  trashedBy: string | null;
+  /** Qué impide borrarla. null = se puede borrar. */
+  motivo: string | null;
+  /** Cuántos días le quedan. null = no se borra nunca (tiene historia). */
+  dias: number | null;
+}
 
 /**
- * Lo que se sacó de circulación, a la vista y reversible.
+ * La papelera. Una sola.
  *
- * Antes todo se «archivaba» y el archivo era invisible: quedaron 17 categorías
- * de prueba en la base que nadie sabía que estaban ahí. Lo que no se ve no se
- * puede limpiar, y termina siendo basura.
+ * Antes había papelera Y archivo, y para elegir entre los dos había que saber
+ * de antemano si la historia de eso iba a importar, que es justo lo que uno no
+ * sabe en el momento de sacarlo de en medio. Ahora todo cae acá y el sistema
+ * resuelve lo que se puede resolver solo: lo que no tiene historia se borra a
+ * los 30 días, lo que sí la tiene se queda —eso es lo que hacía el archivo—,
+ * y restaurar es un toque en cualquiera de los dos casos.
  */
 function HojaPapelera({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => void }) {
-  const { papelera, archivo, restaurar, vaciarPapelera, avisar, members } = useStore();
+  const { papelera, restaurar, vaciarPapelera, avisar, members } = useStore();
   const confirmar = useConfirmar();
   const [trabajando, setTrabajando] = useState(false);
-  const [ataduras, setAtaduras] = useState<Record<string, string | null>>({});
+  const [datos, setDatos] = useState<{
+    motivos: Record<string, string | null>;
+    dias: Record<string, number | null>;
+    plazo: number;
+  }>({ motivos: {}, dias: {}, plazo: 30 });
+  const [marcados, setMarcados] = useState<Set<string>>(new Set());
 
-  // Que ata a cada cosa, para poder decirlo ANTES de que toquen el botón en
-  // vez de que lo descubran cuando no se borra.
+  // Qué ata a cada cosa y cuánto le queda, para poder decirlo ANTES de que
+  // toquen el botón en vez de que lo descubran cuando no se borra.
   useEffect(() => {
     if (!abierta) return;
     let vivo = true;
     void api.revisarPapelera()
       .then((r) => {
         if (!vivo) return;
-        setAtaduras(Object.fromEntries(r.items.map((i) => [i.id, i.motivo])));
+        setDatos({
+          motivos: Object.fromEntries(r.items.map((i) => [i.id, i.motivo])),
+          dias: Object.fromEntries(r.items.map((i) => [i.id, i.diasQueQuedan])),
+          plazo: r.diasHastaBorrar,
+        });
       })
       .catch(() => { /* sin esto la pantalla sigue siendo usable */ });
     return () => { vivo = false; };
   }, [abierta, papelera]);
 
-  const enPapelera: { tipo: Descarte; item: { id: string; name: string; color: string; icon: string; trashedAt: number | null; trashedBy: string | null } }[] = [
-    ...papelera.categories.map((c) => ({ tipo: 'categoria' as Descarte, item: c })),
-    ...papelera.accounts.map((c) => ({ tipo: 'cuenta' as Descarte, item: c })),
-    ...papelera.entities.map((e) => ({ tipo: 'economia' as Descarte, item: e })),
-  ].sort((a, b) => (b.item.trashedAt ?? 0) - (a.item.trashedAt ?? 0));
+  useEffect(() => { if (!abierta) setMarcados(new Set()); }, [abierta]);
 
-  const archivados: { tipo: Descarte; item: { id: string; name: string; color: string; icon: string } }[] = [
-    ...archivo.categories.map((c) => ({ tipo: 'categoria' as Descarte, item: c })),
-    ...archivo.accounts.map((c) => ({ tipo: 'cuenta' as Descarte, item: c })),
-    ...archivo.entities.map((e) => ({ tipo: 'economia' as Descarte, item: e })),
-  ];
+  const todo: Tirado[] = [
+    ...papelera.categories.map((c) => ({ tipo: 'categoria' as Descarte, x: c })),
+    ...papelera.accounts.map((c) => ({ tipo: 'cuenta' as Descarte, x: c })),
+    ...papelera.entities.map((e) => ({ tipo: 'economia' as Descarte, x: e })),
+  ]
+    .map(({ tipo, x }) => ({
+      tipo,
+      id: x.id,
+      nombre: x.name,
+      color: x.color,
+      icon: x.icon,
+      trashedAt: x.trashedAt,
+      trashedBy: x.trashedBy,
+      motivo: datos.motivos[x.id] ?? null,
+      dias: datos.dias[x.id] ?? null,
+    }))
+    .sort((a, b) => (b.trashedAt ?? 0) - (a.trashedAt ?? 0));
 
-  const borrables = enPapelera.filter((x) => ataduras[x.item.id] === null).length;
+  // Dos grupos, porque se comportan distinto: unas se van solas y otras no se
+  // van nunca. Mezclarlas obligaba a leer cada renglón para saber cuál era cuál.
+  const seVan = todo.filter((t) => t.motivo === null);
+  const seQuedan = todo.filter((t) => t.motivo !== null);
+
+  // Solo se puede borrar lo que no tiene historia, así que marcar lo otro no
+  // haría nada: la casilla directamente no se dibuja.
+  const marcadosBorrables = seVan.filter((t) => marcados.has(t.id));
+
+  const alternar = (id: string) => setMarcados((previos) => {
+    const v = new Set(previos);
+    if (v.has(id)) v.delete(id); else v.add(id);
+    return v;
+  });
 
   async function traerDeVuelta(tipo: Descarte, id: string) {
     setTrabajando(true);
     try {
       await restaurar(tipo, id);
+      setMarcados((previos) => {
+        const v = new Set(previos);
+        v.delete(id);
+        return v;
+      });
     } catch (e) {
       avisar(e instanceof Error ? e.message : 'No se pudo restaurar');
     } finally {
@@ -523,28 +578,29 @@ function HojaPapelera({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =>
     }
   }
 
-  async function vaciar() {
+  async function borrar(seleccion: Tirado[] | null) {
+    const cuantos = seleccion ? seleccion.length : seVan.length;
     const ok = await confirmar({
-      titulo: '¿Vaciar la papelera?',
-      detalle: 'Se borra de verdad y no se puede deshacer. Lo que tenga historia '
-        + '—movimientos, presupuestos, pagos habituales— se queda donde está.',
-      confirmar: 'Vaciar',
+      titulo: cuantos === 1 ? '¿Borrar esto?' : `¿Borrar ${cuantos} cosas?`,
+      detalle: 'Se borra de verdad y no se puede deshacer.',
+      confirmar: 'Borrar',
       destructivo: true,
     });
     if (!ok) return;
+
     setTrabajando(true);
     try {
-      const r = await vaciarPapelera();
-      const quedaron = r.retenidos.length;
+      const r = await vaciarPapelera(
+        seleccion ? seleccion.map((t) => ({ tipo: t.tipo, id: t.id })) : undefined,
+      );
+      setMarcados(new Set());
       avisar(
-        r.borrados === 0 && quedaron === 0 ? 'No había nada para borrar'
-          : quedaron === 0
-            ? `Se borraron ${r.borrados}`
-            : `Se borraron ${r.borrados}. Quedaron ${quedaron} con historia.`,
+        r.borrados === 0 ? 'No había nada para borrar'
+          : r.borrados === 1 ? 'Borrado' : `Se borraron ${r.borrados}`,
         'ok',
       );
     } catch (e) {
-      avisar(e instanceof Error ? e.message : 'No se pudo vaciar');
+      avisar(e instanceof Error ? e.message : 'No se pudo borrar');
     } finally {
       setTrabajando(false);
     }
@@ -553,143 +609,151 @@ function HojaPapelera({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =>
   const quien = (id: string | null) =>
     members.find((m) => m.id === id)?.displayName ?? '';
 
+  const fila = (t: Tirado, conCasilla: boolean) => (
+    <div key={t.id} className="flex items-center gap-2.5 py-2">
+      {conCasilla ? (
+        <button
+          onClick={() => alternar(t.id)}
+          role="checkbox"
+          aria-checked={marcados.has(t.id)}
+          aria-label={`Marcar ${t.nombre}`}
+          className={cn(
+            'w-6 h-6 rounded-lg border shrink-0 flex items-center justify-center transition-colors',
+            marcados.has(t.id)
+              ? 'bg-marca-600 border-transparent text-white'
+              : 'superficie-2 borde txt-3',
+          )}
+        >
+          {marcados.has(t.id) && <Icono nombre="check" size={14} />}
+        </button>
+      ) : (
+        <span className="w-6 shrink-0" aria-hidden />
+      )}
+
+      <Ficha color={t.color} icono={t.icon} size={34} />
+
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium txt truncate">{t.nombre}</p>
+        <p className="text-[11px] txt-3 truncate">
+          {[
+            ETIQUETA_DESCARTE[t.tipo],
+            t.trashedBy ? `la tiró ${quien(t.trashedBy)}` : null,
+            t.trashedAt ? fechaCorta(t.trashedAt) : null,
+          ].filter(Boolean).join(' · ')}
+        </p>
+        {/* Sin `truncate`: el motivo es la razon entera por la que algo no se
+            borra, y cortado en «5 movimientos la u...» no explica nada. */}
+        {t.motivo ? (
+          <p className="text-[11px] txt-3 leading-snug">Se queda: {t.motivo}</p>
+        ) : t.dias !== null && (
+          <p className="text-[11px] text-amber-600 dark:text-amber-500">
+            {t.dias === 0 ? 'Se borra hoy' : t.dias === 1 ? 'Se borra mañana' : `Se borra en ${t.dias} días`}
+          </p>
+        )}
+      </div>
+
+      <button
+        onClick={() => void traerDeVuelta(t.tipo, t.id)}
+        disabled={trabajando}
+        aria-label={`Restaurar ${t.nombre}`}
+        className="min-h-9 px-3 rounded-xl superficie-2 borde border text-xs font-medium txt-2 shrink-0 disabled:opacity-40"
+      >
+        Restaurar
+      </button>
+    </div>
+  );
+
   return (
     <Hoja
       abierta={abierta}
       alCerrar={alCerrar}
-      titulo="Papelera y archivo"
-      pie={enPapelera.length > 0 ? (
+      titulo="Papelera"
+      pie={seVan.length > 0 ? (
         <Boton
-          variante={borrables > 0 ? 'peligro' : 'secundario'}
-          onClick={() => void vaciar()}
-          disabled={trabajando || borrables === 0}
+          variante="peligro"
+          onClick={() => void borrar(marcadosBorrables.length > 0 ? marcadosBorrables : null)}
+          disabled={trabajando}
           className="w-full min-h-12"
         >
           <Icono nombre="trash-2" size={17} />
-          {borrables > 0
-            ? `Vaciar la papelera (${borrables})`
-            : 'Nada se puede borrar todavía'}
+          {marcadosBorrables.length > 0
+            ? `Borrar ${marcadosBorrables.length} ahora`
+            : `Borrar las ${seVan.length} ahora`}
         </Boton>
       ) : undefined}
     >
-      <div className="space-y-6">
-        <p className="text-xs txt-3 leading-relaxed superficie-2 rounded-2xl p-3">
-          <strong className="txt-2">La papelera</strong> se puede vaciar y lo
-          borra de verdad. <strong className="txt-2">El archivo</strong> es para
-          lo que se jubiló pero cuya historia importa: sigue contando en los
-          totales del pasado y no se borra nunca solo.
-        </p>
+      {todo.length === 0 ? (
+        <Vacio
+          icono="trash-2"
+          titulo="Papelera vacía"
+          texto={`Lo que tires acá se puede restaurar de un toque, y se borra solo a los ${datos.plazo} días.`}
+        />
+      ) : (
+        <div className="space-y-6">
+          {seVan.length > 0 && (
+            <div>
+              <p className="text-xs font-medium txt-3 mb-1 px-1">
+                Se borran solas · {seVan.length}
+              </p>
+              <p className="text-[11px] txt-3 mb-2 px-1 leading-relaxed">
+                A los {datos.plazo} días de tirarlas. Marca las que quieras borrar ya.
+              </p>
+              <div className="divide-y divide-[var(--borde)]">
+                {seVan.map((t) => fila(t, true))}
+              </div>
+            </div>
+          )}
 
-        <div>
-          <p className="text-xs font-medium txt-3 mb-2 px-1">
-            En la papelera {enPapelera.length > 0 && `· ${enPapelera.length}`}
-          </p>
-          {enPapelera.length === 0 ? (
-            <p className="text-sm txt-3 px-1">Vacía.</p>
-          ) : (
-            <div className="space-y-1">
-              {enPapelera.map(({ tipo, item }) => {
-                const motivo = ataduras[item.id];
-                return (
-                  <div key={item.id} className="flex items-center gap-3 py-2">
-                    <Ficha color={item.color} icono={item.icon} size={36} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium txt truncate">{item.name}</p>
-                      <p className="text-[11px] txt-3 truncate">
-                        {ETIQUETA_DESCARTE[tipo]}
-                        {item.trashedBy && ` · la tiró ${quien(item.trashedBy)}`}
-                        {item.trashedAt && ` · ${fechaCorta(item.trashedAt)}`}
-                      </p>
-                      {motivo && (
-                        <p className="text-[11px] text-amber-600 dark:text-amber-500 truncate">
-                          No se puede borrar: {motivo}
-                        </p>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => void traerDeVuelta(tipo, item.id)}
-                      disabled={trabajando}
-                      aria-label={`Restaurar ${item.name}`}
-                      className="min-h-9 px-3 rounded-xl superficie-2 borde border text-xs font-medium txt-2 shrink-0 disabled:opacity-40"
-                    >
-                      Restaurar
-                    </button>
-                  </div>
-                );
-              })}
+          {seQuedan.length > 0 && (
+            <div>
+              <p className="text-xs font-medium txt-3 mb-1 px-1">
+                Se quedan · {seQuedan.length}
+              </p>
+              <p className="text-[11px] txt-3 mb-2 px-1 leading-relaxed">
+                Tienen historia, así que no se borran nunca: si se fueran, los
+                movimientos que las usan quedarían huérfanos. Están fuera de los
+                selectores y siguen contando en los totales del pasado.
+              </p>
+              <div className="divide-y divide-[var(--borde)]">
+                {seQuedan.map((t) => fila(t, false))}
+              </div>
             </div>
           )}
         </div>
-
-        <div>
-          <p className="text-xs font-medium txt-3 mb-2 px-1">
-            Archivado {archivados.length > 0 && `· ${archivados.length}`}
-          </p>
-          {archivados.length === 0 ? (
-            <p className="text-sm txt-3 px-1">Nada archivado.</p>
-          ) : (
-            <div className="space-y-1">
-              {archivados.map(({ tipo, item }) => (
-                <div key={item.id} className="flex items-center gap-3 py-2">
-                  <Ficha color={item.color} icono={item.icon} size={36} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium txt truncate">{item.name}</p>
-                    <p className="text-[11px] txt-3">{ETIQUETA_DESCARTE[tipo]}</p>
-                  </div>
-                  <button
-                    onClick={() => void traerDeVuelta(tipo, item.id)}
-                    disabled={trabajando}
-                    aria-label={`Volver a usar ${item.name}`}
-                    className="min-h-9 px-3 rounded-xl superficie-2 borde border text-xs font-medium txt-2 shrink-0 disabled:opacity-40"
-                  >
-                    Volver a usar
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </Hoja>
   );
 }
 
-const ETIQUETA_DESCARTE: Record<Descarte, string> = {
-  categoria: 'Categoría',
-  cuenta: 'Cuenta',
-  economia: 'Economía',
-};
-
 /**
- * Preguntar a donde va lo que se saca de circulacion.
+ * Mandar algo a la papelera.
  *
- * Antes el boton archivaba y punto. Pero «lo creé por error probando» y «esto
- * ya no lo usamos pero tiene dos años de historia» son cosas distintas y
- * merecen destinos distintos.
+ * Una sola pregunta, no tres botones: el sistema ya sabe si tiene historia, y
+ * eso decide solo si se va a borrar a los 30 días o si se queda. No hace falta
+ * que lo decida una persona antes de saberlo.
  */
 export function useDescartar() {
   const { descartar, avisar } = useStore();
   const confirmar = useConfirmar();
 
   return async (tipo: Descarte, id: string, nombre: string, enUso: number) => {
-    const r = await confirmar({
-      titulo: `¿Qué hacemos con "${nombre}"?`,
+    const ok = await confirmar({
+      titulo: `¿Mandar "${nombre}" a la papelera?`,
       detalle: enUso > 0
-        ? `La usan ${enUso} ${enUso === 1 ? 'cosa' : 'cosas'}, así que su historia `
-          + 'importa. En los dos casos sale de los selectores y no se pierde nada; '
-          + 'desde la papelera se puede borrar del todo el día que deje de usarse.'
-        : 'No la usa nada, así que se puede borrar sin romper nada. A la papelera '
-          + 'para tirarla, al archivo para jubilarla conservándola.',
+        ? `La usan ${enUso} ${enUso === 1 ? 'cosa' : 'cosas'}, así que se queda `
+          + 'guardada en la papelera y no se borra: su historia no se pierde. '
+          + 'Sale de los selectores y se restaura cuando quieras.'
+        : 'No la usa nada. Se puede restaurar de un toque, y si no la sacas de '
+          + 'ahí se borra sola a los 30 días.',
       confirmar: 'A la papelera',
-      alterna: 'Archivar',
-      cancelar: 'Dejarla como está',
+      cancelar: 'Dejarla',
+      destructivo: true,
     });
-    // Tocar afuera o escapar es `false`: no hace nada, que es lo correcto.
-    if (r === false) return;
+    if (!ok) return;
 
     try {
-      await descartar(tipo, id, r === true ? 'papelera' : 'archivo');
-      avisar(r === true ? 'A la papelera. Se puede restaurar.' : 'Archivada.', 'ok');
+      await descartar(tipo, id);
+      avisar('A la papelera. Se puede restaurar.', 'ok');
     } catch (e) {
       avisar(e instanceof Error ? e.message : 'No se pudo');
     }
@@ -748,7 +812,7 @@ function HojaEntidades({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =
                       'economia', e.id, e.name,
                       categories.filter((c) => c.entityId === e.id).length,
                     )}
-                    aria-label={`Sacar de circulación ${e.name}`}
+                    aria-label={`Tirar ${e.name} a la papelera`}
                     className="w-9 h-9 rounded-lg flex items-center justify-center txt-3 shrink-0"
                   >
                     <Icono nombre="trash-2" size={16} />
@@ -935,7 +999,7 @@ function HojaCategorias({ abierta, alCerrar }: { abierta: boolean; alCerrar: () 
                     </button>
                     <button
                       onClick={() => void descartar('categoria', c.id, c.name, cuantoLaUsan(c.id))}
-                      aria-label={`Sacar de circulación ${c.name}`}
+                      aria-label={`Tirar ${c.name} a la papelera`}
                       className="w-9 h-9 rounded-lg flex items-center justify-center txt-3 shrink-0"
                     >
                       <Icono nombre="trash-2" size={15} />
@@ -1081,8 +1145,12 @@ function EditorCategoria({ categoria, alCerrar }: {
 function HojaPresupuestos({ abierta, alCerrar, alEditar }: {
   abierta: boolean; alCerrar: () => void; alEditar: (b: Budget | null) => void;
 }) {
-  const { budgets, transactions, entities, household } = useStore();
+  const {
+    budgets, transactions, entities, categories, household, borrarPresupuesto, avisar,
+  } = useStore();
+  const confirmar = useConfirmar();
   const moneda = household?.currency ?? 'USD';
+  const variasEconomias = entities.length > 1;
 
   // Los de evento son los que tienen nombre. Los viejos por mes y categoria
   // siguen existiendo y se muestran aparte, pero no se crean mas: un tope
@@ -1098,7 +1166,36 @@ function HojaPresupuestos({ abierta, alCerrar, alEditar }: {
         || b.b.createdAt - a.b.createdAt),
     [budgets, transactions, entities],
   );
-  const viejos = useMemo(() => budgets.filter((b) => !esEvento(b)), [budgets]);
+  // Los topes mensuales de antes, con su categoria y lo que llevan gastado:
+  // sin eso la lista decia «Por categoría» tres veces y no se sabia de cual
+  // era cada tope ni si estaba pasado.
+  const viejos = useMemo(() => budgets
+    .filter((b) => !esEvento(b))
+    .map((b) => ({
+      b,
+      cat: categories.find((c) => c.id === b.categoryId),
+      // Cada uno contra SU mes, no contra el actual: un tope de agosto se mide
+      // con lo que se gasto en agosto.
+      gastado: estadoPresupuestos([b], transactions, b.period, categories)[0]?.gastadoMinor ?? 0,
+    }))
+    .sort((a, x) => x.b.period.localeCompare(a.b.period)
+      || (a.cat?.name ?? '').localeCompare(x.cat?.name ?? '')),
+  [budgets, categories, transactions]);
+
+  async function borrarViejo(b: Budget) {
+    const cat = categories.find((c) => c.id === b.categoryId);
+    const ok = await confirmar({
+      titulo: `¿Borrar el tope de "${cat?.name ?? 'todo el mes'}"?`,
+      detalle: 'Es solo un aviso: no mueve plata ni toca ningún movimiento.',
+      destructivo: true,
+    });
+    if (ok !== true) return;
+    try {
+      await borrarPresupuesto(b.id);
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : 'No se pudo borrar');
+    }
+  }
 
   return (
     <Hoja
@@ -1135,7 +1232,9 @@ function HojaPresupuestos({ abierta, alCerrar, alEditar }: {
                     <span className="text-sm font-medium txt truncate">
                       {b.name}
                       {b.closedAt && <span className="txt-3 font-normal"> · cerrado</span>}
-                      {economia && <span className="txt-3 font-normal"> · {economia.name}</span>}
+                      {economia && variasEconomias && (
+                        <span className="txt-3 font-normal"> · {economia.name}</span>
+                      )}
                     </span>
                     <span className={cn(
                       'text-xs tabular shrink-0',
@@ -1159,25 +1258,46 @@ function HojaPresupuestos({ abierta, alCerrar, alEditar }: {
         {viejos.length > 0 && (
           <div>
             <p className="text-xs font-medium txt-3 mb-2">Topes mensuales de antes</p>
-            <p className="text-[11px] txt-3 leading-relaxed mb-2">
+            <p className="text-[11px] txt-3 leading-relaxed mb-3">
               Siguen funcionando, pero ya no se crean nuevos: un tope mensual
-              por categoría que se renueva solo es, en el fondo, una jarra.
+              por categoría que se renueva solo es, en el fondo, una jarra. Se
+              pueden borrar; no se editan acá.
             </p>
-            <div className="space-y-1">
-              {viejos.map((b) => (
-                <button
-                  key={b.id}
-                  onClick={() => alEditar(b)}
-                  className="w-full flex items-center justify-between py-1.5 text-left"
-                >
-                  <span className="text-sm txt-2 truncate">
-                    {b.categoryId ? 'Por categoría' : 'Todo el mes'} · {nombreMes(b.period)}
-                  </span>
-                  <span className="text-xs tabular txt-3 shrink-0">
-                    {formatMonto(b.amountMinor, moneda)}
-                  </span>
-                </button>
-              ))}
+            <div className="space-y-3.5">
+              {viejos.map(({ b, cat, gastado }) => {
+                const ratio = b.amountMinor > 0 ? gastado / b.amountMinor : 0;
+                return (
+                  <div key={b.id}>
+                    <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                      {/* El nombre de la categoría, no la palabra «categoría».
+                          Con tres topes puestos, tres renglones que decían
+                          «Por categoría» no distinguían cuál era cuál. */}
+                      <span className="text-sm font-medium txt truncate">
+                        {cat?.name ?? 'Todo el mes'}
+                        {b.period !== claveMes(Date.now()) && (
+                          <span className="txt-3 font-normal"> · {nombreMes(b.period)}</span>
+                        )}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className={cn(
+                          'text-xs tabular',
+                          ratio > 1 ? 'text-red-500 font-semibold' : ratio > 0.8 ? 'text-amber-500' : 'txt-2',
+                        )}>
+                          {formatMonto(gastado, moneda)} / {formatMonto(b.amountMinor, moneda)}
+                        </span>
+                        <button
+                          onClick={() => void borrarViejo(b)}
+                          aria-label={`Borrar el tope de ${cat?.name ?? 'todo el mes'}`}
+                          className="w-7 h-7 rounded-lg flex items-center justify-center txt-3"
+                        >
+                          <Icono nombre="trash-2" size={14} />
+                        </button>
+                      </div>
+                    </div>
+                    <Barra ratio={ratio} color={cat?.color ?? '#64748b'} alerta />
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

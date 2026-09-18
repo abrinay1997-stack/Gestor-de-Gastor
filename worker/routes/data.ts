@@ -421,20 +421,26 @@ export async function guardarPresupuesto(req: Request, env: Env, sesion: Sesion)
     if (!cat) return error('La categoría no existe', 404);
   }
 
-  // El indice unico (hogar, periodo, categoria) hace que volver a guardar el
-  // mismo presupuesto lo actualice en lugar de duplicarlo.
+  // El indice unico (hogar, periodo, categoria, economia) hace que volver a
+  // guardar el mismo tope lo actualice en lugar de duplicarlo. Es PARCIAL —solo
+  // cubre las filas con name NULL, o sea los topes mensuales— asi que el
+  // `ON CONFLICT` tiene que repetir ese `WHERE` para apuntarle al mismo indice.
   await env.DB.prepare(
     `INSERT INTO budget (id, household_id, category_id, amount_minor, period,
                          created_at, updated_at, entity_id)
      VALUES (?1,?2,?3,?4,?5,?6,?6,?7)
      ON CONFLICT(household_id, period, IFNULL(category_id, ''), IFNULL(entity_id, ''))
+       WHERE name IS NULL
      DO UPDATE SET
        amount_minor = excluded.amount_minor, updated_at = excluded.updated_at`,
   ).bind(id, sesion.householdId, categoryId, amountMinor, period, t, entityId).run();
 
+  // `name IS NULL` tambien aca: sin eso, un evento nacido el mismo mes y de la
+  // misma economia coincide con estas cuatro columnas y se devolveria el
+  // evento en lugar del tope que se acaba de guardar.
   const fila = await env.DB.prepare(
     `SELECT * FROM budget
-      WHERE household_id = ?1 AND period = ?2
+      WHERE household_id = ?1 AND period = ?2 AND name IS NULL
         AND IFNULL(category_id,'') = ?3 AND IFNULL(entity_id,'') = ?4`,
   ).bind(
     sesion.householdId, period, categoryId ?? '', entityId ?? '',
