@@ -100,7 +100,7 @@ export function Consejero() {
   if (disponible === false) {
     return (
       <div className="space-y-4">
-        <h1 className="t-titulo font-semibold txt tracking-tight">Consejero</h1>
+        <h1 className="t-seccion font-semibold txt tracking-tight">Consejero</h1>
         <Tarjeta>
           <Vacio
             icono="sparkles"
@@ -120,7 +120,7 @@ export function Consejero() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="t-titulo font-semibold txt tracking-tight">Consejero</h1>
+        <h1 className="t-seccion font-semibold txt tracking-tight">Consejero</h1>
         <p className="t-nota txt-3 mt-0.5">
           Ve todos tus números. La conversación no se guarda.
         </p>

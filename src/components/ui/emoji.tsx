@@ -118,7 +118,7 @@ export function SelectorEmoji({ valor, alElegir, color }: {
             onClick={() => alElegir(e)}
             aria-label={`Emoji ${e}`}
             className={cn(
-              'aspect-square rounded-xl flex items-center justify-center t-titulo transition-transform active:scale-90',
+              'aspect-square rounded-xl flex items-center justify-center t-glifo transition-transform active:scale-90',
               valor === e ? 'ring-2' : 'superficie-2',
             )}
             style={valor === e

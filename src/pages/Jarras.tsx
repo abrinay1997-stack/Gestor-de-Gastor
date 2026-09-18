@@ -171,9 +171,9 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
 
           {libre < 0 && (
             <Tarjeta className="border-red-500/40">
-              <p className="t-fila font-medium text-red-500 mb-1">
+              <h2 className="t-seccion font-semibold text-red-500 mb-1">
                 Las jarras tienen {formatMonto(-libre, moneda)} de más
-              </p>
+              </h2>
               <p className="t-nota txt-3">
                 En las cuentas hay {formatMonto(enCuentas, moneda)}.
               </p>
@@ -184,9 +184,11 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
               explica enseña a desconfiar del resto de la pantalla. */}
           {libre > 0 && jars.length > 0 && (
             <Tarjeta className="border-marca-500/40">
-              <p className="t-fila font-medium txt mb-1">
+              {/* Titulo de tarjeta, del mismo tamaño y grosor que los del
+                  Inicio: estas tres tarjetas son cuadrantes igual que aquellos. */}
+              <h2 className="t-seccion font-semibold txt mb-1">
                 Hay {formatMonto(libre, moneda)} sin repartir
-              </p>
+              </h2>
               {/* De donde sale ese numero. Sin esto la pantalla decia "Sin
                   asignar $887.10" con TODOS los movimientos asignados y no
                   habia forma de entenderlo: eran los saldos iniciales de las
@@ -201,11 +203,11 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
 
           {huerfanos.length > 0 && (
             <Tarjeta className="border-marca-500/40">
-              <p className="t-fila font-medium txt mb-1">
+              <h2 className="t-seccion font-semibold txt mb-1">
                 {huerfanos.length === 1
                   ? 'Hay 1 ingreso que nunca se repartió'
                   : `Hay ${huerfanos.length} ingresos que nunca se repartieron`}
-              </p>
+              </h2>
               <p className="t-nota txt-3 mb-3">
                 Suman {formatMonto(huerfanos.reduce((a, t) => a + t.amountMinor, 0), moneda)}.
               </p>
@@ -599,6 +601,7 @@ function MovimientosDeJarra({ jarra, alCerrar, alVerMovimiento, alMover, alPoner
   const {
     transactions, imputaciones, jarAportes, household, borrarAporte, avisar,
   } = useStore();
+  const confirmar = useConfirmar();
   const moneda = household?.currency ?? 'USD';
 
   const movimientos = useMemo(() => {
@@ -747,8 +750,25 @@ function MovimientosDeJarra({ jarra, alCerrar, alVerMovimiento, alMover, alPoner
                   )}>
                     {h.delta > 0 ? '+' : '−'}{formatMonto(Math.abs(h.delta), moneda)}
                   </span>
+                  {/* Preguntando primero, como todo lo que borra.
+                      Era el unico boton de papelera de la app que no preguntaba:
+                      un toque y el reparto se deshacia. Y encima es de los mas
+                      faciles de tocar sin querer, porque vive al final de una
+                      fila de una lista que se recorre con el dedo. La plata no
+                      se pierde —vuelve a «sin asignar»— pero el reparto si, y
+                      eso es justo lo que hay que decir antes. */}
                   <button
                     onClick={async () => {
+                      const ok = await confirmar({
+                        titulo: '¿Deshacer esta asignación?',
+                        detalle: `${formatMonto(Math.abs(h.delta), moneda)} `
+                          + `${h.delta > 0 ? 'salen de' : 'vuelven a'} «${jarra.name}» y `
+                          + 'vuelven a «sin asignar». No se pierde plata: se deshace el reparto.',
+                        confirmar: 'Deshacer',
+                        cancelar: 'Dejarla',
+                        destructivo: true,
+                      });
+                      if (ok !== true) return;
                       try {
                         await borrarAporte(h.aporteId!);
                       } catch (e) {
