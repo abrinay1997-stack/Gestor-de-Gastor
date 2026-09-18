@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../store/store.tsx';
 import { leer } from '@shared/parser';
-import { formatMonto, montoPlano, parseMonto } from '@shared/money';
+import { decimalesDe, formatMonto, montoPlano, parseMonto } from '@shared/money';
 import {
   entidadDe, entidadPorDefecto, imputacionJarras, indexarCategorias, jarrasDe,
 } from '@shared/domain';
@@ -39,6 +39,75 @@ export function etiquetaCuenta(
   if (cuenta.owner === 'compartida') return `${cuenta.name} · Compartida`;
   const duenio = members.find((m) => m.id === cuenta.owner);
   return duenio ? `${cuenta.name} · ${duenio.displayName}` : cuenta.name;
+}
+
+/**
+ * Teclado de monto.
+ *
+ * El campo de monto era un <input inputMode="decimal">, asi que abria el
+ * teclado del sistema: en un celular eso tapa media pantalla, empuja el
+ * formulario y deja el resto fuera de alcance. Ademas el teclado del sistema
+ * trae letras, comas, espacios y un "enter" que no hace nada aca.
+ *
+ * Este tiene diez teclas y un borrar, no se mueve, y no tapa nada porque es
+ * parte del formulario. Y como escribe directo en `montoTexto`, el parser de
+ * siempre sigue siendo el unico que interpreta lo que se escribio.
+ */
+function Teclado({ valor, alCambiar, decimales, alListo }: {
+  valor: string;
+  alCambiar: (v: string) => void;
+  decimales: number;
+  alListo: () => void;
+}) {
+  const escribir = (tecla: string) => {
+    vibrar(8);
+    if (tecla === 'borrar') {
+      alCambiar(valor.slice(0, -1));
+      return;
+    }
+    if (tecla === '.') {
+      // Una sola coma, y ninguna si la moneda no tiene decimales.
+      if (decimales === 0 || valor.includes('.')) return;
+      alCambiar(valor === '' ? '0.' : `${valor}.`);
+      return;
+    }
+    // Ni mas decimales de los que la moneda tiene, ni un cero a la izquierda
+    // que despues haya que borrar a mano.
+    const punto = valor.indexOf('.');
+    if (punto >= 0 && valor.length - punto - 1 >= decimales) return;
+    if (valor === '0') { alCambiar(tecla); return; }
+    if (valor.replace('.', '').length >= 12) return;
+    alCambiar(valor + tecla);
+  };
+
+  const teclas = ['1', '2', '3', '4', '5', '6', '7', '8', '9', decimales > 0 ? '.' : '', '0', 'borrar'];
+
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {teclas.map((t, i) => (t === '' ? <div key={i} /> : (
+        <button
+          key={t}
+          type="button"
+          onClick={() => escribir(t)}
+          aria-label={t === 'borrar' ? 'Borrar un dígito' : t === '.' ? 'Coma decimal' : t}
+          className={cn(
+            'min-h-13 rounded-2xl superficie-2 borde border txt',
+            'text-xl font-medium tabular flex items-center justify-center',
+            'active:scale-[0.96] active:bg-marca-500/10 transition-transform duration-75',
+          )}
+        >
+          {t === 'borrar' ? <Icono nombre="delete" size={20} /> : t}
+        </button>
+      )))}
+      <button
+        type="button"
+        onClick={alListo}
+        className="col-span-3 min-h-11 rounded-2xl superficie borde border txt-2 text-sm font-medium active:scale-[0.98] transition-transform duration-75"
+      >
+        Listo
+      </button>
+    </div>
+  );
 }
 
 export function CargaRapida({ abierta, alCerrar, editando }: {
@@ -72,6 +141,10 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
   const [notas, setNotas] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // El teclado arranca abierto en un movimiento nuevo: lo primero que se hace
+  // al abrir esta pantalla es teclear cuanto fue.
+  const [teclado, setTeclado] = useState(true);
 
   const refFrase = useRef<HTMLInputElement>(null);
 
@@ -108,8 +181,10 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
       setFecha(aInputDate(Date.now()));
       setNotas('');
       setFrase('');
-      setTimeout(() => refFrase.current?.focus(), 80);
     }
+    // Editando ya hay un monto: el teclado empieza cerrado y se abre tocando
+    // el numero. En uno nuevo, abierto.
+    setTeclado(!editando);
     setError(null);
   }, [abierta, editando, moneda, activas, me]);
 
@@ -292,7 +367,19 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
   }
 
   return (
-    <Hoja abierta={abierta} alCerrar={alCerrar} titulo={editando ? 'Editar movimiento' : 'Nuevo movimiento'}>
+    <Hoja
+      abierta={abierta}
+      alCerrar={alCerrar}
+      titulo={editando ? 'Editar movimiento' : 'Nuevo movimiento'}
+      /* Guardar al pie y siempre visible. Antes vivia al final del formulario:
+         en pantalla completa, con el teclado abierto y quince controles arriba,
+         habia que recorrer todo para abajo para poder guardar. */
+      pie={(
+        <Boton onClick={() => void guardar()} disabled={!puedeGuardar} className="w-full min-h-12">
+          {guardando ? 'Guardando...' : editando ? 'Guardar cambios' : 'Registrar'}
+        </Boton>
+      )}
+    >
       <div className="space-y-4">
         {!editando && (
           <div>
@@ -301,6 +388,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
                 ref={refFrase}
                 value={frase}
                 onChange={(e) => setFrase(e.target.value)}
+                onFocus={() => setTeclado(false)}
                 placeholder='Escribí "super 12500" y listo'
                 inputMode="text"
                 enterKeyHint="done"
@@ -333,33 +421,49 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
                 setRepartir(t.id === TxType.INGRESO);
                 if (t.id !== TxType.GASTO) setJarId('');
               }}
+              /* Icono arriba y texto abajo. En una fila, a 390px el tercero
+                 quedaba en «Transferen...»: el icono se comia el ancho que
+                 necesitaba la palabra mas larga de las tres. */
               className={cn(
-                'min-h-11 rounded-xl text-sm font-medium border transition-all flex items-center justify-center gap-1.5',
+                'min-h-14 rounded-xl text-xs font-medium border transition-all',
+                'flex flex-col items-center justify-center gap-0.5 px-1',
                 tipo === t.id ? 'text-white border-transparent' : 'superficie-2 borde txt-2',
               )}
               style={tipo === t.id ? { background: t.color } : undefined}
             >
-              <Icono nombre={t.icono} size={15} />
-              <span className="truncate">{t.etiqueta}</span>
+              <Icono nombre={t.icono} size={16} />
+              <span className="truncate max-w-full">{t.etiqueta}</span>
             </button>
           ))}
         </div>
 
-        <div>
-          <span className="block text-xs font-medium txt-2 mb-1.5">Monto</span>
-          <input
-            value={montoTexto}
-            onChange={(e) => setMontoTexto(e.target.value)}
-            placeholder="0.00"
-            inputMode="decimal"
+        <div className="space-y-2">
+          <span className="block text-xs font-medium txt-2">Monto</span>
+          {/* El numero es un boton, no un campo: no abre el teclado del
+              sistema, y tocarlo trae el de abajo. */}
+          <button
+            type="button"
+            onClick={() => setTeclado(true)}
+            aria-label="Monto"
             className={cn(
-              'w-full min-h-16 px-4 rounded-2xl superficie-2 borde border txt',
-              'text-3xl font-semibold tabular text-center outline-none',
-              'focus:border-marca-500 focus:ring-2 focus:ring-marca-500/20',
+              'w-full min-h-16 px-4 rounded-2xl superficie-2 borde border',
+              'text-3xl font-semibold tabular text-center',
+              teclado && 'ring-2 ring-marca-500/25 border-marca-500',
+              montoTexto === '' ? 'txt-3' : 'txt',
             )}
-          />
+          >
+            {montoTexto === '' ? '0' : montoTexto}
+          </button>
           {montoMinor !== null && montoMinor > 0 && (
-            <p className="text-xs txt-3 mt-1.5 text-center">{formatMonto(montoMinor, moneda)}</p>
+            <p className="text-xs txt-3 text-center">{formatMonto(montoMinor, moneda)}</p>
+          )}
+          {teclado && (
+            <Teclado
+              valor={montoTexto}
+              alCambiar={setMontoTexto}
+              decimales={decimalesDe(moneda)}
+              alListo={() => setTeclado(false)}
+            />
           )}
         </div>
 
@@ -367,6 +471,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           etiqueta="Descripción"
           value={descripcion}
           onChange={(e) => setDescripcion(e.target.value)}
+          onFocus={() => setTeclado(false)}
           placeholder="En qué fue"
         />
 
@@ -599,10 +704,6 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
         )}
 
         {error && <p className="text-sm text-red-500 text-center px-2">{error}</p>}
-
-        <Boton onClick={() => void guardar()} disabled={!puedeGuardar} className="w-full min-h-12">
-          {guardando ? 'Guardando...' : editando ? 'Guardar cambios' : 'Registrar'}
-        </Boton>
       </div>
     </Hoja>
   );

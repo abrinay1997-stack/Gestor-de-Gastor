@@ -215,8 +215,53 @@
   /* Oculta la barra de scroll sin perder el scroll. */
   .sin-barra { scrollbar-width: none; }
   .sin-barra::-webkit-scrollbar { display: none; }
+
+  /*
+   * Una fila que acaba de llegar del otro telefono.
+   *
+   * Entra desde arriba y se despinta sola: el resaltado dura lo que dura la
+   * animacion y no queda ningun estilo pegado, asi que un rato despues la fila
+   * es igual a todas. Sin esto, la fila aparece de la nada en medio de la
+   * lista y no hay forma de saber que es nueva.
+   */
+  .fila-nueva {
+    animation: fila-entra 1.6s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  @keyframes fila-entra {
+    0% {
+      opacity: 0;
+      transform: translateY(-8px);
+      background: color-mix(in srgb, var(--color-marca-500) 18%, transparent);
+    }
+    22% {
+      opacity: 1;
+      transform: none;
+      background: color-mix(in srgb, var(--color-marca-500) 18%, transparent);
+    }
+    100% {
+      opacity: 1;
+      transform: none;
+      background: transparent;
+    }
+  }
 }
 
+/* Quien pidio menos movimiento ve el resaltado, pero no el desplazamiento. */
+@media (prefers-reduced-motion: reduce) {
+  .fila-nueva {
+    animation: fila-entra-quieta 1.6s ease-out;
+  }
+  @keyframes fila-entra-quieta {
+    0%, 22% { background: color-mix(in srgb, var(--color-marca-500) 18%, transparent); }
+    100% { background: transparent; }
+  }
+}
+
+/* El vidrio de la barra, en oscuro.
+   Va dos veces a proposito: el media query cubre a quien tiene el sistema en
+   oscuro y no eligio nada (por eso el `:not([data-tema='claro'])`), y el
+   bloque de abajo a quien eligio oscuro a mano teniendo el sistema en claro,
+   que el media query no alcanza. Los dos dicen exactamente lo mismo. */
 @media (prefers-color-scheme: dark) {
   @layer utilities {
     :root:not([data-tema='claro']) .borde-luz {
@@ -228,9 +273,13 @@
       backdrop-filter: blur(30px) saturate(1.8);
       border: 0.5px solid rgb(255 255 255 / 0.10);
       box-shadow:
-        inset 0 0.5px 0 rgb(255 255 255 / /* Y lo mismo para quien eligio oscuro a mano, que no lo cubre el media query. */
-@layer utilities {
+        inset 0 0.5px 0 rgb(255 255 255 / 0.10),
+        0 6px 24px -8px rgb(0 0 0 / 0.5);
+    }
+  }
+}
 
+@layer utilities {
   :root[data-tema='oscuro'] .borde-luz {
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
   }
@@ -240,14 +289,8 @@
     backdrop-filter: blur(30px) saturate(1.8);
     border: 0.5px solid rgb(255 255 255 / 0.10);
     box-shadow:
-    inset 0 0.5px 0 rgb(255 255 255 / 0.10),
-    0 6px 24px -8px rgb(0 0 0 / 0.5);
-  }
-  }
-
-0.10),
-        0 6px 24px -8px rgb(0 0 0 / 0.5);
-    }
+      inset 0 0.5px 0 rgb(255 255 255 / 0.10),
+      0 6px 24px -8px rgb(0 0 0 / 0.5);
   }
 }
 

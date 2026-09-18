@@ -121,20 +121,16 @@ export function Inicio({ alVerMovimiento, alAgregar }: {
     ),
 
     'patrimonio': (
-      <Tarjeta className="bg-linear-to-br from-marca-600 to-marca-700 border-transparent text-white">
-        <p className="text-sm opacity-80 mb-1">Lo que tenemos</p>
-        <p className="text-[2.75rem] leading-[1.05] font-bold tabular tracking-tight">
-          {formatMonto(patrimonio, moneda)}
-        </p>
-        {/* Las cuentas estan mezcladas: no hay una que sea de un negocio.
-            Decirlo evita leer este numero como si fuera de la economia que
-            se esta mirando. */}
-        <p className="text-xs opacity-70 mt-1.5">
-          {nombreActiva
-            ? 'Todas las economías juntas · las cuentas no se separan'
-            : `En ${cuantasCuentas} cuenta${cuantasCuentas === 1 ? '' : 's'}`}
-        </p>
-      </Tarjeta>
+      <HeroPatrimonio
+        montoMinor={patrimonio}
+        moneda={moneda}
+        /* Las cuentas estan mezcladas: no hay una que sea de un negocio.
+           Decirlo evita leer este numero como si fuera de la economia que
+           se esta mirando. */
+        pie={nombreActiva
+          ? 'Todas las economías juntas · las cuentas no se separan'
+          : `En ${cuantasCuentas} cuenta${cuantasCuentas === 1 ? '' : 's'}`}
+      />
     ),
 
     'quien-gasto': members.length > 1 && resumen.gastoMinor > 0 ? (
@@ -271,9 +267,51 @@ export function Inicio({ alVerMovimiento, alAgregar }: {
 }
 
 /** Una fila de la lista de movimientos. Se reusa en varias pantallas. */
-export function FilaMovimiento({ tx, alTocar }: { tx: Transaction; alTocar: () => void }) {
+/**
+ * El patrimonio en grande. Lo unico que se pinta de color en toda la app.
+ *
+ * Vive aca y se exporta porque Cuentas muestra el mismo numero: dos copias del
+ * mismo bloque terminan divergiendo en el primer retoque, y entonces la misma
+ * plata se ve distinta en dos pantallas.
+ */
+export function HeroPatrimonio({ montoMinor, moneda, pie, extra }: {
+  montoMinor: number;
+  moneda: string;
+  pie: string;
+  /** Lo que va debajo del pie, si la pantalla tiene algo mas que decir. */
+  extra?: React.ReactNode;
+}) {
+  return (
+    <Tarjeta className="bg-linear-to-br from-marca-600 to-marca-700 border-transparent text-white">
+      <p className="text-sm opacity-80 mb-1">Lo que tenemos</p>
+      <p className="text-[2.75rem] leading-[1.05] font-bold tabular tracking-tight">
+        {formatMonto(montoMinor, moneda)}
+      </p>
+      <p className="text-xs opacity-70 mt-1.5">{pie}</p>
+      {extra}
+    </Tarjeta>
+  );
+}
+
+export function FilaMovimiento({ tx, alTocar, sinFecha, deltaMinor }: {
+  tx: Transaction;
+  alTocar: () => void;
+  /** En una lista ya agrupada por dia, la fecha esta en el titulo del grupo. */
+  sinFecha?: boolean;
+  /**
+   * Lo que este movimiento le hizo a la jarra que se esta mirando.
+   *
+   * Dentro de una jarra el monto del movimiento no es el numero que importa:
+   * un sueldo de $2.500 le puso $1.375 a Necesidades y el resto a otras cinco.
+   * Antes se veian los dos, el total grande y la parte chiquita encimada en la
+   * esquina, y no habia forma de saber cual era cual. Con esto manda la parte,
+   * y el total pasa a ser el detalle.
+   */
+  deltaMinor?: number;
+}) {
   const {
-    categories, accounts, members, household, enVuelo, entities, entidadActiva,
+    categories, accounts, members, household, enVuelo, recienLlegados, entities,
+    entidadActiva,
   } = useStore();
   const moneda = household?.currency ?? 'USD';
 
@@ -286,6 +324,9 @@ export function FilaMovimiento({ tx, alTocar }: { tx: Transaction; alTocar: () =
   const cuenta = accounts.find((c) => c.id === tx.accountId);
   const quien = members.find((m) => m.id === autorDe(tx));
   const subiendo = enVuelo.has(tx.id);
+  // Acaba de cargarlo la otra persona, en este momento. Ver aparecer la fila
+  // es la mitad de la gracia de estar los dos adentro a la vez.
+  const recien = recienLlegados.has(tx.id);
 
   const esIngreso = tx.type === TxType.INGRESO;
   const esTransferencia = tx.type === TxType.TRANSFERENCIA;
@@ -299,6 +340,7 @@ export function FilaMovimiento({ tx, alTocar }: { tx: Transaction; alTocar: () =
       className={cn(
         'w-full flex items-center gap-3 py-3 px-1 text-left transition-opacity active:opacity-60',
         subiendo && 'opacity-50',
+        recien && 'fila-nueva',
       )}
     >
       <Ficha color={color} icono={icono} size={40} />
@@ -313,20 +355,29 @@ export function FilaMovimiento({ tx, alTocar }: { tx: Transaction; alTocar: () =
         {entidad && (
           <span className="inline-block mt-0.5"><EtiquetaEntidad entidad={entidad} /></span>
         )}
+        {/* La fecha se calla cuando el grupo ya la dice: repetirla en cada
+            fila de un mismo dia es la misma palabra catorce veces. */}
         <p className="text-xs txt-3 truncate">
-          {fechaCorta(tx.date)}
-          {cuenta && ` · ${cuenta.name}`}
-          {quien && ` · ${quien.displayName}`}
+          {[
+            sinFecha ? null : fechaCorta(tx.date),
+            deltaMinor !== undefined && Math.abs(deltaMinor) !== tx.amountMinor
+              ? `de ${formatMonto(tx.amountMinor, moneda)}`
+              : cuenta?.name,
+            quien?.displayName,
+          ].filter(Boolean).join(' · ')}
         </p>
       </div>
 
       <div className="text-right shrink-0 flex items-center gap-2">
         <p className={cn(
           'text-sm font-semibold tabular',
-          esIngreso ? 'text-marca-600 dark:text-marca-500' : esTransferencia ? 'txt-2' : 'txt',
+          deltaMinor !== undefined
+            ? (deltaMinor > 0 ? 'text-marca-600 dark:text-marca-500' : 'text-red-500')
+            : esIngreso ? 'text-marca-600 dark:text-marca-500' : esTransferencia ? 'txt-2' : 'txt',
         )}>
-          {esTransferencia ? '' : esIngreso ? '+' : '−'}
-          {formatMonto(tx.amountMinor, moneda)}
+          {deltaMinor !== undefined
+            ? `${deltaMinor > 0 ? '+' : '−'}${formatMonto(Math.abs(deltaMinor), moneda)}`
+            : `${esTransferencia ? '' : esIngreso ? '+' : '−'}${formatMonto(tx.amountMinor, moneda)}`}
         </p>
         {quien && (
           <span

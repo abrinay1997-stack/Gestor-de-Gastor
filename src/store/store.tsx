@@ -53,6 +53,14 @@ interface Estado {
   jarAportes: JarAporte[];
   /** Ids con una escritura en vuelo: la UI los muestra atenuados. */
   enVuelo: Set<string>;
+  /**
+   * Lo que acaba de llegar del otro telefono, por unos segundos.
+   *
+   * Es lo que hace visible el "estamos los dos adentro": sin esto, una fila
+   * nueva aparece de la nada en medio de la lista y no se sabe si estaba desde
+   * antes. Se limpia solo; no es un dato, es un destello.
+   */
+  recienLlegados: Set<string>;
   /** Movimientos cargados sin conexion, esperando para subir. */
   cola: TransactionInput[];
   online: string[];
@@ -65,7 +73,7 @@ const inicial: Estado = {
   household: null, accounts: [], categories: [], entities: [], entidadActiva: null,
   jars: [], budgets: [],
   transactions: [], recurring: [], imputaciones: [], jarTransfers: [], jarAportes: [],
-  enVuelo: new Set(), cola: [], online: [],
+  enVuelo: new Set(), recienLlegados: new Set(), cola: [], online: [],
   estadoLive: 'desconectado', aviso: null,
 };
 
@@ -75,6 +83,7 @@ type Accion =
   | { t: 'snapshot'; snap: Snapshot }
   | { t: 'salir' }
   | { t: 'tx:upsert'; tx: Transaction }
+  | { t: 'recien'; id: string; dentro: boolean }
   | { t: 'tx:delete'; id: string }
   | { t: 'saldos'; accounts: Account[]; jars: Jar[] }
   | { t: 'account:upsert'; account: Account }
@@ -252,6 +261,13 @@ function reducer(s: Estado, a: Accion): Estado {
 
     case 'recurring:delete':
       return { ...s, recurring: s.recurring.filter((r) => r.id !== a.id) };
+
+    case 'recien': {
+      const v = new Set(s.recienLlegados);
+      if (a.dentro) v.add(a.id);
+      else v.delete(a.id);
+      return { ...s, recienLlegados: v };
+    }
 
     case 'vuelo:add': {
       const v = new Set(s.enVuelo);
@@ -455,7 +471,13 @@ export function Store({ children }: { children: ReactNode }) {
 
     const quitarEscucha = live.al((ev: LiveEvent) => {
       switch (ev.kind) {
-        case 'tx:upsert': dispatch({ t: 'tx:upsert', tx: ev.tx }); break;
+        case 'tx:upsert':
+          dispatch({ t: 'tx:upsert', tx: ev.tx });
+          // Lo que llega por el cable es del otro telefono: destella un
+          // segundo y medio y despues es una fila mas.
+          dispatch({ t: 'recien', id: ev.tx.id, dentro: true });
+          setTimeout(() => dispatch({ t: 'recien', id: ev.tx.id, dentro: false }), 1600);
+          break;
         case 'tx:delete': dispatch({ t: 'tx:delete', id: ev.id }); break;
         case 'account:upsert': dispatch({ t: 'account:upsert', account: ev.account }); break;
         case 'account:delete': dispatch({ t: 'account:delete', id: ev.id }); break;

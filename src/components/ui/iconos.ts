@@ -19,7 +19,7 @@ import {
   ChartLine, ChartPie, Check, ChevronDown, ChevronLeft, ChevronRight,
   ChevronUp, Church, Cigarette, Circle, CircleCheck, CircleEllipsis,
   CircleHelp, CirclePlus, Clapperboard, CloudOff, Coffee, Coins, CreditCard,
-  Crown, Dices, Dog, Download, Drill, Droplet, Dumbbell, Egg, Eye, FileMinus,
+  Crown, Delete, Dices, Dog, Download, Drill, Droplet, Dumbbell, Egg, Eye, FileMinus,
   Filter, Fish, Flame, Flower2, Footprints, Fuel, Gamepad2, Gem, Gift,
   Glasses, GraduationCap, GripVertical, Guitar, Hammer, HandCoins, HandHeart,
   Handshake, Headphones, Heart, HeartHandshake, HeartPulse, House,
@@ -305,6 +305,8 @@ export const ICONOS: Record<string, LucideIcon> = {
   'train-front': TrainFront,
   'trash': Trash,
   'trash-2': Trash2,
+  /* El borrar del teclado de monto: la tecla con la flecha, no un tacho. */
+  'delete': Delete,
   'trees': Trees,
   'trending-down': TrendingDown,
   'trending-up': TrendingUp,

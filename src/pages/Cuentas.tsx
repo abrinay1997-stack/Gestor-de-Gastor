@@ -14,8 +14,9 @@ import {
 } from '@shared/types';
 import { calcularPatrimonio } from '@shared/domain';
 import {
-  Boton, Campo, COLORES, Ficha, Hoja, Icono, Selector, SelectorColor, Tarjeta, Vacio,
+  Barra, Boton, Campo, COLORES, Ficha, Hoja, Icono, Selector, SelectorColor, Tarjeta, Vacio,
 } from '../components/ui/base.tsx';
+import { HeroPatrimonio } from './Inicio.tsx';
 import { cn } from '../lib/utils.ts';
 
 const ICONOS: Record<AccountCategory, string> = {
@@ -75,30 +76,44 @@ export function Cuentas() {
         </Tarjeta>
       ) : (
         <>
-          <Tarjeta>
-            <p className="text-xs txt-2 mb-1">Patrimonio neto</p>
-            <p className="text-3xl font-bold tabular tracking-tight txt mb-4">{formatMonto(patrimonio, moneda)}</p>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div>
-                <p className="text-xs txt-3 mb-0.5">Tenés</p>
-                <p className="font-semibold tabular text-marca-600 dark:text-marca-500">
-                  {formatMonto(totalActivos, moneda)}
-                </p>
+          {/* El MISMO bloque que corona el Inicio, no una version parecida.
+              Es el mismo numero: si en una pantalla es una tarjeta de color y
+              en la otra un texto gris, parecen dos datos distintos. */}
+          <HeroPatrimonio
+            montoMinor={patrimonio}
+            moneda={moneda}
+            pie={`En ${activas.length} cuenta${activas.length === 1 ? '' : 's'}`}
+            extra={pasivos.length > 0 ? (
+              <div className="grid grid-cols-2 gap-3 mt-4 pt-3.5 border-t border-white/15">
+                <div>
+                  <p className="text-[11px] opacity-70 mb-0.5">Tenés</p>
+                  <p className="font-semibold tabular">{formatMonto(totalActivos, moneda)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] opacity-70 mb-0.5">Debés</p>
+                  <p className="font-semibold tabular">{formatMonto(totalPasivos, moneda)}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs txt-3 mb-0.5">Debes</p>
-                <p className="font-semibold tabular text-red-500">
-                  {formatMonto(totalPasivos, moneda)}
-                </p>
-              </div>
-            </div>
-          </Tarjeta>
+            ) : undefined}
+          />
 
           {activos.length > 0 && (
-            <Grupo titulo="Lo que tenés" cuentas={activos} alTocar={abrirEdicion} members={members} />
+            <Grupo
+              titulo="Lo que tenés"
+              cuentas={activos}
+              alTocar={abrirEdicion}
+              members={members}
+              total={totalActivos}
+            />
           )}
           {pasivos.length > 0 && (
-            <Grupo titulo="Lo que debes" cuentas={pasivos} alTocar={abrirEdicion} members={members} />
+            <Grupo
+              titulo="Lo que debes"
+              cuentas={pasivos}
+              alTocar={abrirEdicion}
+              members={members}
+              total={-totalPasivos}
+            />
           )}
           {archivadas.length > 0 && (
             <Grupo titulo="Archivadas" cuentas={archivadas} alTocar={abrirEdicion} members={members} />
@@ -115,11 +130,13 @@ export function Cuentas() {
   );
 }
 
-function Grupo({ titulo, cuentas, alTocar, members }: {
+function Grupo({ titulo, cuentas, alTocar, members, total }: {
   titulo: string;
   cuentas: Account[];
   alTocar: (c: Account) => void;
   members: { id: string; displayName: string }[];
+  /** Para la barra de reparto. Sin esto el grupo se dibuja sin barras. */
+  total?: number;
 }) {
   return (
     <Tarjeta className="py-3">
@@ -129,6 +146,12 @@ function Grupo({ titulo, cuentas, alTocar, members }: {
           const dueno = c.owner === 'compartida'
             ? 'Compartida'
             : members.find((m) => m.id === c.owner)?.displayName ?? 'Personal';
+          // Que parte del grupo es esta cuenta. La misma barra fina que usa
+          // "Quién gastó" en el Inicio: aca tambien es un reparto, no un
+          // limite, y por eso nunca se pone roja.
+          const parte = total && total > 0
+            ? Math.abs(c.balanceMinor) / total
+            : null;
 
           return (
             <button
@@ -138,17 +161,24 @@ function Grupo({ titulo, cuentas, alTocar, members }: {
             >
               <Ficha color={c.color} icono={c.icon} size={40} />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium txt truncate">{c.name}</p>
-                <p className="text-xs txt-3 truncate">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-medium txt truncate">{c.name}</p>
+                  <p className={cn(
+                    'text-sm font-semibold tabular shrink-0',
+                    c.balanceMinor < 0 ? 'text-red-500' : 'txt',
+                  )}>
+                    {formatMonto(c.balanceMinor, c.currency)}
+                  </p>
+                </div>
+                <p className="text-xs txt-3 truncate mt-0.5">
                   {ACCOUNT_CATEGORY_LABEL[c.category]} · {dueno}
                 </p>
+                {parte !== null && (
+                  <div className="mt-1.5">
+                    <Barra ratio={parte} color={c.color} fina />
+                  </div>
+                )}
               </div>
-              <p className={cn(
-                'text-sm font-semibold tabular shrink-0',
-                c.balanceMinor < 0 ? 'text-red-500' : 'txt',
-              )}>
-                {formatMonto(c.balanceMinor, c.currency)}
-              </p>
             </button>
           );
         })}

@@ -259,7 +259,7 @@ export function Movimientos({ alVerMovimiento, alAgregar }: {
               <p className="text-xs font-medium txt-3 px-1 mb-1">{fechaCorta(txs[0].date)}</p>
               <div className="divide-y divide-[var(--borde)] -mx-1">
                 {txs.map((tx) => (
-                  <FilaMovimiento key={tx.id} tx={tx} alTocar={() => alVerMovimiento(tx)} />
+                  <FilaMovimiento key={tx.id} tx={tx} sinFecha alTocar={() => alVerMovimiento(tx)} />
                 ))}
               </div>
             </Tarjeta>
