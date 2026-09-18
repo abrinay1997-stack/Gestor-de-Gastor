@@ -16,6 +16,7 @@ import {
   type ReactNode,
 } from 'react';
 import { api, ApiError } from '../api/client.ts';
+import type { Descarte } from '../api/client.ts';
 import { live, type EstadoLive } from '../api/live.ts';
 import { calcularJarras, calcularSaldos } from '@shared/domain';
 import type {
@@ -315,6 +316,14 @@ interface Acciones {
   guardarCategoria: (c: Partial<Category>, id?: string) => Promise<void>;
   guardarEntidad: (e: Partial<Entity>, id?: string) => Promise<void>;
   archivarEntidad: (id: string) => Promise<void>;
+  /** Sacar de circulacion: a la papelera (se puede deshacer) o al archivo. */
+  descartar: (tipo: Descarte, id: string, destino: 'papelera' | 'archivo') => Promise<void>;
+  restaurar: (tipo: Descarte, id: string) => Promise<void>;
+  /** Borra de verdad lo de la papelera que no tenga historia. */
+  vaciarPapelera: (tipo?: Descarte, id?: string) => Promise<{
+    borrados: number;
+    retenidos: { tipo: Descarte; id: string; nombre: string; motivo: string }[];
+  }>;
   verEntidad: (id: string | null) => void;
   guardarJarras: (jars: Partial<Jar>[]) => Promise<void>;
   traspasarEntreJarras: (d: {
@@ -342,7 +351,18 @@ interface Acciones {
   avisar: (texto: string, tipo?: 'error' | 'ok') => void;
 }
 
-const Ctx = createContext<(Estado & Acciones) | null>(null);
+/**
+ * Lo que el store calcula y no viene de la API tal cual.
+ *
+ * `categories`, `accounts` y `entities` del Estado ya vienen sin lo tirado;
+ * esto es lo tirado y lo archivado, que solo mira la pantalla de la papelera.
+ */
+interface Derivados {
+  papelera: { categories: Category[]; accounts: Account[]; entities: Entity[] };
+  archivo: { categories: Category[]; accounts: Account[]; entities: Entity[] };
+}
+
+const Ctx = createContext<(Estado & Derivados & Acciones) | null>(null);
 
 export function Store({ children }: { children: ReactNode }) {
   const [estado, dispatch] = useReducer(reducer, inicial);
@@ -594,6 +614,25 @@ export function Store({ children }: { children: ReactNode }) {
       else dispatch({ t: 'entity:delete', id });
     },
 
+    // La papelera no toca el estado local a mano: el Worker vuelve a
+    // difundir la fila y llega por el canal en vivo, igual que si lo hubiera
+    // hecho la otra persona. Asi las dos pantallas quedan iguales.
+    descartar: async (tipo, id, destino) => {
+      await api.descartar(tipo, id, destino);
+      await cargar();
+    },
+
+    restaurar: async (tipo, id) => {
+      await api.restaurar(tipo, id);
+      await cargar();
+    },
+
+    vaciarPapelera: async (tipo, id) => {
+      const r = await api.vaciarPapelera(tipo, id);
+      await cargar();
+      return { borrados: r.borrados, retenidos: r.retenidos };
+    },
+
     verEntidad: (id) => dispatch({ t: 'entidadActiva', id }),
 
     guardarJarras: async (jars) => {
@@ -683,9 +722,50 @@ export function Store({ children }: { children: ReactNode }) {
     },
   }), [avisar, cargar, estado.transactions, estado.household, estado.me, estado.members, setCola]);
 
+  /**
+   * Lo que esta en la papelera no existe para el resto de la app.
+   *
+   * Se filtra ACA, una sola vez, y no en las 43 pantallas que listan
+   * categorias, cuentas o economias. Filtrar en cada una significaria que la
+   * pantalla que escriba alguien mañana se olvide y muestre algo tirado; asi,
+   * para verlo hay que pedirlo a proposito con `papelera`.
+   *
+   * Archivado NO se filtra aca: eso lo decide cada pantalla, porque una
+   * categoria archivada tiene que seguir apareciendo en el historial y en los
+   * totales del pasado.
+   */
+  const vivos = useMemo(() => ({
+    categories: estado.categories.filter((c) => !c.trashedAt),
+    accounts: cuentasConSaldo.filter((c) => !c.trashedAt),
+    entities: estado.entities.filter((e) => !e.trashedAt),
+  }), [estado.categories, estado.entities, cuentasConSaldo]);
+
+  /** Lo tirado, para la pantalla de la papelera y para nada mas. */
+  const papelera = useMemo(() => ({
+    categories: estado.categories.filter((c) => Boolean(c.trashedAt)),
+    accounts: estado.accounts.filter((c) => Boolean(c.trashedAt)),
+    entities: estado.entities.filter((e) => Boolean(e.trashedAt)),
+  }), [estado.categories, estado.accounts, estado.entities]);
+
+  /** Lo archivado: jubilado pero con su historia intacta. */
+  const archivo = useMemo(() => ({
+    categories: estado.categories.filter((c) => c.archived && !c.trashedAt),
+    accounts: estado.accounts.filter((c) => c.archived && !c.trashedAt),
+    entities: estado.entities.filter((e) => e.archived && !e.trashedAt),
+  }), [estado.categories, estado.accounts, estado.entities]);
+
   const valor = useMemo(
-    () => ({ ...estado, accounts: cuentasConSaldo, jars: jarrasConSaldo, ...acciones }),
-    [estado, cuentasConSaldo, jarrasConSaldo, acciones],
+    () => ({
+      ...estado,
+      categories: vivos.categories,
+      accounts: vivos.accounts,
+      entities: vivos.entities,
+      jars: jarrasConSaldo,
+      papelera,
+      archivo,
+      ...acciones,
+    }),
+    [estado, vivos, jarrasConSaldo, papelera, archivo, acciones],
   );
 
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;

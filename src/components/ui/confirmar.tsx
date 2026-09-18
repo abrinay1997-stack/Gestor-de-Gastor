@@ -22,13 +22,24 @@ export interface PedidoConfirmacion {
   detalle?: string;
   confirmar?: string;
   cancelar?: string;
+  /**
+   * Una tercera salida, para cuando la pregunta no es si/no sino a donde.
+   *
+   * Existe por la papelera: «¿a la papelera o al archivo?» tiene tres
+   * respuestas, porque tocar afuera tiene que ser «ninguna de las dos» y no
+   * archivar por descarte.
+   */
+  alterna?: string;
   /** true para borrados; pinta el boton de rojo. */
   destructivo?: boolean;
 }
 
-type Resolver = (ok: boolean) => void;
+/** Que eligieron. `false` es tambien lo que sale al tocar afuera o escapar. */
+export type Respuesta = true | false | 'alterna';
 
-const Ctx = createContext<((p: PedidoConfirmacion) => Promise<boolean>) | null>(null);
+type Resolver = (r: Respuesta) => void;
+
+const Ctx = createContext<((p: PedidoConfirmacion) => Promise<Respuesta>) | null>(null);
 
 export function ProveedorConfirmacion({ children }: { children: ReactNode }) {
   const [pedido, setPedido] = useState<PedidoConfirmacion | null>(null);
@@ -36,10 +47,10 @@ export function ProveedorConfirmacion({ children }: { children: ReactNode }) {
 
   const confirmar = useCallback((p: PedidoConfirmacion) => {
     setPedido(p);
-    return new Promise<boolean>((resolve) => setResolver({ fn: resolve }));
+    return new Promise<Respuesta>((resolve) => setResolver({ fn: resolve }));
   }, []);
 
-  const responder = (ok: boolean) => {
+  const responder = (ok: Respuesta) => {
     resolver?.fn(ok);
     setPedido(null);
     setResolver(null);
@@ -80,19 +91,39 @@ export function ProveedorConfirmacion({ children }: { children: ReactNode }) {
               </div>
             </div>
 
-            {/* Cancelar a la derecha, donde cae el pulgar sin pensar. */}
-            <div className="flex gap-2">
-              <Boton
-                variante={pedido.destructivo ? 'peligro' : 'primario'}
-                onClick={() => responder(true)}
-                className="flex-1 min-h-12"
-              >
-                {pedido.confirmar ?? (pedido.destructivo ? 'Borrar' : 'Confirmar')}
-              </Boton>
-              <Boton variante="secundario" onClick={() => responder(false)} className="flex-1 min-h-12">
-                {pedido.cancelar ?? 'Cancelar'}
-              </Boton>
-            </div>
+            {/* Con tres salidas van apiladas: en una fila de tres, a 320px
+                cada boton queda en 90px y los tres textos se cortan. */}
+            {pedido.alterna ? (
+              <div className="space-y-2">
+                <Boton
+                  variante={pedido.destructivo ? 'peligro' : 'primario'}
+                  onClick={() => responder(true)}
+                  className="w-full min-h-12"
+                >
+                  {pedido.confirmar ?? 'Confirmar'}
+                </Boton>
+                <Boton variante="secundario" onClick={() => responder('alterna')} className="w-full min-h-12">
+                  {pedido.alterna}
+                </Boton>
+                <Boton variante="fantasma" onClick={() => responder(false)} className="w-full min-h-11">
+                  {pedido.cancelar ?? 'Cancelar'}
+                </Boton>
+              </div>
+            ) : (
+              /* Cancelar a la derecha, donde cae el pulgar sin pensar. */
+              <div className="flex gap-2">
+                <Boton
+                  variante={pedido.destructivo ? 'peligro' : 'primario'}
+                  onClick={() => responder(true)}
+                  className="flex-1 min-h-12"
+                >
+                  {pedido.confirmar ?? (pedido.destructivo ? 'Borrar' : 'Confirmar')}
+                </Boton>
+                <Boton variante="secundario" onClick={() => responder(false)} className="flex-1 min-h-12">
+                  {pedido.cancelar ?? 'Cancelar'}
+                </Boton>
+              </div>
+            )}
           </div>
 
           <style>{`@keyframes aparecer { from { opacity:0; transform: translateY(12px) scale(.97) } to { opacity:1; transform:none } }`}</style>

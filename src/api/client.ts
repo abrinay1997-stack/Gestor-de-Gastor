@@ -18,6 +18,9 @@ export class ApiError extends Error {
   }
 }
 
+/** Las tres cosas que se pueden mandar a la papelera o al archivo. */
+export type Descarte = 'categoria' | 'cuenta' | 'economia';
+
 async function pedir<T>(ruta: string, init: RequestInit = {}): Promise<T> {
   let res: Response;
 
@@ -157,6 +160,20 @@ export const api = {
   editarEntidad: (id: string, e: Partial<Entity>) =>
     put<{ entity: Entity }>(`/api/entities/${id}`, e),
   archivarEntidad: (id: string) => del<{ ok: true; entity?: Entity }>(`/api/entities/${id}`),
+
+  // --- papelera y archivo ---
+  /** Que hay en la papelera y que la ata, sin borrar nada. */
+  revisarPapelera: () =>
+    get<{ items: { tipo: Descarte; id: string; motivo: string | null }[] }>('/api/papelera'),
+  descartar: (tipo: Descarte, id: string, destino: 'papelera' | 'archivo') =>
+    post<{ ok: true }>('/api/papelera', { tipo, id, destino }),
+  restaurar: (tipo: Descarte, id: string) =>
+    post<{ ok: true }>('/api/papelera/restaurar', { tipo, id }),
+  vaciarPapelera: (tipo?: Descarte, id?: string) =>
+    post<{
+      ok: true; borrados: number;
+      retenidos: { tipo: Descarte; id: string; nombre: string; motivo: string }[];
+    }>('/api/papelera/vaciar', { tipo, id }),
 
   crearCategoria: (c: Partial<Category>) => post<{ category: Category }>('/api/categories', c),
   editarCategoria: (id: string, c: Partial<Category>) =>

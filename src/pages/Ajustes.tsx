@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store/store.tsx';
 import { api } from '../api/client.ts';
+import type { Descarte } from '../api/client.ts';
 import { formatMonto, montoPlano, parseMonto } from '@shared/money';
 import { claveMes, estadoPresupuestos } from '@shared/domain';
 import { MIN_PASSWORD } from '@shared/kdf';
@@ -13,7 +14,7 @@ import {
   SECCIONES_INICIO, SECCION_LABEL, TX_TYPE_LABEL, TxType,
   type Budget, type Category, type Entity, type SeccionInicio,
 } from '@shared/types';
-import { nombreMes } from '../lib/utils.ts';
+import { fechaCorta, nombreMes } from '../lib/utils.ts';
 import {
   Avatar, Barra, Boton, Campo, Ficha, Hoja, Icono, SelectorColor,
   SelectorIcono, Selector, Tarjeta,
@@ -25,7 +26,7 @@ import { PagosHabituales } from './ajustes/PagosHabituales.tsx';
 import { cn } from '../lib/utils.ts';
 
 type Hoja1 = null | 'invitar' | 'password' | 'presupuestos' | 'presupuesto'
-  | 'habituales' | 'categorias' | 'entidades' | 'perfil' | 'inicio';
+  | 'habituales' | 'categorias' | 'entidades' | 'perfil' | 'inicio' | 'papelera';
 
 export function Ajustes({ alVerConsejero, alVerAnalisis }: {
   /** Consejero y Analisis no estan en la barra de abajo: se entra por aca. */
@@ -34,8 +35,13 @@ export function Ajustes({ alVerConsejero, alVerAnalisis }: {
 }) {
   const {
     me, members, household, categories, entities, budgets, accounts, transactions,
-    recurring, salir,
+    recurring, papelera, archivo, salir,
   } = useStore();
+
+  const enLaPapelera = papelera.categories.length + papelera.accounts.length
+    + papelera.entities.length;
+  const archivadas = archivo.categories.length + archivo.accounts.length
+    + archivo.entities.length;
   const moneda = household?.currency ?? 'USD';
 
   const [hoja, setHoja] = useState<Hoja1>(null);
@@ -128,6 +134,14 @@ export function Ajustes({ alVerConsejero, alVerAnalisis }: {
           detalle={`${categories.filter((c) => !c.archived).length} activas`}
           alTocar={() => setHoja('categorias')}
         />
+        <Opcion
+          icono="trash-2"
+          titulo="Papelera y archivo"
+          detalle={enLaPapelera > 0
+            ? `${enLaPapelera} en la papelera`
+            : archivadas > 0 ? `${archivadas} archivado${archivadas === 1 ? '' : 's'}` : 'Vacía'}
+          alTocar={() => setHoja('papelera')}
+        />
         <Opcion icono="grip-vertical" titulo="Ordenar el inicio" alTocar={() => setHoja('inicio')} />
         <Opcion icono="lock" titulo="Cambiar contraseña" alTocar={() => setHoja('password')} />
         <Opcion
@@ -163,6 +177,7 @@ export function Ajustes({ alVerConsejero, alVerAnalisis }: {
         editando={presupuestoEdit}
       />
       <HojaEntidades abierta={hoja === 'entidades'} alCerrar={() => setHoja(null)} />
+      <HojaPapelera abierta={hoja === 'papelera'} alCerrar={() => setHoja(null)} />
       <HojaCategorias abierta={hoja === 'categorias'} alCerrar={() => setHoja(null)} />
     </div>
   );
@@ -365,6 +380,233 @@ function HojaOrdenInicio({ abierta, alCerrar }: { abierta: boolean; alCerrar: ()
   );
 }
 
+// --- papelera y archivo ---------------------------------------------------
+
+/**
+ * Lo que se sacó de circulación, a la vista y reversible.
+ *
+ * Antes todo se «archivaba» y el archivo era invisible: quedaron 17 categorías
+ * de prueba en la base que nadie sabía que estaban ahí. Lo que no se ve no se
+ * puede limpiar, y termina siendo basura.
+ */
+function HojaPapelera({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => void }) {
+  const { papelera, archivo, restaurar, vaciarPapelera, avisar, members } = useStore();
+  const confirmar = useConfirmar();
+  const [trabajando, setTrabajando] = useState(false);
+  const [ataduras, setAtaduras] = useState<Record<string, string | null>>({});
+
+  // Que ata a cada cosa, para poder decirlo ANTES de que toquen el botón en
+  // vez de que lo descubran cuando no se borra.
+  useEffect(() => {
+    if (!abierta) return;
+    let vivo = true;
+    void api.revisarPapelera()
+      .then((r) => {
+        if (!vivo) return;
+        setAtaduras(Object.fromEntries(r.items.map((i) => [i.id, i.motivo])));
+      })
+      .catch(() => { /* sin esto la pantalla sigue siendo usable */ });
+    return () => { vivo = false; };
+  }, [abierta, papelera]);
+
+  const enPapelera: { tipo: Descarte; item: { id: string; name: string; color: string; icon: string; trashedAt: number | null; trashedBy: string | null } }[] = [
+    ...papelera.categories.map((c) => ({ tipo: 'categoria' as Descarte, item: c })),
+    ...papelera.accounts.map((c) => ({ tipo: 'cuenta' as Descarte, item: c })),
+    ...papelera.entities.map((e) => ({ tipo: 'economia' as Descarte, item: e })),
+  ].sort((a, b) => (b.item.trashedAt ?? 0) - (a.item.trashedAt ?? 0));
+
+  const archivados: { tipo: Descarte; item: { id: string; name: string; color: string; icon: string } }[] = [
+    ...archivo.categories.map((c) => ({ tipo: 'categoria' as Descarte, item: c })),
+    ...archivo.accounts.map((c) => ({ tipo: 'cuenta' as Descarte, item: c })),
+    ...archivo.entities.map((e) => ({ tipo: 'economia' as Descarte, item: e })),
+  ];
+
+  const borrables = enPapelera.filter((x) => ataduras[x.item.id] === null).length;
+
+  async function traerDeVuelta(tipo: Descarte, id: string) {
+    setTrabajando(true);
+    try {
+      await restaurar(tipo, id);
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : 'No se pudo restaurar');
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  async function vaciar() {
+    const ok = await confirmar({
+      titulo: '¿Vaciar la papelera?',
+      detalle: 'Se borra de verdad y no se puede deshacer. Lo que tenga historia '
+        + '—movimientos, presupuestos, pagos habituales— se queda donde está.',
+      confirmar: 'Vaciar',
+      destructivo: true,
+    });
+    if (!ok) return;
+    setTrabajando(true);
+    try {
+      const r = await vaciarPapelera();
+      const quedaron = r.retenidos.length;
+      avisar(
+        r.borrados === 0 && quedaron === 0 ? 'No había nada para borrar'
+          : quedaron === 0
+            ? `Se borraron ${r.borrados}`
+            : `Se borraron ${r.borrados}. Quedaron ${quedaron} con historia.`,
+        'ok',
+      );
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : 'No se pudo vaciar');
+    } finally {
+      setTrabajando(false);
+    }
+  }
+
+  const quien = (id: string | null) =>
+    members.find((m) => m.id === id)?.displayName ?? '';
+
+  return (
+    <Hoja
+      abierta={abierta}
+      alCerrar={alCerrar}
+      titulo="Papelera y archivo"
+      pie={enPapelera.length > 0 ? (
+        <Boton
+          variante={borrables > 0 ? 'peligro' : 'secundario'}
+          onClick={() => void vaciar()}
+          disabled={trabajando || borrables === 0}
+          className="w-full min-h-12"
+        >
+          <Icono nombre="trash-2" size={17} />
+          {borrables > 0
+            ? `Vaciar la papelera (${borrables})`
+            : 'Nada se puede borrar todavía'}
+        </Boton>
+      ) : undefined}
+    >
+      <div className="space-y-6">
+        <p className="text-xs txt-3 leading-relaxed superficie-2 rounded-2xl p-3">
+          <strong className="txt-2">La papelera</strong> se puede vaciar y lo
+          borra de verdad. <strong className="txt-2">El archivo</strong> es para
+          lo que se jubiló pero cuya historia importa: sigue contando en los
+          totales del pasado y no se borra nunca solo.
+        </p>
+
+        <div>
+          <p className="text-xs font-medium txt-3 mb-2 px-1">
+            En la papelera {enPapelera.length > 0 && `· ${enPapelera.length}`}
+          </p>
+          {enPapelera.length === 0 ? (
+            <p className="text-sm txt-3 px-1">Vacía.</p>
+          ) : (
+            <div className="space-y-1">
+              {enPapelera.map(({ tipo, item }) => {
+                const motivo = ataduras[item.id];
+                return (
+                  <div key={item.id} className="flex items-center gap-3 py-2">
+                    <Ficha color={item.color} icono={item.icon} size={36} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium txt truncate">{item.name}</p>
+                      <p className="text-[11px] txt-3 truncate">
+                        {ETIQUETA_DESCARTE[tipo]}
+                        {item.trashedBy && ` · la tiró ${quien(item.trashedBy)}`}
+                        {item.trashedAt && ` · ${fechaCorta(item.trashedAt)}`}
+                      </p>
+                      {motivo && (
+                        <p className="text-[11px] text-amber-600 dark:text-amber-500 truncate">
+                          No se puede borrar: {motivo}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => void traerDeVuelta(tipo, item.id)}
+                      disabled={trabajando}
+                      aria-label={`Restaurar ${item.name}`}
+                      className="min-h-9 px-3 rounded-xl superficie-2 borde border text-xs font-medium txt-2 shrink-0 disabled:opacity-40"
+                    >
+                      Restaurar
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <p className="text-xs font-medium txt-3 mb-2 px-1">
+            Archivado {archivados.length > 0 && `· ${archivados.length}`}
+          </p>
+          {archivados.length === 0 ? (
+            <p className="text-sm txt-3 px-1">Nada archivado.</p>
+          ) : (
+            <div className="space-y-1">
+              {archivados.map(({ tipo, item }) => (
+                <div key={item.id} className="flex items-center gap-3 py-2">
+                  <Ficha color={item.color} icono={item.icon} size={36} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium txt truncate">{item.name}</p>
+                    <p className="text-[11px] txt-3">{ETIQUETA_DESCARTE[tipo]}</p>
+                  </div>
+                  <button
+                    onClick={() => void traerDeVuelta(tipo, item.id)}
+                    disabled={trabajando}
+                    aria-label={`Volver a usar ${item.name}`}
+                    className="min-h-9 px-3 rounded-xl superficie-2 borde border text-xs font-medium txt-2 shrink-0 disabled:opacity-40"
+                  >
+                    Volver a usar
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </Hoja>
+  );
+}
+
+const ETIQUETA_DESCARTE: Record<Descarte, string> = {
+  categoria: 'Categoría',
+  cuenta: 'Cuenta',
+  economia: 'Economía',
+};
+
+/**
+ * Preguntar a donde va lo que se saca de circulacion.
+ *
+ * Antes el boton archivaba y punto. Pero «lo creé por error probando» y «esto
+ * ya no lo usamos pero tiene dos años de historia» son cosas distintas y
+ * merecen destinos distintos.
+ */
+export function useDescartar() {
+  const { descartar, avisar } = useStore();
+  const confirmar = useConfirmar();
+
+  return async (tipo: Descarte, id: string, nombre: string, enUso: number) => {
+    const r = await confirmar({
+      titulo: `¿Qué hacemos con "${nombre}"?`,
+      detalle: enUso > 0
+        ? `La usan ${enUso} ${enUso === 1 ? 'cosa' : 'cosas'}, así que su historia `
+          + 'importa. En los dos casos sale de los selectores y no se pierde nada; '
+          + 'desde la papelera se puede borrar del todo el día que deje de usarse.'
+        : 'No la usa nada, así que se puede borrar sin romper nada. A la papelera '
+          + 'para tirarla, al archivo para jubilarla conservándola.',
+      confirmar: 'A la papelera',
+      alterna: 'Archivar',
+      cancelar: 'Dejarla como está',
+    });
+    // Tocar afuera o escapar es `false`: no hace nada, que es lo correcto.
+    if (r === false) return;
+
+    try {
+      await descartar(tipo, id, r === true ? 'papelera' : 'archivo');
+      avisar(r === true ? 'A la papelera. Se puede restaurar.' : 'Archivada.', 'ok');
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : 'No se pudo');
+    }
+  };
+}
+
 // --- categorias -----------------------------------------------------------
 
 /**
@@ -375,28 +617,11 @@ function HojaOrdenInicio({ abierta, alCerrar }: { abierta: boolean; alCerrar: ()
  * economias existen.
  */
 function HojaEntidades({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => void }) {
-  const { entities, categories, archivarEntidad, avisar } = useStore();
-  const confirmar = useConfirmar();
+  const { entities, categories } = useStore();
+  const descartar = useDescartar();
   const [editando, setEditando] = useState<Entity | null>(null);
 
   const visibles = entities.filter((e) => !e.archived);
-
-  async function archivar(e: Entity) {
-    const cuantas = categories.filter((c) => c.entityId === e.id && !c.archived).length;
-    const ok = await confirmar({
-      titulo: `¿Archivar "${e.name}"?`,
-      detalle: cuantas > 0
-        ? `Deja de aparecer en el selector. Sus ${cuantas} categorías y todo su historial se quedan como están.`
-        : 'Deja de aparecer en el selector. Nada se borra.',
-      destructivo: true,
-    });
-    if (!ok) return;
-    try {
-      await archivarEntidad(e.id);
-    } catch (err) {
-      avisar(err instanceof Error ? err.message : 'No se pudo archivar');
-    }
-  }
 
   return (
     <>
@@ -430,11 +655,14 @@ function HojaEntidades({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =
                 </button>
                 {visibles.length > 1 && (
                   <button
-                    onClick={() => void archivar(e)}
-                    aria-label={`Archivar ${e.name}`}
+                    onClick={() => void descartar(
+                      'economia', e.id, e.name,
+                      categories.filter((c) => c.entityId === e.id).length,
+                    )}
+                    aria-label={`Sacar de circulación ${e.name}`}
                     className="w-9 h-9 rounded-lg flex items-center justify-center txt-3 shrink-0"
                   >
-                    <Icono nombre="archive" size={16} />
+                    <Icono nombre="trash-2" size={16} />
                   </button>
                 )}
               </div>
@@ -534,9 +762,15 @@ function EditorEntidad({ entidad, alCerrar }: { entidad: Entity | null; alCerrar
 }
 
 function HojaCategorias({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => void }) {
-  const { categories, entities, entidadActiva, guardarCategoria, avisar } = useStore();
-  const confirmar = useConfirmar();
+  const { categories, entities, entidadActiva, transactions, budgets, recurring } = useStore();
+  const descartar = useDescartar();
   const [editando, setEditando] = useState<Category | null>(null);
+
+  // Cuantas cosas la usan, para que el diálogo diga si se puede borrar o no.
+  const cuantoLaUsan = (id: string) =>
+    transactions.filter((t) => t.categoryId === id).length
+    + budgets.filter((b) => b.categoryId === id).length
+    + recurring.filter((r) => r.categoryId === id).length;
 
   // Una categoria nueva nace en la entidad que se esta mirando. Si estan en
   // el consolidado, en la primera, que es Familia.
@@ -561,21 +795,6 @@ function HojaCategorias({ abierta, alCerrar }: { abierta: boolean; alCerrar: () 
       ? [{ economia: null as Entity | null, lista: sueltas }, ...grupos]
       : grupos;
   };
-
-  async function archivar(c: Category) {
-    const ok = await confirmar({
-      titulo: `¿Archivar "${c.name}"?`,
-      detalle: 'Deja de aparecer al cargar movimientos. Los que ya la usan la conservan.',
-      confirmar: 'Archivar',
-      destructivo: true,
-    });
-    if (!ok) return;
-    try {
-      await guardarCategoria({ archived: true }, c.id);
-    } catch (e) {
-      avisar(e instanceof Error ? e.message : 'No se pudo archivar');
-    }
-  }
 
   return (
     <>
@@ -626,11 +845,11 @@ function HojaCategorias({ abierta, alCerrar }: { abierta: boolean; alCerrar: () 
                       <Icono nombre="pencil" size={15} />
                     </button>
                     <button
-                      onClick={() => void archivar(c)}
-                      aria-label={`Archivar ${c.name}`}
+                      onClick={() => void descartar('categoria', c.id, c.name, cuantoLaUsan(c.id))}
+                      aria-label={`Sacar de circulación ${c.name}`}
                       className="w-9 h-9 rounded-lg flex items-center justify-center txt-3 shrink-0"
                     >
-                      <Icono nombre="archive" size={15} />
+                      <Icono nombre="trash-2" size={15} />
                     </button>
                   </div>
                 ))}

@@ -14,6 +14,7 @@ import * as auth from './routes/auth.ts';
 import * as data from './routes/data.ts';
 import * as adjustments from './routes/adjustments.ts';
 import * as entities from './routes/entities.ts';
+import * as papelera from './routes/papelera.ts';
 import * as resumen from './routes/resumen.ts';
 import * as consejo from './routes/consejo.ts';
 import * as jarTransfers from './routes/jarTransfers.ts';
@@ -51,6 +52,10 @@ const RUTAS: Record<string, Partial<Record<string, Handler>>> = {
   '/api/entities': { GET: entities.listar, POST: entities.crear },
   // Los numeros ya calculados, para auditar sin leer el codigo. Ver resumen.ts.
   '/api/resumen': { GET: resumen.traer },
+  // Papelera y archivo. Ver worker/routes/papelera.ts.
+  '/api/papelera': { GET: papelera.revisar, POST: papelera.descartar },
+  '/api/papelera/restaurar': { POST: papelera.restaurar },
+  '/api/papelera/vaciar': { POST: papelera.vaciar },
   // El consejero. La respuesta va en streaming; ver consejo.ts.
   '/api/consejo': { POST: consejo.preguntar },
   '/api/consejo/estado': { GET: consejo.estado },
