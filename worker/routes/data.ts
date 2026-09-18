@@ -363,7 +363,11 @@ export async function guardarPresupuesto(req: Request, env: Env, sesion: Sesion)
   const t = ahora();
   const id = idOpcional(body.id, 'id') ?? nuevoId();
 
-  // --- Evento: nombre y tope, y nada mas. -----------------------------------
+  const icono = body.icon === undefined || body.icon === null || body.icon === ''
+    ? null
+    : texto(body.icon, 'icon', { max: 40, min: 1 });
+
+  // --- Evento: nombre, icono y tope. ----------------------------------------
   if (nombre !== null) {
     const entityId = idOpcional(body.entityId, 'entityId');
     const cerrado = body.closedAt === undefined ? undefined
@@ -380,21 +384,32 @@ export async function guardarPresupuesto(req: Request, env: Env, sesion: Sesion)
     ).bind(id, sesion.householdId).first();
 
     if (existe) {
+      // Los `?n` se arman contando, no a mano: la version anterior intercalaba
+      // `closed_at` en el medio y dejaba los numeros fijos, asi que agregar una
+      // columna al final corria todos los parametros de lugar y la sentencia
+      // terminaba comparando el household_id contra el icono.
+      const campos = [
+        ['name', nombre],
+        ['amount_minor', amountMinor],
+        ['entity_id', entityId],
+        ['icon', icono],
+        ['updated_at', t],
+        ...(cerrado === undefined ? [] : [['closed_at', cerrado] as const]),
+      ] as const;
+
+      const asignaciones = campos.map(([col], i) => `${col} = ?${i + 1}`).join(', ');
       await env.DB.prepare(
-        `UPDATE budget SET name = ?1, amount_minor = ?2, entity_id = ?3, updated_at = ?4
-           ${cerrado === undefined ? '' : ', closed_at = ?6'}
-         WHERE id = ?5 AND household_id = ?7`,
-      ).bind(
-        nombre, amountMinor, entityId, t, id,
-        ...(cerrado === undefined ? [] : [cerrado]),
-        sesion.householdId,
-      ).run();
+        `UPDATE budget SET ${asignaciones}
+          WHERE id = ?${campos.length + 1} AND household_id = ?${campos.length + 2}`,
+      ).bind(...campos.map(([, v]) => v), id, sesion.householdId).run();
     } else {
       await env.DB.prepare(
         `INSERT INTO budget (id, household_id, name, category_id, amount_minor, period,
-                             closed_at, created_at, updated_at, entity_id)
-         VALUES (?1,?2,?3,NULL,?4,?5,?6,?7,?7,?8)`,
-      ).bind(id, sesion.householdId, nombre, amountMinor, period, cerrado ?? null, t, entityId).run();
+                             closed_at, created_at, updated_at, entity_id, icon)
+         VALUES (?1,?2,?3,NULL,?4,?5,?6,?7,?7,?8,?9)`,
+      ).bind(
+        id, sesion.householdId, nombre, amountMinor, period, cerrado ?? null, t, entityId, icono,
+      ).run();
     }
 
     const filaEvento = await env.DB.prepare('SELECT * FROM budget WHERE id = ?1')
@@ -405,7 +420,25 @@ export async function guardarPresupuesto(req: Request, env: Env, sesion: Sesion)
     return json({ budget });
   }
 
-  // --- Mensual por categoria: el de antes, intacto. -------------------------
+  // --- Mensual por categoria ------------------------------------------------
+
+  // Editar uno que ya existe: solo cambia el monto. El mes y la categoria son
+  // su identidad —el indice unico es justamente (hogar, mes, categoria)— asi
+  // que tocarlos aca lo mudaria de lugar en vez de corregirlo.
+  if (body.id !== undefined && body.period === undefined) {
+    const { meta } = await env.DB.prepare(
+      'UPDATE budget SET amount_minor = ?1, updated_at = ?2 WHERE id = ?3 AND household_id = ?4',
+    ).bind(amountMinor, t, id, sesion.householdId).run();
+    if (!meta.changes) return error('El presupuesto no existe', 404);
+
+    const filaTope = await env.DB.prepare('SELECT * FROM budget WHERE id = ?1')
+      .bind(id).first<Record<string, unknown>>();
+    if (!filaTope) return error('No se pudo guardar el presupuesto', 500);
+    const budget = aBudget(filaTope);
+    await difundir(env, sesion.householdId, { kind: 'budget:upsert', budget, by: sesion.memberId });
+    return json({ budget });
+  }
+
   const categoryId = idOpcional(body.categoryId, 'categoryId');
   const period = periodo(body.period, 'period');
 

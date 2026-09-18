@@ -50,14 +50,6 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
     [jars, entidadActiva],
   );
 
-  // Cuanto de lo que esta sin asignar es capital de arranque. Es la parte que
-  // desconcierta: los movimientos pueden estar todos asignados y el numero
-  // seguir ahi, porque esto nunca fue un movimiento.
-  const inicialesSinAsignar = useMemo(
-    () => accounts.filter((c) => !c.archived)
-      .reduce((t, c) => t + Math.max(0, c.initialBalanceMinor), 0),
-    [accounts],
-  );
 
   // En "Todo" con mas de una economia, cada tanda lleva su titulo: seis
   // frascos de la casa y tres de un negocio en una sola lista corrida no se
@@ -179,15 +171,8 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
               <p className="text-sm font-medium text-red-500 mb-1">
                 Las jarras tienen {formatMonto(-libre, moneda)} de más
               </p>
-              <p className="text-xs txt-3 leading-relaxed">
-                {/* El sin asignar es del hogar entero, siempre: las cuentas no
-                    estan separadas por economia. Mirando un negocio solo,
-                    decir "las jarras" a secas haria pensar que el rojo es de
-                    ese negocio. */}
-                {entidadActiva === null ? 'Entre todas' : 'Todas las jarras juntas'} suman
-                más de lo que hay en las cuentas ({formatMonto(enCuentas, moneda)}).
-                Se arregla moviendo plata entre jarras, con «Mover» acá arriba, o
-                ajustando el saldo de una cuenta.
+              <p className="text-xs txt-3">
+                En las cuentas hay {formatMonto(enCuentas, moneda)}.
               </p>
             </Tarjeta>
           )}
@@ -204,16 +189,7 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
                   habia forma de entenderlo: eran los saldos iniciales de las
                   cuentas, plata que ya estaba ahi y que las jarras nunca
                   vieron porque solo ven movimientos. */}
-              <p className="text-xs txt-3 leading-relaxed mb-3">
-                {inicialesSinAsignar >= libre
-                  ? 'Es el capital con el que arrancaron: los saldos iniciales de las cuentas. Nunca pasó por una jarra porque las jarras solo ven movimientos.'
-                  : inicialesSinAsignar > 0
-                    ? `Incluye ${formatMonto(inicialesSinAsignar, moneda)} de los saldos iniciales de las cuentas, que nunca pasaron por una jarra.`
-                    : 'Plata que está en las cuentas y todavía no tiene propósito.'}
-                {' '}Repartirla no mueve ninguna cuenta: solo dice para qué está.
-                {entidadActiva !== null
-                  && ' Es del hogar entero: las cuentas no están separadas por economía.'}
-              </p>
+              <div className="mb-3" />
               <Boton onClick={() => setAsignando(true)} className="w-full">
                 Repartirla entre las jarras
               </Boton>
@@ -227,10 +203,8 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
                   ? 'Hay 1 ingreso que nunca se repartió'
                   : `Hay ${huerfanos.length} ingresos que nunca se repartieron`}
               </p>
-              <p className="text-xs txt-3 leading-relaxed mb-3">
+              <p className="text-xs txt-3 mb-3">
                 Suman {formatMonto(huerfanos.reduce((a, t) => a + t.amountMinor, 0), moneda)}.
-                Se reparten con los porcentajes de ahora. Los que ya tienen una jarra
-                puesta no se tocan.
               </p>
               <Boton onClick={() => void alDia()} disabled={poniendoAlDia} className="w-full">
                 {poniendoAlDia ? 'Repartiendo...' : 'Repartirlos ahora'}
@@ -410,10 +384,6 @@ function HojaTraspaso({ abierta, alCerrar, desde }: {
     return todas.filter((j) => j.entityId === entidad);
   }, [todas, desde, origen, entidadActiva]);
 
-  const nombreAmbito = entities.find(
-    (e) => e.id === todas.find((j) => j.id === origen)?.entityId,
-  )?.name;
-
   /** Las jarras agrupadas por economia, para el selector de origen. */
   const porEconomia = useMemo(() => {
     if (!variasEconomias) return null;
@@ -490,23 +460,6 @@ function HojaTraspaso({ abierta, alCerrar, desde }: {
   return (
     <Hoja abierta alCerrar={alCerrar} titulo={esPago ? 'Pagarle a otra economía' : 'Mover entre jarras'}>
       <div className="space-y-4">
-        <p className="text-xs txt-3 leading-relaxed">
-          {esPago ? (
-            <>
-              No se mueve plata de ninguna cuenta: ya está ahí, lo que cambia es
-              de quién es. Por eso no cuenta como ingreso —el negocio ya lo contó
-              cuando cobró— y el total del hogar no se mueve.
-            </>
-          ) : (
-            <>
-              No se mueve plata de ninguna cuenta. Solo cambia para qué está
-              guardada.
-              {variasEconomias && nombreAmbito
-                && ` Estas son las jarras de ${nombreAmbito}; para pasarle plata a otra economía, elegila abajo en "A".`}
-            </>
-          )}
-        </p>
-
         <Selector
           etiqueta="De"
           value={origen}
@@ -948,10 +901,6 @@ function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
                 <option key={e.id} value={e.id}>{e.name}</option>
               ))}
             </Selector>
-            <p className="text-xs txt-3 -mt-1 px-1 leading-relaxed">
-              Cada economía reparte sus propios ingresos. Los porcentajes suman
-              100% acá adentro, no entre todas.
-            </p>
           </>
         )}
 
@@ -1281,11 +1230,6 @@ function HojaAsignar({ abierta, alCerrar, disponible, hacia }: {
   return (
     <Hoja abierta alCerrar={alCerrar} titulo="Repartir lo que está sin asignar">
       <div className="space-y-4">
-        <p className="text-xs txt-3 leading-relaxed">
-          No se mueve plata de ninguna cuenta: ya está ahí. Lo único que cambia
-          es para qué está guardada. Si te arrepientes, se deshace desde la jarra.
-        </p>
-
         <Campo
           etiqueta="Monto"
           value={montoTexto}

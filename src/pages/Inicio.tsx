@@ -280,20 +280,33 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
  * mismo bloque terminan divergiendo en el primer retoque, y entonces la misma
  * plata se ve distinta en dos pantallas.
  */
-export function HeroPatrimonio({ montoMinor, moneda, pie, extra }: {
+export function HeroPatrimonio({ montoMinor, moneda, pie, extra, accion }: {
   montoMinor: number;
   moneda: string;
   /** Solo si hay algo que aclarar. Contar las cuentas no lo era. */
   pie?: string;
   /** Lo que va debajo del pie, si la pantalla tiene algo mas que decir. */
   extra?: React.ReactNode;
+  /**
+   * Un boton en la esquina de arriba.
+   *
+   * Vive aca y no en una fila propia: un titulo con un boton al lado se comia
+   * un renglon entero para decir el nombre de la pantalla, que ya lo dice el
+   * icono encendido de la barra de abajo.
+   */
+  accion?: React.ReactNode;
 }) {
   return (
     <Tarjeta className="bg-linear-to-br from-marca-600 to-marca-700 border-transparent text-white">
-      <p className="text-sm opacity-80 mb-1">Patrimonio neto</p>
-      <p className="text-[2.75rem] leading-[1.05] font-bold tabular tracking-tight">
-        {formatMonto(montoMinor, moneda)}
-      </p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm opacity-80 mb-1">Patrimonio neto</p>
+          <p className="text-[2.75rem] leading-[1.05] font-bold tabular tracking-tight">
+            {formatMonto(montoMinor, moneda)}
+          </p>
+        </div>
+        {accion && <div className="shrink-0 -mr-1 -mt-1">{accion}</div>}
+      </div>
       {pie && <p className="text-xs opacity-70 mt-1.5">{pie}</p>}
       {extra}
     </Tarjeta>

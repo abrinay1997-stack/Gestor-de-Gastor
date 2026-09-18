@@ -230,6 +230,7 @@ export const api = {
     amountMinor: number;
     period?: string;
     closedAt?: number | null;
+    icon?: string | null;
   }) =>
     put<{ budget: Budget }>('/api/budgets', b),
   borrarPresupuesto: (id: string) => del<{ ok: true }>(`/api/budgets/${id}`),

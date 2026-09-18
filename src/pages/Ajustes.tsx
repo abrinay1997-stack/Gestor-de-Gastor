@@ -14,7 +14,7 @@ import {
   esEvento, SECCIONES_INICIO, SECCION_LABEL, TEMA_LABEL, TEMAS, TX_TYPE_LABEL, TxType,
   type Budget, type Category, type Entity, type SeccionInicio, type Tema,
 } from '@shared/types';
-import { fechaCorta, nombreMes } from '../lib/utils.ts';
+import { fechaCorta } from '../lib/utils.ts';
 import {
   Avatar, Barra, Boton, Campo, Ficha, Hoja, Icono, SelectorColor,
   SelectorIcono, Selector, Tarjeta, Vacio,
@@ -52,8 +52,6 @@ export function Ajustes({ alVerConsejero, alVerAnalisis }: {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold txt tracking-tight">Ajustes</h1>
-
       {/* Perfil y hogar */}
       <Tarjeta>
         <h2 className="font-semibold txt mb-3">{household?.name ?? 'Nuestra casa'}</h2>
@@ -150,11 +148,6 @@ export function Ajustes({ alVerConsejero, alVerAnalisis }: {
       <Boton variante="secundario" onClick={() => void salir()} className="w-full">
         <Icono nombre="log-out" size={17} /> Cerrar sesión
       </Boton>
-
-      <p className="text-xs txt-3 text-center px-6 leading-relaxed pb-2">
-        Tus datos viven en tu propia base de Cloudflare. Nadie más que ustedes
-        dos tiene acceso.
-      </p>
 
       <HojaPerfil abierta={hoja === 'perfil'} alCerrar={() => setHoja(null)} />
       <HojaOrdenInicio abierta={hoja === 'inicio'} alCerrar={() => setHoja(null)} />
@@ -686,17 +679,14 @@ function HojaPapelera({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =>
         <Vacio
           icono="trash-2"
           titulo="Papelera vacía"
-          texto={`Lo que tires acá se puede restaurar de un toque, y se borra solo a los ${datos.plazo} días.`}
+          texto={`Lo que tires acá se borra solo a los ${datos.plazo} días.`}
         />
       ) : (
         <div className="space-y-6">
           {seVan.length > 0 && (
             <div>
-              <p className="text-xs font-medium txt-3 mb-1 px-1">
+              <p className="text-xs font-medium txt-3 mb-2 px-1">
                 Se borran solas · {seVan.length}
-              </p>
-              <p className="text-[11px] txt-3 mb-2 px-1 leading-relaxed">
-                A los {datos.plazo} días de tirarlas. Marca las que quieras borrar ya.
               </p>
               <div className="divide-y divide-[var(--borde)]">
                 {seVan.map((t) => fila(t, true))}
@@ -706,13 +696,8 @@ function HojaPapelera({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =>
 
           {seQuedan.length > 0 && (
             <div>
-              <p className="text-xs font-medium txt-3 mb-1 px-1">
+              <p className="text-xs font-medium txt-3 mb-2 px-1">
                 Se quedan · {seQuedan.length}
-              </p>
-              <p className="text-[11px] txt-3 mb-2 px-1 leading-relaxed">
-                Tienen historia, así que no se borran nunca: si se fueran, los
-                movimientos que las usan quedarían huérfanos. Están fuera de los
-                selectores y siguen contando en los totales del pasado.
               </p>
               <div className="divide-y divide-[var(--borde)]">
                 {seQuedan.map((t) => fila(t, false))}
@@ -780,12 +765,6 @@ function HojaEntidades({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =
     <>
       <Hoja abierta={abierta && !editando} alCerrar={alCerrar} titulo="Economías">
         <div className="space-y-5">
-          <p className="text-xs txt-3 leading-relaxed">
-            La casa y cada negocio, cada uno con su propio resultado, sus jarras y
-            sus presupuestos. De quién es cada movimiento se define en su
-            categoría, no acá.
-          </p>
-
           <Boton onClick={() => setEditando({
             id: '', householdId: '', name: '', kind: 'negocio', color: '#9a6a06',
             icon: 'briefcase', displayOrder: visibles.length, archived: false,
@@ -962,11 +941,7 @@ function HojaCategorias({ abierta, alCerrar }: { abierta: boolean; alCerrar: () 
           </Boton>
 
           {economias.length > 1 && (
-            <p className="text-xs txt-3 leading-relaxed superficie-2 rounded-2xl p-3">
-              Un movimiento pertenece a la economía de su categoría. Mueve una
-              categoría de economía y toda su historia se va con ella, sin tocar
-              ningún movimiento.
-            </p>
+            <span />
           )}
 
           {[
@@ -1145,16 +1120,13 @@ function EditorCategoria({ categoria, alCerrar }: {
 function HojaPresupuestos({ abierta, alCerrar, alEditar }: {
   abierta: boolean; alCerrar: () => void; alEditar: (b: Budget | null) => void;
 }) {
-  const {
-    budgets, transactions, entities, categories, household, borrarPresupuesto, avisar,
-  } = useStore();
-  const confirmar = useConfirmar();
+  const { budgets, transactions, entities, categories, household } = useStore();
   const moneda = household?.currency ?? 'USD';
   const variasEconomias = entities.length > 1;
 
-  // Los de evento son los que tienen nombre. Los viejos por mes y categoria
-  // siguen existiendo y se muestran aparte, pero no se crean mas: un tope
-  // mensual por categoria que acumula es exactamente una jarra.
+  // Los de evento son los que tienen nombre. Los de mes y categoría siguen
+  // existiendo y se muestran aparte, pero no se crean más: un tope mensual por
+  // categoría que acumula es exactamente una jarra.
   const eventos = useMemo(
     () => budgets.filter(esEvento)
       .map((b) => ({
@@ -1166,36 +1138,65 @@ function HojaPresupuestos({ abierta, alCerrar, alEditar }: {
         || b.b.createdAt - a.b.createdAt),
     [budgets, transactions, entities],
   );
-  // Los topes mensuales de antes, con su categoria y lo que llevan gastado:
-  // sin eso la lista decia «Por categoría» tres veces y no se sabia de cual
-  // era cada tope ni si estaba pasado.
+
   const viejos = useMemo(() => budgets
     .filter((b) => !esEvento(b))
     .map((b) => ({
       b,
       cat: categories.find((c) => c.id === b.categoryId),
       // Cada uno contra SU mes, no contra el actual: un tope de agosto se mide
-      // con lo que se gasto en agosto.
+      // con lo que se gastó en agosto.
       gastado: estadoPresupuestos([b], transactions, b.period, categories)[0]?.gastadoMinor ?? 0,
     }))
     .sort((a, x) => x.b.period.localeCompare(a.b.period)
       || (a.cat?.name ?? '').localeCompare(x.cat?.name ?? '')),
   [budgets, categories, transactions]);
 
-  async function borrarViejo(b: Budget) {
-    const cat = categories.find((c) => c.id === b.categoryId);
-    const ok = await confirmar({
-      titulo: `¿Borrar el tope de "${cat?.name ?? 'todo el mes'}"?`,
-      detalle: 'Es solo un aviso: no mueve plata ni toca ningún movimiento.',
-      destructivo: true,
-    });
-    if (ok !== true) return;
-    try {
-      await borrarPresupuesto(b.id);
-    } catch (e) {
-      avisar(e instanceof Error ? e.message : 'No se pudo borrar');
-    }
-  }
+  const fila = (
+    clave: string,
+    nombre: string,
+    icono: string,
+    color: string,
+    gastado: number,
+    tope: number,
+    alTocar: () => void,
+    apagado: boolean,
+    aclaracion?: string,
+  ) => {
+    const ratio = tope > 0 ? gastado / tope : 0;
+    const resto = tope - gastado;
+    return (
+      <button
+        key={clave}
+        onClick={alTocar}
+        className={cn('w-full text-left flex items-center gap-3', apagado && 'opacity-55')}
+      >
+        <Ficha color={color} icono={icono} size={38} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-sm font-medium txt truncate">
+              {nombre}
+              {aclaracion && <span className="txt-3 font-normal"> · {aclaracion}</span>}
+            </span>
+            <span className={cn(
+              'text-xs tabular shrink-0',
+              ratio > 1 ? 'text-red-500 font-semibold' : ratio > 0.8 ? 'text-amber-500' : 'txt-2',
+            )}>
+              {formatMonto(gastado, moneda)} / {formatMonto(tope, moneda)}
+            </span>
+          </div>
+          <div className="mt-1.5">
+            <Barra ratio={ratio} color={color} alerta />
+          </div>
+          <p className="text-[11px] txt-3 mt-1">
+            {resto >= 0
+              ? `Quedan ${formatMonto(resto, moneda)}`
+              : `Te pasaste ${formatMonto(-resto, moneda)}`}
+          </p>
+        </div>
+      </button>
+    );
+  };
 
   return (
     <Hoja
@@ -1208,100 +1209,40 @@ function HojaPresupuestos({ abierta, alCerrar, alEditar }: {
         </Boton>
       )}
     >
-      <div className="space-y-5">
-        <p className="text-xs txt-3 leading-relaxed">
-          Un presupuesto es un evento con nombre y tope: «Viaje a Cancún,
-          $2.000». Solo mide — no aparta plata ni toca ninguna cuenta. Al
-          cargar un gasto eliges si es de acá.
-        </p>
+      {eventos.length === 0 && viejos.length === 0 ? (
+        <Vacio
+          icono="scale"
+          titulo="Sin presupuestos"
+          texto="Un nombre y un tope, para algo puntual. Solo mide."
+          accion={<Boton onClick={() => alEditar(null)}>Crear el primero</Boton>}
+        />
+      ) : (
+        <div className="space-y-4">
+          {eventos.map(({ b, gastado, economia }) => fila(
+            b.id,
+            b.name ?? '',
+            b.icon ?? 'scale',
+            economia?.color ?? '#10b981',
+            gastado,
+            b.amountMinor,
+            () => alEditar(b),
+            Boolean(b.closedAt),
+            [b.closedAt ? 'cerrado' : null, economia && variasEconomias ? economia.name : null]
+              .filter(Boolean).join(' · ') || undefined,
+          ))}
 
-        {eventos.length === 0 ? (
-          <p className="text-sm txt-3">Todavía no hay ninguno.</p>
-        ) : (
-          <div className="space-y-4">
-            {eventos.map(({ b, gastado, economia }) => {
-              const ratio = b.amountMinor > 0 ? gastado / b.amountMinor : 0;
-              const resto = b.amountMinor - gastado;
-              return (
-                <button
-                  key={b.id}
-                  onClick={() => alEditar(b)}
-                  className={cn('w-full text-left', b.closedAt && 'opacity-55')}
-                >
-                  <div className="flex items-baseline justify-between mb-1.5 gap-2">
-                    <span className="text-sm font-medium txt truncate">
-                      {b.name}
-                      {b.closedAt && <span className="txt-3 font-normal"> · cerrado</span>}
-                      {economia && variasEconomias && (
-                        <span className="txt-3 font-normal"> · {economia.name}</span>
-                      )}
-                    </span>
-                    <span className={cn(
-                      'text-xs tabular shrink-0',
-                      ratio > 1 ? 'text-red-500 font-semibold' : ratio > 0.8 ? 'text-amber-500' : 'txt-2',
-                    )}>
-                      {formatMonto(gastado, moneda)} / {formatMonto(b.amountMinor, moneda)}
-                    </span>
-                  </div>
-                  <Barra ratio={ratio} color="#10b981" alerta />
-                  <p className="text-[11px] txt-3 mt-1">
-                    {resto >= 0
-                      ? `Quedan ${formatMonto(resto, moneda)}`
-                      : `Te pasaste ${formatMonto(-resto, moneda)}`}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {viejos.length > 0 && (
-          <div>
-            <p className="text-xs font-medium txt-3 mb-2">Topes mensuales de antes</p>
-            <p className="text-[11px] txt-3 leading-relaxed mb-3">
-              Siguen funcionando, pero ya no se crean nuevos: un tope mensual
-              por categoría que se renueva solo es, en el fondo, una jarra. Se
-              pueden borrar; no se editan acá.
-            </p>
-            <div className="space-y-3.5">
-              {viejos.map(({ b, cat, gastado }) => {
-                const ratio = b.amountMinor > 0 ? gastado / b.amountMinor : 0;
-                return (
-                  <div key={b.id}>
-                    <div className="flex items-baseline justify-between gap-2 mb-1.5">
-                      {/* El nombre de la categoría, no la palabra «categoría».
-                          Con tres topes puestos, tres renglones que decían
-                          «Por categoría» no distinguían cuál era cuál. */}
-                      <span className="text-sm font-medium txt truncate">
-                        {cat?.name ?? 'Todo el mes'}
-                        {b.period !== claveMes(Date.now()) && (
-                          <span className="txt-3 font-normal"> · {nombreMes(b.period)}</span>
-                        )}
-                      </span>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className={cn(
-                          'text-xs tabular',
-                          ratio > 1 ? 'text-red-500 font-semibold' : ratio > 0.8 ? 'text-amber-500' : 'txt-2',
-                        )}>
-                          {formatMonto(gastado, moneda)} / {formatMonto(b.amountMinor, moneda)}
-                        </span>
-                        <button
-                          onClick={() => void borrarViejo(b)}
-                          aria-label={`Borrar el tope de ${cat?.name ?? 'todo el mes'}`}
-                          className="w-7 h-7 rounded-lg flex items-center justify-center txt-3"
-                        >
-                          <Icono nombre="trash-2" size={14} />
-                        </button>
-                      </div>
-                    </div>
-                    <Barra ratio={ratio} color={cat?.color ?? '#64748b'} alerta />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
+          {viejos.map(({ b, cat, gastado }) => fila(
+            b.id,
+            cat?.name ?? 'Todo el mes',
+            b.icon ?? cat?.icon ?? 'calendar-days',
+            cat?.color ?? '#64748b',
+            gastado,
+            b.amountMinor,
+            () => alEditar(b),
+            false,
+          ))}
+        </div>
+      )}
     </Hoja>
   );
 }
@@ -1310,14 +1251,22 @@ function HojaPresupuesto({ abierta, alCerrar, editando }: {
   abierta: boolean; alCerrar: () => void; editando: Budget | null;
 }) {
   const {
-    entities, household, transactions, guardarPresupuesto, borrarPresupuesto, avisar,
+    entities, categories, household, transactions, guardarPresupuesto,
+    borrarPresupuesto, avisar,
   } = useStore();
   const confirmar = useConfirmar();
   const moneda = household?.currency ?? 'USD';
 
+  // Un tope mensual de los viejos no tiene nombre: lo identifica su categoría
+  // y su mes, y de esos dos no se toca ninguno. Lo único que se corrige es
+  // cuánto. Antes no se podía ni eso, y era la lista que más se mira.
+  const esTopeViejo = Boolean(editando) && !esEvento(editando as Budget);
+  const catDelTope = categories.find((c) => c.id === editando?.categoryId);
+
   const [nombre, setNombre] = useState('');
   const [monto, setMonto] = useState('');
   const [economia, setEconomia] = useState('');
+  const [icono, setIcono] = useState('scale');
   const [cargando, setCargando] = useState(false);
 
   useEffect(() => {
@@ -1325,21 +1274,23 @@ function HojaPresupuesto({ abierta, alCerrar, editando }: {
     setNombre(editando?.name ?? '');
     setMonto(editando ? montoPlano(editando.amountMinor, moneda) : '');
     setEconomia(editando?.entityId ?? '');
+    setIcono(editando?.icon ?? 'scale');
   }, [abierta, editando, moneda]);
 
-  const economias = entities.filter((e) => !e.archived);
+  const economias = entities;
   const montoMinor = parseMonto(monto, moneda);
-  const gastado = editando ? gastadoEnEvento(editando.id, transactions) : 0;
+  const gastado = editando && !esTopeViejo ? gastadoEnEvento(editando.id, transactions) : 0;
   const cerrado = Boolean(editando?.closedAt);
+  const puedeGuardar = montoMinor !== null && montoMinor >= 0 && !cargando
+    && (esTopeViejo || nombre.trim().length > 0);
 
   async function eliminar() {
     if (!editando) return;
     const cuantos = transactions.filter((t) => t.budgetId === editando.id).length;
     const ok = await confirmar({
-      titulo: `¿Borrar "${editando.name ?? 'este presupuesto'}"?`,
+      titulo: `¿Borrar "${editando.name ?? catDelTope?.name ?? 'este presupuesto'}"?`,
       detalle: cuantos > 0
-        ? `Los ${cuantos} gastos que le cargaron se quedan donde están y no se `
-          + 'pierde un centavo: solo dejan de contar contra un tope.'
+        ? `Los ${cuantos} gastos que le cargaron se quedan donde están.`
         : 'Nada más se toca.',
       destructivo: true,
     });
@@ -1353,16 +1304,21 @@ function HojaPresupuesto({ abierta, alCerrar, editando }: {
   }
 
   async function guardar(cerrarlo?: boolean) {
-    if (montoMinor === null || !nombre.trim()) return;
+    if (!puedeGuardar || montoMinor === null) return;
     setCargando(true);
     try {
-      await guardarPresupuesto({
-        id: editando?.id,
-        name: nombre.trim(),
-        amountMinor: montoMinor,
-        entityId: economia || null,
-        closedAt: cerrarlo === undefined ? undefined : (cerrarlo ? Date.now() : null),
-      });
+      await guardarPresupuesto(esTopeViejo
+        // Sin `period` el Worker entiende que es una corrección de monto y no
+        // mueve ni el mes ni la categoría, que son su identidad.
+        ? { id: editando!.id, amountMinor: montoMinor }
+        : {
+          id: editando?.id,
+          name: nombre.trim(),
+          amountMinor: montoMinor,
+          entityId: economia || null,
+          icon: icono,
+          closedAt: cerrarlo === undefined ? undefined : (cerrarlo ? Date.now() : null),
+        });
       alCerrar();
     } catch (e) {
       avisar(e instanceof Error ? e.message : 'No se pudo guardar');
@@ -1385,7 +1341,7 @@ function HojaPresupuesto({ abierta, alCerrar, editando }: {
           )}
           <Boton
             onClick={() => void guardar()}
-            disabled={montoMinor === null || montoMinor < 0 || !nombre.trim() || cargando}
+            disabled={!puedeGuardar}
             className="flex-1 min-h-12"
           >
             {cargando ? 'Guardando...' : 'Guardar'}
@@ -1394,12 +1350,34 @@ function HojaPresupuesto({ abierta, alCerrar, editando }: {
       )}
     >
       <div className="space-y-4">
-        <Campo
-          etiqueta="Nombre"
-          value={nombre}
-          onChange={(e) => setNombre(e.target.value)}
-          placeholder="Viaje a Cancún, Navidad, Mudanza..."
-        />
+        {esTopeViejo ? (
+          <div className="flex items-center gap-3">
+            <Ficha
+              color={catDelTope?.color ?? '#64748b'}
+              icono={catDelTope?.icon ?? 'calendar-days'}
+              size={40}
+            />
+            <p className="text-sm font-medium txt">{catDelTope?.name ?? 'Todo el mes'}</p>
+          </div>
+        ) : (
+          <>
+            <Campo
+              etiqueta="Nombre"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              placeholder="Viaje a Cancún, Navidad, Mudanza..."
+            />
+
+            <div>
+              <span className="block text-xs font-medium txt-2 mb-2">Ícono</span>
+              <SelectorIcono
+                valor={icono}
+                alElegir={setIcono}
+                color={entities.find((e) => e.id === economia)?.color ?? '#10b981'}
+              />
+            </div>
+          </>
+        )}
 
         <Campo
           etiqueta="Tope"
@@ -1409,27 +1387,23 @@ function HojaPresupuesto({ abierta, alCerrar, editando }: {
           inputMode="decimal"
         />
 
-        {economias.length > 1 && (
+        {!esTopeViejo && economias.length > 1 && (
           <Selector
             etiqueta="¿De alguna economía?"
             value={economia}
             onChange={(e) => setEconomia(e.target.value)}
           >
             <option value="">De la casa, sin economía</option>
-            {economias.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+            {economias.map((e) => (
+              <option key={e.id} value={e.id}>{e.name}</option>
+            ))}
           </Selector>
         )}
 
-        <p className="text-xs txt-3 leading-relaxed">
-          No aparta plata ni toca ninguna cuenta: lleva la cuenta de cuánto se
-          lleva gastado contra el tope. Al cargar un gasto vas a poder decir si
-          es de acá.
-        </p>
-
-        {editando && (
+        {editando && !esTopeViejo && (
           <div className="superficie-2 rounded-2xl p-3 space-y-2">
             <div className="flex items-baseline justify-between">
-              <span className="text-xs txt-2">Llevan gastado</span>
+              <span className="text-xs txt-2">Lleva gastado</span>
               <span className="text-sm font-semibold tabular txt">
                 {formatMonto(gastado, moneda)}
               </span>
@@ -1440,13 +1414,8 @@ function HojaPresupuesto({ abierta, alCerrar, editando }: {
               disabled={cargando}
               className="w-full"
             >
-              {cerrado ? 'Reabrir' : 'Cerrar el evento'}
+              {cerrado ? 'Volver a abrirlo' : 'Darlo por cerrado'}
             </Boton>
-            <p className="text-[11px] txt-3 leading-relaxed">
-              {cerrado
-                ? 'Cerrado: no aparece al cargar gastos. Los que ya tiene se quedan.'
-                : 'Al cerrarlo deja de ofrecerse al cargar gastos, y queda el resumen de cómo les fue.'}
-            </p>
           </div>
         )}
       </div>

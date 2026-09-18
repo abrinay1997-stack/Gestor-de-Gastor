@@ -168,6 +168,7 @@ export const aBudget = (f: Fila): Budget => ({
   period: str(f.period),
   name: strOpt(f.name),
   closedAt: intOpt(f.closed_at),
+  icon: strOpt(f.icon),
   createdAt: int(f.created_at),
   updatedAt: int(f.updated_at),
   entityId: strOpt(f.entity_id),

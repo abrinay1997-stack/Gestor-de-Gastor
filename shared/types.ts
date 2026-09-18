@@ -366,6 +366,8 @@ export interface Budget {
   period: string;
   /** Epoch del cierre. null = abierto. */
   closedAt: number | null;
+  /** Icono, como el de una jarra o una categoria. null = uno generico. */
+  icon: string | null;
   createdAt: number;
   updatedAt: number;
 }

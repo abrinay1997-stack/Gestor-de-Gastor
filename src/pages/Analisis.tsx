@@ -161,10 +161,6 @@ export function Analisis() {
               </div>
             ))}
           </div>
-          <p className="text-[11px] txt-3 mt-3 leading-relaxed">
-            La entidad sale de la categoría de cada movimiento. Los que no tienen
-            categoría quedan en «Sin clasificar».
-          </p>
         </Tarjeta>
       )}
 

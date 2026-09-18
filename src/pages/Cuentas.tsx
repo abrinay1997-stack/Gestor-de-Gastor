@@ -58,13 +58,6 @@ export function Cuentas() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold txt tracking-tight">Cuentas</h1>
-        <Boton onClick={abrirNueva} className="px-3">
-          <Icono nombre="plus" size={17} /> Nueva
-        </Boton>
-      </div>
-
       {activas.length === 0 ? (
         <Tarjeta>
           <Vacio
@@ -82,6 +75,17 @@ export function Cuentas() {
           <HeroPatrimonio
             montoMinor={patrimonio}
             moneda={moneda}
+            accion={(
+              /* Con la palabra, no solo el «+»: el botón flotante de abajo
+                 también es un «+» y significa otra cosa (un movimiento). Dos
+                 cruces iguales en la misma pantalla se prestan a confusión. */
+              <button
+                onClick={abrirNueva}
+                className="min-h-9 pl-2.5 pr-3 rounded-full bg-white/20 border border-white/25 flex items-center gap-1 text-sm font-medium active:scale-[0.94] transition-transform duration-100"
+              >
+                <Icono nombre="plus" size={16} /> Cuenta
+              </button>
+            )}
             extra={pasivos.length > 0 ? (
               <div className="grid grid-cols-2 gap-3 mt-4 pt-3.5 border-t border-white/15">
                 <div>
@@ -301,10 +305,6 @@ function FormularioCuenta({ abierta, alCerrar, editando }: {
                 <span className={cn('font-semibold tabular', diferencia < 0 ? 'text-red-500' : 'text-marca-600 dark:text-marca-500')}>
                   {diferencia > 0 ? '+' : '−'}{formatMonto(Math.abs(diferencia), moneda)}
                 </span>
-              </p>
-              <p className="text-xs txt-3 mt-1 leading-relaxed">
-                No se crea ni se toca ningún movimiento. Los que cargues después
-                siguen sumando y restando desde acá.
               </p>
             </div>
             <Campo

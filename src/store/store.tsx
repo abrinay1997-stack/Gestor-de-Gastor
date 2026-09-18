@@ -367,6 +367,7 @@ interface Acciones {
     amountMinor: number;
     period?: string;
     closedAt?: number | null;
+    icon?: string | null;
   }) => Promise<void>;
   borrarPresupuesto: (id: string) => Promise<void>;
   guardarPerfil: (d: {
