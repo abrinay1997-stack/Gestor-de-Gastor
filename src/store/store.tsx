@@ -21,6 +21,7 @@ import { live, type EstadoLive } from '../api/live.ts';
 import { calcularJarras, calcularSaldos } from '@shared/domain';
 import type {
   Account, Budget, Category, Entity, Jar, JarAporte, JarImputacion, JarTransfer, LiveEvent,
+  Tema,
   Member, Recurring, SeccionInicio, Snapshot, Transaction, TransactionInput,
 } from '@shared/types';
 
@@ -342,7 +343,13 @@ interface Acciones {
     categoryId: string | null; entityId?: string | null; amountMinor: number; period: string;
   }) => Promise<void>;
   borrarPresupuesto: (id: string) => Promise<void>;
-  guardarPerfil: (d: { displayName?: string; color?: string; emoji?: string; homeLayout?: SeccionInicio[] }) => Promise<void>;
+  guardarPerfil: (d: {
+    displayName?: string; color?: string; emoji?: string;
+    homeLayout?: SeccionInicio[];
+    /** Data URI ya recortada y achicada en el navegador. '' la quita. */
+    photo?: string;
+    theme?: Tema;
+  }) => Promise<void>;
   guardarRecurrente: (r: Partial<Recurring> & { startAt?: number }, id?: string) => Promise<void>;
   borrarRecurrente: (id: string) => Promise<void>;
   cobrarRecurrente: (id: string, d?: { amountMinor?: number; date?: number }) => Promise<void>;
@@ -753,6 +760,24 @@ export function Store({ children }: { children: ReactNode }) {
     accounts: estado.accounts.filter((c) => c.archived && !c.trashedAt),
     entities: estado.entities.filter((e) => e.archived && !e.trashedAt),
   }), [estado.categories, estado.accounts, estado.entities]);
+
+  /**
+   * El tema de cada persona, estampado en <html>.
+   *
+   * Va aca y no en un componente porque tiene que aplicarse apenas se sabe
+   * quien entro, antes de que se dibuje nada: si se hiciera al montar una
+   * pantalla, la app parpadearia del tema del sistema al elegido.
+   */
+  useEffect(() => {
+    const tema = estado.me?.theme ?? 'auto';
+    const raiz = document.documentElement;
+    if (tema === 'auto') raiz.removeAttribute('data-tema');
+    else raiz.setAttribute('data-tema', tema);
+    // `color-scheme` le dice al navegador de que color pintar los controles
+    // nativos y las barras de scroll. Sin esto, un desplegable del sistema
+    // sale claro sobre una app oscura.
+    raiz.style.colorScheme = tema === 'auto' ? 'light dark' : tema === 'oscuro' ? 'dark' : 'light';
+  }, [estado.me?.theme]);
 
   const valor = useMemo(
     () => ({

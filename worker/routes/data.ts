@@ -12,7 +12,7 @@ import {
   ahora, booleano, color, cuerpo, difundir, entero, error, idOpcional,
   json, nuevoId, periodo, texto, unoDe,
 } from '../http.ts';
-import { AccountCategory, SECCIONES_INICIO, type Jar } from '../../shared/types.ts';
+import { AccountCategory, SECCIONES_INICIO, TEMAS, type Jar } from '../../shared/types.ts';
 import { validarJarras } from '../../shared/domain.ts';
 
 const CATEGORIAS_CUENTA = Object.values(AccountCategory);
@@ -430,11 +430,37 @@ export async function editarPerfil(req: Request, env: Env, sesion: Sesion): Prom
       typeof x === 'string' && validas.has(x)))] as typeof actual.homeLayout;
   }
 
+  const theme = body.theme === undefined
+    ? actual.theme
+    : unoDe(body.theme, TEMAS, 'theme');
+
+  /**
+   * La foto viene ya recortada y achicada por el navegador, como data URI.
+   *
+   * El tope de 256 KB es una red de seguridad, no el tamaño esperado: un
+   * avatar de 256px en JPEG pesa ~20 KB. Sin tope, un cliente manipulado
+   * podria meter megabytes en una fila que viaja en CADA snapshot.
+   *
+   * Se acepta solo `data:image/...`: una URL externa convertiria el avatar en
+   * un pedido a un servidor de otro, que es justo lo que no queremos.
+   */
+  let photo = actual.photo;
+  if (body.photo !== undefined) {
+    const v = body.photo === null ? '' : String(body.photo);
+    if (v !== '' && !/^data:image\/(png|jpeg|webp);base64,/.test(v)) {
+      return error('La foto tiene que ser una imagen del propio dispositivo', 400);
+    }
+    if (v.length > 256_000) return error('La foto es demasiado grande', 400);
+    photo = v;
+  }
+
   await env.DB.prepare(
-    'UPDATE member SET display_name = ?1, color = ?2, emoji = ?3, home_layout = ?4 WHERE id = ?5',
+    `UPDATE member SET display_name = ?1, color = ?2, emoji = ?3, home_layout = ?4,
+       theme = ?5, photo = ?6 WHERE id = ?7`,
   ).bind(
     displayName, nuevoColor, emoji,
     homeLayout.length > 0 ? JSON.stringify(homeLayout) : '',
+    theme, photo,
     sesion.memberId,
   ).run();
 

@@ -3,7 +3,7 @@
  * orden del Inicio, seguridad y exportacion.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store/store.tsx';
 import { api } from '../api/client.ts';
 import type { Descarte } from '../api/client.ts';
@@ -11,8 +11,8 @@ import { formatMonto, montoPlano, parseMonto } from '@shared/money';
 import { claveMes, estadoPresupuestos } from '@shared/domain';
 import { MIN_PASSWORD } from '@shared/kdf';
 import {
-  SECCIONES_INICIO, SECCION_LABEL, TX_TYPE_LABEL, TxType,
-  type Budget, type Category, type Entity, type SeccionInicio,
+  SECCIONES_INICIO, SECCION_LABEL, TEMA_LABEL, TEMAS, TX_TYPE_LABEL, TxType,
+  type Budget, type Category, type Entity, type SeccionInicio, type Tema,
 } from '@shared/types';
 import { fechaCorta, nombreMes } from '../lib/utils.ts';
 import {
@@ -68,7 +68,7 @@ export function Ajustes({ alVerConsejero, alVerAnalisis }: {
               disabled={m.id !== me?.id}
               className="w-full flex items-center gap-3 text-left disabled:cursor-default"
             >
-              <Avatar nombre={m.displayName} color={m.color} emoji={m.emoji} size={38} />
+              <Avatar nombre={m.displayName} color={m.color} emoji={m.emoji} foto={m.photo} size={38} />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium txt truncate">
                   {m.displayName}
@@ -217,40 +217,60 @@ function HojaPerfil({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => v
   const [nombre, setNombre] = useState('');
   const [color, setColor] = useState('#10b981');
   const [emoji, setEmoji] = useState('');
+  const [foto, setFoto] = useState('');
+  const [tema, setTema] = useState<Tema>('auto');
   const [guardando, setGuardando] = useState(false);
+  const archivo = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!abierta || !me) return;
     setNombre(me.displayName);
     setColor(me.color);
     setEmoji(me.emoji);
+    setFoto(me.photo);
+    setTema(me.theme);
   }, [abierta, me]);
 
+  /**
+   * La foto se recorta y se achica ACA, en el navegador, antes de subirla.
+   *
+   * Sin esto una foto de camara son 4 MB que viajarian en cada snapshot, en
+   * los dos telefonos, para dibujarse a 38 pixeles. Se recorta al cuadrado
+   * central y se reduce a 256px, que es el doble de lo que hace falta en la
+   * pantalla mas densa: unos 20 KB.
+   */
+  async function elegirFoto(file: File) {
+    try {
+      const bitmap = await createImageBitmap(file);
+      const lado = Math.min(bitmap.width, bitmap.height);
+      const lienzo = document.createElement('canvas');
+      lienzo.width = 256;
+      lienzo.height = 256;
+      const ctx = lienzo.getContext('2d');
+      if (!ctx) throw new Error('No se pudo procesar la imagen');
+      ctx.drawImage(
+        bitmap,
+        (bitmap.width - lado) / 2, (bitmap.height - lado) / 2, lado, lado,
+        0, 0, 256, 256,
+      );
+      bitmap.close();
+      setFoto(lienzo.toDataURL('image/jpeg', 0.82));
+    } catch {
+      avisar('No se pudo leer esa imagen');
+    }
+  }
+
   return (
-    <Hoja abierta={abierta} alCerrar={alCerrar} titulo="Tu perfil">
-      <div className="space-y-5">
-        <div className="flex flex-col items-center pt-1">
-          <Avatar nombre={nombre || '?'} color={color} emoji={emoji} size={72} />
-          <p className="text-sm txt-3 mt-2">Así te ven en la app</p>
-        </div>
-
-        <Campo etiqueta="Tu nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} />
-
-        <div>
-          <span className="block text-xs font-medium txt-2 mb-2">Color</span>
-          <SelectorColor valor={color} alElegir={setColor} />
-        </div>
-
-        <div>
-          <span className="block text-xs font-medium txt-2 mb-2">Ícono</span>
-          <SelectorEmoji valor={emoji} alElegir={setEmoji} color={color} />
-        </div>
-
+    <Hoja
+      abierta={abierta}
+      alCerrar={alCerrar}
+      titulo="Tu perfil"
+      pie={(
         <Boton
           onClick={async () => {
             setGuardando(true);
             try {
-              await guardarPerfil({ displayName: nombre.trim(), color, emoji });
+              await guardarPerfil({ displayName: nombre.trim(), color, emoji, photo: foto, theme: tema });
               alCerrar();
             } catch (e) {
               avisar(e instanceof Error ? e.message : 'No se pudo guardar');
@@ -263,6 +283,76 @@ function HojaPerfil({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => v
         >
           {guardando ? 'Guardando...' : 'Guardar'}
         </Boton>
+      )}
+    >
+      <div className="space-y-5">
+        <div className="flex flex-col items-center pt-1">
+          <Avatar nombre={nombre || '?'} color={color} emoji={emoji} foto={foto} size={84} />
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={() => archivo.current?.click()}
+              className="min-h-9 px-3 rounded-xl superficie-2 borde border text-xs font-medium txt-2 flex items-center gap-1.5"
+            >
+              <Icono nombre="camera" size={14} /> {foto ? 'Cambiar foto' : 'Subir foto'}
+            </button>
+            {foto && (
+              <button
+                onClick={() => setFoto('')}
+                className="min-h-9 px-3 rounded-xl superficie-2 borde border text-xs font-medium txt-3"
+              >
+                Quitar
+              </button>
+            )}
+          </div>
+          <input
+            ref={archivo}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void elegirFoto(f);
+              e.target.value = '';
+            }}
+          />
+          <p className="text-xs txt-3 mt-2">
+            {foto ? 'La foto manda sobre el emoji' : 'Así te ven en la app'}
+          </p>
+        </div>
+
+        <Campo etiqueta="Tu nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} />
+
+        <div>
+          <span className="block text-xs font-medium txt-2 mb-2">Tema</span>
+          {/* Guardado en tu perfil, no en el teléfono: vos y tu pareja pueden
+              tener temas distintos, y el tuyo te sigue a donde entres. */}
+          <div className="grid grid-cols-3 gap-2">
+            {TEMAS.map((t) => (
+              <button
+                key={t}
+                onClick={() => setTema(t)}
+                className={cn(
+                  'min-h-11 rounded-xl text-sm font-medium border transition-all',
+                  tema === t ? 'bg-marca-600 text-white border-transparent' : 'superficie-2 borde txt-2',
+                )}
+              >
+                {TEMA_LABEL[t]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <span className="block text-xs font-medium txt-2 mb-2">Color</span>
+          <SelectorColor valor={color} alElegir={setColor} />
+        </div>
+
+        <div className={cn(foto && 'opacity-50 pointer-events-none')}>
+          <span className="block text-xs font-medium txt-2 mb-2">
+            Emoji {foto && '· lo tapa la foto'}
+          </span>
+          <SelectorEmoji valor={emoji} alElegir={setEmoji} color={color} />
+        </div>
       </div>
     </Hoja>
   );

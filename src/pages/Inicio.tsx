@@ -143,7 +143,7 @@ export function Inicio({ alVerMovimiento, alAgregar }: {
         <div className="space-y-3">
           {porPers.map(({ member, resumen: r }) => (
             <div key={member.id} className="flex items-center gap-3">
-              <Avatar nombre={member.displayName} color={member.color} emoji={member.emoji} size={36} />
+              <Avatar nombre={member.displayName} color={member.color} emoji={member.emoji} foto={member.photo} size={36} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline justify-between mb-1.5">
                   <span className="text-sm font-medium txt truncate">

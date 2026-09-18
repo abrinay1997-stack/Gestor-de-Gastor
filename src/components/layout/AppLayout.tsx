@@ -148,7 +148,7 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
           <EstadoConexion estado={estadoLive} pareja={pareja?.displayName} enLinea={parejaEnLinea} />
           <div className="flex items-center justify-between mt-3">
             <div className="flex items-center gap-2.5 min-w-0">
-              <Avatar nombre={me?.displayName ?? '?'} color={me?.color ?? '#10b981'} emoji={me?.emoji} size={30} />
+              <Avatar nombre={me?.displayName ?? '?'} color={me?.color ?? '#10b981'} emoji={me?.emoji} foto={me?.photo} size={30} />
               <span className="text-sm font-medium txt truncate">{me?.displayName}</span>
             </div>
             <button
@@ -177,13 +177,13 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
             )}
             {pareja && (
               <div className="relative" title={parejaEnLinea ? `${pareja.displayName} está en línea` : pareja.displayName}>
-                <Avatar nombre={pareja.displayName} color={pareja.color} emoji={pareja.emoji} size={30} />
+                <Avatar nombre={pareja.displayName} color={pareja.color} emoji={pareja.emoji} foto={pareja.photo} size={30} />
                 {parejaEnLinea && (
                   <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-marca-500 ring-2 ring-[var(--fondo)]" />
                 )}
               </div>
             )}
-            <Avatar nombre={me?.displayName ?? '?'} color={me?.color ?? '#10b981'} emoji={me?.emoji} size={30} />
+            <Avatar nombre={me?.displayName ?? '?'} color={me?.color ?? '#10b981'} emoji={me?.emoji} foto={me?.photo} size={30} />
           </div>
         </div>
 

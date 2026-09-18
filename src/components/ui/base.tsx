@@ -211,12 +211,27 @@ export function Ficha({ color, icono, size = 40 }: { color: string; icono: strin
   );
 }
 
-export function Avatar({ nombre, color, emoji, size = 32 }: {
-  nombre: string; color: string; emoji?: string; size?: number;
+export function Avatar({ nombre, color, emoji, foto, size = 32 }: {
+  nombre: string; color: string; emoji?: string; foto?: string; size?: number;
 }) {
-  // El emoji manda; si no hay, las iniciales. El tamaño de fuente es mayor
-  // para el emoji porque las iniciales ocupan mas ancho que alto.
+  // Manda la foto, despues el emoji, y al final las iniciales. El tamaño de
+  // fuente es mayor para el emoji porque las iniciales ocupan mas ancho que
+  // alto.
   const ini = nombre.trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('');
+
+  if (foto) {
+    return (
+      <img
+        src={foto}
+        alt={nombre}
+        width={size}
+        height={size}
+        className="rounded-full object-cover shrink-0 select-none"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+
   return (
     <div
       className="ficha rounded-full flex items-center justify-center font-semibold shrink-0 select-none"

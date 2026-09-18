@@ -30,8 +30,13 @@
     --tinte-tinta: #1c1c1e;
   }
 
+  /* El tema de cada persona se estampa en <html data-tema="...">.
+     Tres bloques y no dos: uno para el sistema (guardado con :not, asi la
+     eleccion manual le gana), y uno por cada eleccion explicita, para que
+     elegir "claro" en un telefono en oscuro funcione igual de bien que al
+     reves. */
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-tema='claro']) {
       --fondo: #000000;
       --superficie: #1c1c1e;
       --superficie-2: #2c2c2e;
@@ -45,6 +50,20 @@
       --tinte-tinta: #ffffff;
     }
   }
+
+  :root[data-tema='oscuro'] {
+      --fondo: #000000;
+      --superficie: #1c1c1e;
+      --superficie-2: #2c2c2e;
+      --borde: #38383a;
+      --texto: #f5f5f7;
+      --texto-2: #aeaeb2;
+      --texto-3: #98989f;
+      /* En oscuro el glifo se aclara (82% color + 18% blanco) sobre 15%. */
+      --alfa-tinta: 15%;
+      --peso-glifo: 82%;
+      --tinte-tinta: #ffffff;
+    }
 
   html {
     /* Evita el zoom automatico de iOS al enfocar un input. */
@@ -200,16 +219,33 @@
 
 @media (prefers-color-scheme: dark) {
   @layer utilities {
-    .borde-luz {
+    :root:not([data-tema='claro']) .borde-luz {
       box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
     }
-    .barra-flotante {
+    :root:not([data-tema='claro']) .barra-flotante {
       background: color-mix(in srgb, var(--superficie) 58%, transparent);
       -webkit-backdrop-filter: blur(30px) saturate(1.8);
       backdrop-filter: blur(30px) saturate(1.8);
       border: 0.5px solid rgb(255 255 255 / 0.10);
       box-shadow:
-        inset 0 0.5px 0 rgb(255 255 255 / 0.10),
+        inset 0 0.5px 0 rgb(255 255 255 / /* Y lo mismo para quien eligio oscuro a mano, que no lo cubre el media query. */
+@layer utilities {
+
+  :root[data-tema='oscuro'] .borde-luz {
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
+  }
+  :root[data-tema='oscuro'] .barra-flotante {
+    background: color-mix(in srgb, var(--superficie) 58%, transparent);
+    -webkit-backdrop-filter: blur(30px) saturate(1.8);
+    backdrop-filter: blur(30px) saturate(1.8);
+    border: 0.5px solid rgb(255 255 255 / 0.10);
+    box-shadow:
+    inset 0 0.5px 0 rgb(255 255 255 / 0.10),
+    0 6px 24px -8px rgb(0 0 0 / 0.5);
+  }
+  }
+
+0.10),
         0 6px 24px -8px rgb(0 0 0 / 0.5);
     }
   }
