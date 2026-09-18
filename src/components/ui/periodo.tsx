@@ -54,33 +54,41 @@ export function SelectorPeriodo({ periodo, alCambiar }: {
 
   return (
     <>
-      <div className="flex items-center justify-between gap-2">
+      {/* Una fila fina y no una barra de 40px.
+          Con el patrimonio ya arriba de todo, esta era la unica fila que
+          seguia empujando los numeros hacia abajo: dos botones grandes a los
+          costados de un texto centrado, para algo que se toca de vez en
+          cuando. Los botones bajan a 32px —que sigue siendo tocable con el
+          margen de la fila— y la fila entera se achica. */}
+      <div className="flex items-center justify-between gap-1">
         <button
           onClick={() => movible && alCambiar(moverPeriodo(periodo, -1))}
           disabled={!movible}
           aria-label="Período anterior"
-          className="w-10 h-10 rounded-xl superficie-2 flex items-center justify-center txt-2 disabled:opacity-30 shrink-0"
+          className="w-8 h-8 rounded-lg flex items-center justify-center txt-3 disabled:opacity-25 shrink-0 active:superficie-2 transition-colors"
         >
-          <Icono nombre="chevron-left" size={19} />
+          <Icono nombre="chevron-left" size={18} />
         </button>
 
         {/* min-w-0: sin eso el boton no baja de lo que mide su texto, y a
             320px "Septiembre de 2026" empujaba la flecha fuera de pantalla. */}
         <button
           onClick={() => setAbierto(true)}
-          className="flex-1 min-w-0 min-h-10 rounded-xl flex items-center justify-center gap-1.5 px-2 active:superficie-2 transition-colors"
+          className="flex-1 min-w-0 min-h-8 rounded-lg flex items-center justify-center gap-1 px-2 active:superficie-2 transition-colors"
         >
-          <span className="font-semibold txt truncate">{mayusculaInicial(describirPeriodo(periodo))}</span>
-          <Icono nombre="chevron-down" size={15} className="txt-3 shrink-0" />
+          <span className="text-sm font-semibold txt truncate">
+            {mayusculaInicial(describirPeriodo(periodo))}
+          </span>
+          <Icono nombre="chevron-down" size={13} className="txt-3 shrink-0" />
         </button>
 
         <button
           onClick={() => haySiguiente && alCambiar(moverPeriodo(periodo, 1))}
           disabled={!haySiguiente}
           aria-label="Período siguiente"
-          className="w-10 h-10 rounded-xl superficie-2 flex items-center justify-center txt-2 disabled:opacity-30 shrink-0"
+          className="w-8 h-8 rounded-lg flex items-center justify-center txt-3 disabled:opacity-25 shrink-0 active:superficie-2 transition-colors"
         >
-          <Icono nombre="chevron-right" size={19} />
+          <Icono nombre="chevron-right" size={18} />
         </button>
       </div>
 

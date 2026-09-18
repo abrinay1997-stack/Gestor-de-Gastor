@@ -21,7 +21,8 @@ import type { Sesion } from '../auth.ts';
 import { error, json } from '../http.ts';
 import {
   balancePorMes, calcularPatrimonio, entidadDe, entidadPorDefecto, estadoPresupuestos,
-  flujoDeJarras, indexarCategorias, jarrasDe, porCategoria, resumir, sinAsignar,
+  flujoDeJarras, gastadoEnEvento, indexarCategorias, jarrasDe, porCategoria, resumir,
+  sinAsignar,
 } from '../../shared/domain.ts';
 import { claveMes } from '../../shared/domain.ts';
 import { TxType } from '../../shared/types.ts';
@@ -40,9 +41,11 @@ const TABLAS: Record<string, string> = {
   jar: 'Las jarras. fill_kind: porcentaje|fijo|resto. entity_id es duro: una jarra es de una sola economia.',
   jar_imputacion: 'Lo que cada movimiento le hizo a cada jarra, calculado UNA vez al guardar y congelado. Cambiar un porcentaje no reescribe el pasado.',
   jar_transfer: 'Mover plata entre jarras sin tocar ninguna cuenta.',
-  budget: 'Topes mensuales. category_id en NULL es el tope global del mes.',
+  jar_aporte: 'Plata puesta a mano en una jarra, sin que venga de repartir un ingreso. Tambien suma al saldo de la jarra.',
+  budget: 'Dos cosas distintas en la misma tabla: con name en NULL es un tope mensual (category_id en NULL = tope global del mes); con name es un presupuesto de evento, que solo mide lo que se le carga y no aparta plata.',
   recurring: 'Pagos habituales. frequency: semanal|quincenal|mensual|anual.',
   account_adjustment: 'Correcciones manuales de saldo, con su rastro. No inventan ni borran movimientos.',
+  'category/account/entity.trashed_at': 'Si tiene fecha, esta en la papelera y no cuenta para nada. archived es otra cosa: sigue contando, solo que no se ofrece al cargar.',
 };
 
 const INVARIANTES = [
@@ -52,7 +55,8 @@ const INVARIANTES = [
   'Los porcentajes de las jarras suman 100% dentro de cada economia, no entre todas.',
   'Un cobro de un negocio se reparte solo entre las jarras de ese negocio. Un ingreso sin economia cae en las de la primera, que es la casa.',
   'Las transferencias entre cuentas propias y los ajustes de saldo no son ni ingreso ni gasto: no entran en ningun resultado.',
-  'Una jarra en negativo no es un error de calculo: es que se gasto de ella mas de lo que se le puso.',
+  'El saldo de una jarra es repartos de ingresos + aportes a mano + traspasos recibidos - lo que se gasto de ella. En negativo significa que salio mas de lo que entro, no que este mal calculado.',
+  'Lo que esta en la papelera no aparece en ningun numero de aca. Lo archivado si: sigue sumando su historia, solo que no se ofrece al cargar.',
 ];
 
 /**
@@ -68,9 +72,20 @@ export async function resumenDelHogar(
   const snap = await snapshot(env, householdId, memberId);
   if (!snap) return null;
 
-  const { accounts, categories, jars, transactions, entities, budgets, recurring } = snap;
+  const { jars, transactions, budgets, recurring } = snap;
+
+  // Lo que esta en la papelera no existe para la pantalla, asi que tampoco
+  // puede existir aca: si el consejero suma una cuenta tirada, su patrimonio
+  // no es el que la persona ve, y esa es la peor forma de equivocarse.
+  const accounts = snap.accounts.filter((a) => a.trashedAt === null);
+  const categories = snap.categories.filter((c) => c.trashedAt === null);
+  const entities = snap.entities.filter((e) => e.trashedAt === null);
+
   const activas = accounts.filter((c) => !c.archived);
-  const indice = indexarCategorias(categories);
+  // El indice se arma con TODAS, tiradas incluidas: un movimiento viejo de una
+  // categoria tirada sigue heredando su economia, y sin esto caeria en
+  // «sin clasificar» y desordenaria los totales por economia.
+  const indice = indexarCategorias(snap.categories);
   const porDefecto = entidadPorDefecto(entities);
 
   const saldosJarras = new Map(jars.map((j) => [j.id, j.balanceMinor]));
@@ -197,6 +212,43 @@ export async function resumenDelHogar(
         gastadoMinor: e.gastadoMinor,
         excedido: e.gastadoMinor > e.budget.amountMinor,
       })),
+    // Los eventos con nombre: «Viaje a Cancún». Solo miden, no apartan plata.
+    presupuestosDeEvento: budgets.filter((b) => b.name).map((b) => {
+      const gastado = gastadoEnEvento(b.id, transactions);
+      return {
+        nombre: b.name,
+        economia: nombreEntidad(b.entityId),
+        topeMinor: b.amountMinor,
+        gastadoMinor: gastado,
+        restanteMinor: b.amountMinor - gastado,
+        cerrado: b.closedAt !== null,
+        gastosCargados: transactions.filter((t) => t.budgetId === b.id).length,
+      };
+    }),
+
+    /**
+     * Lo que va a pasar solo en los proximos 30 dias.
+     *
+     * Sin esto el consejero solo ve el pasado y responde «te sobran $500»
+     * cuando el dia 5 se va el alquiler. Un consejo sobre plata que ignora lo
+     * que ya esta comprometido es peor que ninguno.
+     */
+    loQueViene: (() => {
+      const limite = Date.now() + 30 * 86_400_000;
+      const proximos = recurring.filter((r) => r.active && r.nextRun <= limite);
+      const entra = proximos.filter((r) => r.type === TxType.INGRESO)
+        .reduce((a, r) => a + r.amountMinor, 0);
+      const sale = proximos.filter((r) => r.type === TxType.GASTO)
+        .reduce((a, r) => a + r.amountMinor, 0);
+      return {
+        enLosProximos30Dias: proximos.length,
+        entraMinor: entra,
+        saleMinor: sale,
+        netoMinor: entra - sale,
+        patrimonioProyectadoMinor: calcularPatrimonio(activas) + entra - sale,
+      };
+    })(),
+
     pagosHabituales: recurring.filter((r) => r.active).map((r) => ({
       nombre: r.name,
       tipo: r.type === TxType.INGRESO ? 'ingreso' : r.type === TxType.GASTO ? 'gasto' : 'otro',

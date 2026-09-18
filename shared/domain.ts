@@ -7,6 +7,7 @@
 import {
   type Account, type Budget, type Category, type Entity, type Jar, type JarAporte,
   type JarImputacion, type JarTransfer, type Member, type Transaction, TxType,
+  esEvento,
 } from './types.ts';
 import { repartir, sumarMinor } from './money.ts';
 import { dentroDe, type Periodo } from './periodo.ts';
@@ -651,7 +652,10 @@ export function estadoPresupuestos(
   const indice = indexarCategorias(categorias);
 
   return budgets
-    .filter((b) => b.period === period)
+    // Los de evento («Viaje a Cancún») no son del mes aunque nacieran en el:
+    // no tienen categoria, asi que aca contarian TODO el gasto del mes como
+    // suyo. Se miden aparte, con gastadoEnEvento.
+    .filter((b) => b.period === period && !esEvento(b))
     .map((budget) => {
       const gastadoMinor = sumarMinor(
         ...delMes
