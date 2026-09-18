@@ -108,11 +108,11 @@ export function Cuentas() {
           )}
           {pasivos.length > 0 && (
             <Grupo
-              titulo="Lo que debes"
+              titulo="Lo que debés"
               cuentas={pasivos}
               alTocar={abrirEdicion}
               members={members}
-              total={-totalPasivos}
+              total={totalPasivos}
             />
           )}
           {archivadas.length > 0 && (
@@ -149,7 +149,7 @@ function Grupo({ titulo, cuentas, alTocar, members, total }: {
           // Que parte del grupo es esta cuenta. La misma barra fina que usa
           // "Quién gastó" en el Inicio: aca tambien es un reparto, no un
           // limite, y por eso nunca se pone roja.
-          const parte = total && total > 0
+          const parte = total && total > 0 && cuentas.length > 1
             ? Math.abs(c.balanceMinor) / total
             : null;
 

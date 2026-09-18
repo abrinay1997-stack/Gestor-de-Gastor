@@ -20,8 +20,9 @@ import { cn } from '../lib/utils.ts';
 type FiltroQuien = 'todos' | string;
 type FiltroTipo = 'todos' | 'gastos' | 'ingresos' | 'transferencias';
 
-export function Movimientos({ alVerMovimiento, alAgregar }: {
+export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
   alVerMovimiento: (tx: Transaction) => void;
+  alEditarMovimiento: (tx: Transaction) => void;
   alAgregar: () => void;
 }) {
   const {
@@ -259,7 +260,13 @@ export function Movimientos({ alVerMovimiento, alAgregar }: {
               <p className="text-xs font-medium txt-3 px-1 mb-1">{fechaCorta(txs[0].date)}</p>
               <div className="divide-y divide-[var(--borde)] -mx-1">
                 {txs.map((tx) => (
-                  <FilaMovimiento key={tx.id} tx={tx} sinFecha alTocar={() => alVerMovimiento(tx)} />
+                  <FilaMovimiento
+                    key={tx.id}
+                    tx={tx}
+                    sinFecha
+                    alTocar={() => alVerMovimiento(tx)}
+                    alEditar={alEditarMovimiento}
+                  />
                 ))}
               </div>
             </Tarjeta>

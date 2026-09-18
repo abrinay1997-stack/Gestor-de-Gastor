@@ -75,9 +75,14 @@ export function formatMonto(
   const d = decimalesDe(currency);
   const valor = minor / 10 ** d;
 
-  // En compacto los montos redondos pierden los decimales ($80, no $80.00),
-  // pero los que tienen centavos los muestran enteros: "$64.1" no es plata,
-  // es un numero a medio escribir.
+  // "Compacto" es solo dejar de escribir los centavos cuando son cero: $80 en
+  // vez de $80.00. Los que tienen centavos se muestran enteros, porque "$64.1"
+  // no es plata, es un numero a medio escribir.
+  //
+  // Lo que NO hace es abreviar. Antes, pasando los $10.000, mostraba "$12.5K",
+  // y eso es un monto que no se puede leer: no se sabe si son 12.500 o 12.549,
+  // y en una pantalla de plata esa diferencia es plata. Un numero largo se
+  // resuelve con el ancho de la columna, no escondiendo cifras.
   const redondo = minor % 10 ** d === 0;
   const decimales = opciones.compacto && redondo ? 0 : d;
 
@@ -86,9 +91,6 @@ export function formatMonto(
     currency,
     minimumFractionDigits: decimales,
     maximumFractionDigits: decimales,
-    ...(opciones.compacto && Math.abs(valor) >= 10_000
-      ? { notation: 'compact' as const, minimumFractionDigits: 0, maximumFractionDigits: 1 }
-      : {}),
   });
 
   const texto = fmt.format(Math.abs(valor));

@@ -176,9 +176,9 @@ export const esPasivo = (c: AccountCategory): boolean => !esActivo(c);
 export const ACCOUNT_CATEGORY_LABEL: Record<AccountCategory, string> = {
   [AccountCategory.EFECTIVO]: 'Efectivo',
   [AccountCategory.CUENTA_CORRIENTE]: 'Cuenta corriente',
-  [AccountCategory.TARJETA_CREDITO]: 'Tarjeta de credito',
+  [AccountCategory.TARJETA_CREDITO]: 'Tarjeta de crédito',
   [AccountCategory.AHORRO]: 'Ahorro',
-  [AccountCategory.INVERSION]: 'Inversion',
+  [AccountCategory.INVERSION]: 'Inversión',
   [AccountCategory.DEUDA]: 'Deuda',
   [AccountCategory.POR_COBRAR]: 'Por cobrar',
 };

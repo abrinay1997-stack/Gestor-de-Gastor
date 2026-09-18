@@ -859,3 +859,17 @@ describe('el reparto respeta la economia del movimiento', () => {
     expect(validarJarras(jarrasDe(jars, 'pc', null)).ok).toBe(true);
   });
 });
+
+describe('formatMonto nunca abrevia', () => {
+  it('escribe el monto entero aunque pase los cinco dígitos', () => {
+    expect(formatMonto(1_250_000, 'USD', { compacto: true })).toBe('$12,500');
+    expect(formatMonto(1_254_937, 'USD', { compacto: true })).toBe('$12,549.37');
+    expect(formatMonto(123_456_789, 'USD', { compacto: true })).toBe('$1,234,567.89');
+  });
+
+  it('compacto solo se saltea los centavos en cero', () => {
+    expect(formatMonto(8000, 'USD', { compacto: true })).toBe('$80');
+    expect(formatMonto(8012, 'USD', { compacto: true })).toBe('$80.12');
+    expect(formatMonto(8000, 'USD')).toBe('$80.00');
+  });
+});

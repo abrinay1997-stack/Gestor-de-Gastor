@@ -19,13 +19,17 @@ import {
 } from '@shared/types';
 import { describirRegla } from '@shared/recurrencia';
 import { fechaCorta, nombreMes } from '../lib/utils.ts';
-import { Avatar, Barra, Boton, Ficha, Icono, Tarjeta, Vacio } from '../components/ui/base.tsx';
+import {
+  Avatar, Barra, Boton, Deslizable, Ficha, Icono, Tarjeta, Vacio,
+} from '../components/ui/base.tsx';
+import { useConfirmar } from '../components/ui/confirmar.tsx';
 import { EtiquetaEntidad } from '../components/ui/entidad.tsx';
 import { SelectorPeriodo } from '../components/ui/periodo.tsx';
 import { cn } from '../lib/utils.ts';
 
-export function Inicio({ alVerMovimiento, alAgregar }: {
+export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
   alVerMovimiento: (tx: Transaction) => void;
+  alEditarMovimiento: (tx: Transaction) => void;
   alAgregar: () => void;
 }) {
   const {
@@ -248,7 +252,12 @@ export function Inicio({ alVerMovimiento, alAgregar }: {
         ) : (
           <div className="divide-y divide-[var(--borde)] -mx-1">
             {ultimos.map((tx) => (
-              <FilaMovimiento key={tx.id} tx={tx} alTocar={() => alVerMovimiento(tx)} />
+              <FilaMovimiento
+                key={tx.id}
+                tx={tx}
+                alTocar={() => alVerMovimiento(tx)}
+                alEditar={alEditarMovimiento}
+              />
             ))}
           </div>
         )}
@@ -293,9 +302,17 @@ export function HeroPatrimonio({ montoMinor, moneda, pie, extra }: {
   );
 }
 
-export function FilaMovimiento({ tx, alTocar, sinFecha, deltaMinor }: {
+export function FilaMovimiento({ tx, alTocar, alEditar, sinFecha, deltaMinor }: {
   tx: Transaction;
   alTocar: () => void;
+  /**
+   * Abrir el formulario con este movimiento cargado.
+   *
+   * Cuando viene, la fila se puede correr con el dedo y deja ver «Editar» y
+   * «Borrar». Sin esto la fila no se desliza: adentro del detalle de una jarra
+   * el gesto sobraria, porque ahi no se corrige nada.
+   */
+  alEditar?: (tx: Transaction) => void;
   /** En una lista ya agrupada por dia, la fecha esta en el titulo del grupo. */
   sinFecha?: boolean;
   /**
@@ -311,7 +328,7 @@ export function FilaMovimiento({ tx, alTocar, sinFecha, deltaMinor }: {
 }) {
   const {
     categories, accounts, members, household, enVuelo, recienLlegados, entities,
-    entidadActiva,
+    entidadActiva, borrarTx, avisar,
   } = useStore();
   const moneda = household?.currency ?? 'USD';
 
@@ -324,6 +341,7 @@ export function FilaMovimiento({ tx, alTocar, sinFecha, deltaMinor }: {
   const cuenta = accounts.find((c) => c.id === tx.accountId);
   const quien = members.find((m) => m.id === autorDe(tx));
   const subiendo = enVuelo.has(tx.id);
+  const confirmar = useConfirmar();
   // Acaba de cargarlo la otra persona, en este momento. Ver aparecer la fila
   // es la mitad de la gracia de estar los dos adentro a la vez.
   const recien = recienLlegados.has(tx.id);
@@ -334,7 +352,21 @@ export function FilaMovimiento({ tx, alTocar, sinFecha, deltaMinor }: {
   const color = esTransferencia ? '#3b82f6' : esIngreso ? '#10b981' : (cat?.color ?? '#64748b');
   const icono = esTransferencia ? 'arrow-left-right' : (cat?.icon ?? (esIngreso ? 'arrow-up-right' : 'arrow-down-left'));
 
-  return (
+  async function eliminar() {
+    const ok = await confirmar({
+      titulo: '¿Borrar este movimiento?',
+      detalle: `"${tx.description}" por ${formatMonto(tx.amountMinor, moneda)}. Los saldos se recalculan solos.`,
+      destructivo: true,
+    });
+    if (!ok) return;
+    try {
+      await borrarTx(tx.id);
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : 'No se pudo borrar');
+    }
+  }
+
+  const fila = (
     <button
       onClick={alTocar}
       className={cn(
@@ -388,6 +420,19 @@ export function FilaMovimiento({ tx, alTocar, sinFecha, deltaMinor }: {
         )}
       </div>
     </button>
+  );
+
+  if (!alEditar) return fila;
+
+  return (
+    <Deslizable
+      acciones={[
+        { etiqueta: 'Editar', icono: 'pencil', alTocar: () => alEditar(tx) },
+        { etiqueta: 'Borrar', icono: 'trash-2', peligro: true, alTocar: () => void eliminar() },
+      ]}
+    >
+      {fila}
+    </Deslizable>
   );
 }
 

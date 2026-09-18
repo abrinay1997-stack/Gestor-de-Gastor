@@ -5,7 +5,7 @@
 
 import {
   type ButtonHTMLAttributes, type ComponentPropsWithRef, type CSSProperties,
-  type ReactNode, useEffect,
+  type PointerEvent as EventoPuntero, type ReactNode, useEffect, useRef, useState,
 } from 'react';
 import { cn } from '../../lib/utils.ts';
 import { X } from 'lucide-react';
@@ -346,6 +346,135 @@ export function SelectorColor({ valor, alElegir }: {
  * de irse al final del scroll, donde en un formulario largo hay que bajar
  * hasta el fondo para encontrarla.
  */
+
+// --- deslizar para actuar ------------------------------------------------
+
+export interface AccionDeslizada {
+  etiqueta: string;
+  icono: string;
+  alTocar: () => void;
+  /** Rojo, para borrar. */
+  peligro?: boolean;
+}
+
+/**
+ * Una fila que se corre a la izquierda y deja ver sus acciones.
+ *
+ * Existe porque editar o borrar un movimiento eran tres toques: abrir el
+ * detalle, buscar el boton, confirmar. Con una lista de cuarenta movimientos
+ * eso es mucho para corregir un monto mal tipeado.
+ *
+ * Se abre con el dedo, pero NO se queda con cualquier gesto: solo si el
+ * movimiento es claramente horizontal (mas del doble que el vertical) y hacia
+ * la izquierda. Si no, el toque sigue siendo el scroll de siempre. Y las
+ * acciones estan tambien en el detalle: esto es un atajo, no el unico camino.
+ */
+export function Deslizable({ acciones, children, className }: {
+  acciones: AccionDeslizada[];
+  children: ReactNode;
+  className?: string;
+}) {
+  const ANCHO = 72;
+  const total = ANCHO * acciones.length;
+
+  const [dx, setDx] = useState(0);
+  const [animando, setAnimando] = useState(false);
+  const inicio = useRef<{ x: number; y: number; base: number } | null>(null);
+  // Hasta saber si el gesto es horizontal o vertical no se toca nada: si se
+  // decidiera en el primer pixel, bajar la lista abriria filas sin querer.
+  const decidido = useRef<'no' | 'horizontal' | 'vertical'>('no');
+  // Soltar el dedo despues de arrastrar dispara un `click` igual. Sin esto,
+  // ese click caia en el manejador de abajo y cerraba la fila en el mismo
+  // gesto que la abrio: se veia abrirse y cerrarse sola.
+  const fueArrastre = useRef(false);
+
+  if (acciones.length === 0) return <>{children}</>;
+
+  const empezar = (e: EventoPuntero<HTMLDivElement>) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    inicio.current = { x: e.clientX, y: e.clientY, base: dx };
+    decidido.current = 'no';
+    fueArrastre.current = false;
+    setAnimando(false);
+  };
+
+  const mover = (e: EventoPuntero<HTMLDivElement>) => {
+    const i = inicio.current;
+    if (!i) return;
+    const desdeX = e.clientX - i.x;
+    const desdeY = e.clientY - i.y;
+
+    if (decidido.current === 'no') {
+      if (Math.abs(desdeX) < 8 && Math.abs(desdeY) < 8) return;
+      decidido.current = Math.abs(desdeX) > Math.abs(desdeY) * 2 ? 'horizontal' : 'vertical';
+      if (decidido.current === 'horizontal') {
+        fueArrastre.current = true;
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }
+    }
+    if (decidido.current !== 'horizontal') return;
+
+    // Solo hacia la izquierda, y con un tope: mas alla de las acciones el
+    // arrastre se frena en vez de irse de la pantalla.
+    setDx(Math.max(-total, Math.min(0, i.base + desdeX)));
+  };
+
+  const soltar = () => {
+    if (!inicio.current) return;
+    inicio.current = null;
+    if (decidido.current !== 'horizontal') return;
+    setAnimando(true);
+    setDx(dx < -total / 2.5 ? -total : 0);
+  };
+
+  const cerrar = () => { setAnimando(true); setDx(0); };
+
+  return (
+    <div className={cn('relative overflow-hidden', className)}>
+      {/* Las acciones, quietas detras. La fila se corre encima de ellas. */}
+      <div className="absolute inset-y-0 right-0 flex" aria-hidden={dx === 0}>
+        {acciones.map((a) => (
+          <button
+            key={a.etiqueta}
+            onClick={() => { cerrar(); a.alTocar(); }}
+            tabIndex={dx === 0 ? -1 : 0}
+            aria-label={a.etiqueta}
+            className={cn(
+              'flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium',
+              a.peligro ? 'bg-red-500 text-white' : 'superficie-2 txt-2',
+            )}
+            style={{ width: ANCHO }}
+          >
+            <Icono nombre={a.icono} size={17} />
+            {a.etiqueta}
+          </button>
+        ))}
+      </div>
+
+      <div
+        onPointerDown={empezar}
+        onPointerMove={mover}
+        onPointerUp={soltar}
+        onPointerCancel={soltar}
+        // Abierta, el primer toque en la fila la cierra en vez de abrir el
+        // detalle: es lo que hace cualquier lista del telefono. Pero el click
+        // que viene de haber arrastrado no cuenta como toque, solo se descarta.
+        onClickCapture={(e) => {
+          if (!fueArrastre.current && dx === 0) return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (!fueArrastre.current) cerrar();
+          fueArrastre.current = false;
+        }}
+        className={cn('relative superficie', animando && 'transition-transform duration-200 ease-out')}
+        style={{ transform: `translateX(${dx}px)`, touchAction: 'pan-y' }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export function Hoja({ abierta, alCerrar, titulo, children, pie, accion }: {
   abierta: boolean; alCerrar: () => void; titulo: string; children: ReactNode;
   pie?: ReactNode;

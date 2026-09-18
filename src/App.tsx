@@ -53,9 +53,15 @@ export default function App() {
     <>
       <AppLayout solapa={solapa} alCambiar={setSolapa} alAgregar={abrirNuevo}>
         {solapa === 'inicio' && (
-          <Inicio alVerMovimiento={setViendo} alAgregar={abrirNuevo} />
+          <Inicio alVerMovimiento={setViendo} alEditarMovimiento={abrirEdicion} alAgregar={abrirNuevo} />
         )}
-        {solapa === 'movimientos' && <Movimientos alVerMovimiento={setViendo} alAgregar={abrirNuevo} />}
+        {solapa === 'movimientos' && (
+          <Movimientos
+            alVerMovimiento={setViendo}
+            alEditarMovimiento={abrirEdicion}
+            alAgregar={abrirNuevo}
+          />
+        )}
         {solapa === 'cuentas' && <Cuentas />}
         {solapa === 'jarras' && <Jarras alVerMovimiento={setViendo} />}
         {solapa === 'ajustes' && (
