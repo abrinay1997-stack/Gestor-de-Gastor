@@ -394,6 +394,32 @@ interface Acciones {
  */
 interface Derivados {
   papelera: { categories: Category[]; accounts: Account[]; entities: Entity[] };
+  /**
+   * Buscar una categoría POR SU ID, esté tirada o no.
+   *
+   * Existe por un agujero que dejaba la regla de arriba. Tirar una categoría
+   * la saca de `categories`, y entonces los movimientos que la usaban dejaban
+   * de encontrarla: se dibujaban como «Sin categoría», con el icono gris, y el
+   * buscador de Movimientos tampoco los encontraba por su nombre. O sea que la
+   * app decía «esta categoría no se puede borrar, la usan 3 movimientos» y al
+   * mismo tiempo escondía esos 3 movimientos. Uno miraba la lista, no veía
+   * ninguno, y concluía —con razón— que la app se equivocaba.
+   *
+   * La regla sigue en pie donde importa: lo tirado no se OFRECE para elegir.
+   * Pero lo ya guardado se sigue leyendo, que es lo contrario de ofrecerlo.
+   */
+  categoriaPorId: (id: string | null | undefined) => Category | undefined;
+  /**
+   * TODAS las categorías, tiradas incluidas.
+   *
+   * Es para `filtrarPorEntidad` e `indexarCategorias`, que no ofrecen nada:
+   * resuelven de qué economía es un movimiento ya guardado. Con la lista
+   * recortada, un movimiento cuya categoría estaba en la papelera no resolvía
+   * economía y desaparecía de Inicio, de Movimientos y de Jarras en cuanto se
+   * elegía una economía: la plata seguía en los saldos pero no estaba en
+   * ninguna lista.
+   */
+  categoriasTodas: Category[];
 }
 
 const Ctx = createContext<(Estado & Derivados & Acciones) | null>(null);
@@ -780,6 +806,15 @@ export function Store({ children }: { children: ReactNode }) {
     entities: estado.entities.filter((e) => !e.trashedAt),
   }), [estado.categories, estado.entities, cuentasConSaldo]);
 
+  /**
+   * Para LEER un movimiento viejo: busca entre todas, tiradas incluidas.
+   * Para OFRECER algo que elegir sigue estando `categories`, sin lo tirado.
+   */
+  const categoriaPorId = useMemo(() => {
+    const porId = new Map(estado.categories.map((c) => [c.id, c]));
+    return (id: string | null | undefined) => (id ? porId.get(id) : undefined);
+  }, [estado.categories]);
+
   /** Lo tirado, para la pantalla de la papelera y para nada mas. */
   const papelera = useMemo(() => ({
     categories: estado.categories.filter((c) => Boolean(c.trashedAt)),
@@ -813,9 +848,11 @@ export function Store({ children }: { children: ReactNode }) {
       entities: vivos.entities,
       jars: jarrasConSaldo,
       papelera,
+      categoriaPorId,
+      categoriasTodas: estado.categories,
       ...acciones,
     }),
-    [estado, vivos, jarrasConSaldo, papelera, acciones],
+    [estado, vivos, jarrasConSaldo, papelera, categoriaPorId, acciones],
   );
 
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;

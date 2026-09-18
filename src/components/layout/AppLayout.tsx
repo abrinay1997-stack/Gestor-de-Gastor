@@ -128,7 +128,7 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
           <div className="w-9 h-9 bg-marca-600 text-white border border-white/15 rounded-xl flex items-center justify-center shadow-md shadow-marca-600/25">
             <Icono nombre="wallet" size={18} />
           </div>
-          <span className="font-semibold txt tracking-tight">Nuestros gastos</span>
+          <span className="t-seccion font-semibold txt tracking-tight">Nuestros gastos</span>
         </div>
 
         <PastillaEntidad className="mb-4" />
@@ -139,7 +139,7 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
               key={d.id}
               onClick={() => alCambiar(d.id)}
               className={cn(
-                'w-full flex items-center gap-3 px-3 min-h-11 rounded-xl text-sm font-medium transition-all duration-100',
+                'w-full flex items-center gap-3 px-3 min-h-11 rounded-xl t-fila font-medium transition-all duration-100',
                 solapa === d.id ? 'bg-marca-600/12 text-marca-700 dark:bg-marca-500/15 dark:text-marca-100 font-semibold shadow-sm' : 'txt-2 hover:superficie-2 active:superficie-2',
               )}
             >
@@ -161,7 +161,7 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
           <div className="flex items-center justify-between mt-3">
             <div className="flex items-center gap-2.5 min-w-0">
               <Avatar nombre={me?.displayName ?? '?'} color={me?.color ?? '#10b981'} emoji={me?.emoji} foto={me?.photo} size={30} />
-              <span className="text-sm font-medium txt truncate">{me?.displayName}</span>
+              <span className="t-fila font-medium txt truncate">{me?.displayName}</span>
             </div>
             <button
               onClick={() => void salir()}
@@ -301,7 +301,7 @@ function EstadoConexion({ estado, pareja, enLinea }: {
 }) {
   if (estado !== 'conectado') {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs txt-3">
+      <span className="inline-flex items-center gap-1.5 t-nota txt-3">
         <span className={cn('w-1.5 h-1.5 rounded-full', estado === 'conectando' ? 'bg-amber-500 animate-pulse' : 'bg-stone-400')} />
         {estado === 'conectando' ? 'Conectando...' : 'Sin conexión'}
       </span>
@@ -309,7 +309,7 @@ function EstadoConexion({ estado, pareja, enLinea }: {
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs txt-3">
+    <span className="inline-flex items-center gap-1.5 t-nota txt-3">
       <span className="w-1.5 h-1.5 rounded-full bg-marca-500" />
       {enLinea && pareja ? `${pareja} está en línea` : 'En vivo'}
     </span>

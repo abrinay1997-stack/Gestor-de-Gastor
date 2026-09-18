@@ -23,8 +23,8 @@ function Marco({ titulo, subtitulo, children }: {
           <div className="w-16 h-16 bg-marca-600 text-white border border-white/15 rounded-3xl flex items-center justify-center mb-5 shadow-xl shadow-marca-600/30">
             <Icono nombre="wallet" size={30} />
           </div>
-          <h1 className="text-2xl font-semibold txt tracking-tight text-balance mb-2">{titulo}</h1>
-          <p className="text-sm txt-2 leading-relaxed">{subtitulo}</p>
+          <h1 className="t-titulo font-semibold txt tracking-tight text-balance mb-2">{titulo}</h1>
+          <p className="t-fila txt-2 leading-relaxed">{subtitulo}</p>
         </div>
         {children}
       </div>
@@ -73,14 +73,14 @@ function Ingreso() {
           required
         />
 
-        {error && <p className="text-sm text-red-500 text-center px-2">{error}</p>}
+        {error && <p className="t-fila text-red-500 text-center px-2">{error}</p>}
 
         <Boton type="submit" disabled={!email || !pass || cargando} className="w-full min-h-12">
           {cargando ? 'Entrando...' : 'Entrar'}
         </Boton>
       </form>
 
-      <p className="text-xs txt-3 text-center mt-6 leading-relaxed">
+      <p className="t-nota txt-3 text-center mt-6 leading-relaxed">
         Solo ustedes dos tienen acceso. No hay registro público.
       </p>
     </Marco>
@@ -158,7 +158,7 @@ function Instalacion() {
           required
         />
 
-        {error && <p className="text-sm text-red-500 text-center px-2">{error}</p>}
+        {error && <p className="t-fila text-red-500 text-center px-2">{error}</p>}
 
         <Boton
           type="submit"

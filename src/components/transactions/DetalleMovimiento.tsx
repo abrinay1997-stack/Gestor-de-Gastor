@@ -24,14 +24,14 @@ export function DetalleMovimiento({ tx, alCerrar, alEditar }: {
   alEditar: (tx: Transaction) => void;
 }) {
   const {
-    categories, accounts, jars, members, household, recurring, borrarTx, avisar,
+    categoriaPorId, accounts, jars, members, household, recurring, borrarTx, avisar,
   } = useStore();
   const confirmar = useConfirmar();
   const moneda = household?.currency ?? 'USD';
 
   if (!tx) return null;
 
-  const cat = categories.find((c) => c.id === tx.categoryId);
+  const cat = categoriaPorId(tx.categoryId);
   const cuenta = accounts.find((c) => c.id === tx.accountId);
   const destino = accounts.find((c) => c.id === tx.destAccountId);
   const jarra = jars.find((j) => j.id === tx.jarId);
@@ -77,8 +77,8 @@ export function DetalleMovimiento({ tx, alCerrar, alEditar }: {
             {esTransferencia ? '' : esIngreso ? '+' : '−'}
             {formatMonto(tx.amountMinor, moneda)}
           </p>
-          <p className="text-base font-medium txt mt-1.5">{tx.description}</p>
-          <p className="text-xs txt-3 mt-0.5">{fechaLarga(tx.date)}</p>
+          <p className="t-seccion font-medium txt mt-1.5">{tx.description}</p>
+          <p className="t-nota txt-3 mt-0.5">{fechaLarga(tx.date)}</p>
         </div>
 
         <div className="superficie-2 rounded-2xl divide-y divide-[var(--borde)]">
@@ -100,10 +100,10 @@ export function DetalleMovimiento({ tx, alCerrar, alEditar }: {
 
           {hizo && (
             <div className="flex items-center justify-between gap-3 px-4 py-3">
-              <span className="text-sm txt-2 shrink-0">Lo hizo</span>
+              <span className="t-fila txt-2 shrink-0">Lo hizo</span>
               <span className="flex items-center gap-2 min-w-0">
                 <Avatar nombre={hizo.displayName} color={hizo.color} emoji={hizo.emoji} size={22} />
-                <span className="text-sm font-medium txt truncate">{hizo.displayName}</span>
+                <span className="t-fila font-medium txt truncate">{hizo.displayName}</span>
               </span>
             </div>
           )}
@@ -112,10 +112,10 @@ export function DetalleMovimiento({ tx, alCerrar, alEditar }: {
               veces es ruido. */}
           {cargo && hizo && cargo.id !== hizo.id && (
             <div className="flex items-center justify-between gap-3 px-4 py-3">
-              <span className="text-sm txt-2 shrink-0">Lo cargó</span>
+              <span className="t-fila txt-2 shrink-0">Lo cargó</span>
               <span className="flex items-center gap-2 min-w-0">
                 <Avatar nombre={cargo.displayName} color={cargo.color} emoji={cargo.emoji} size={22} />
-                <span className="text-sm font-medium txt truncate">{cargo.displayName}</span>
+                <span className="t-fila font-medium txt truncate">{cargo.displayName}</span>
               </span>
             </div>
           )}
@@ -142,7 +142,7 @@ function Dato({ etiqueta, valor, color, icono }: {
 }) {
   return (
     <div className="flex items-center justify-between gap-3 px-4 py-3">
-      <span className="text-sm txt-2 shrink-0">{etiqueta}</span>
+      <span className="t-fila txt-2 shrink-0">{etiqueta}</span>
       <span className="flex items-center gap-2 min-w-0">
         {icono && color && (
           <span
@@ -152,7 +152,7 @@ function Dato({ etiqueta, valor, color, icono }: {
             <Icono nombre={icono} size={12} />
           </span>
         )}
-        <span className="text-sm font-medium txt truncate text-right">{valor}</span>
+        <span className="t-fila font-medium txt truncate text-right">{valor}</span>
       </span>
     </div>
   );

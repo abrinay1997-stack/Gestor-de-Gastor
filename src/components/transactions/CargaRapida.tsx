@@ -29,8 +29,10 @@ const TIPOS: { id: TxType; etiqueta: string; icono: string; color: string }[] = 
 
 /**
  * Nombre de cuenta con su dueño: "Banco Central · Avalon".
- * Sin esto, dos cuentas parecidas de personas distintas son imposibles de
- * distinguir en el desplegable.
+ *
+ * Es para donde la cuenta aparece SUELTA —el detalle de un movimiento, una
+ * fila— y hay que decir de quién es sin nada alrededor que lo cuente. En un
+ * desplegable no: ahí el dueño es el título del grupo. Ver `cuentasPorDueno`.
  */
 export function etiquetaCuenta(
   cuenta: { name: string; owner: string },
@@ -39,6 +41,47 @@ export function etiquetaCuenta(
   if (cuenta.owner === 'compartida') return `${cuenta.name} · Compartida`;
   const duenio = members.find((m) => m.id === cuenta.owner);
   return duenio ? `${cuenta.name} · ${duenio.displayName}` : cuenta.name;
+}
+
+/**
+ * Las cuentas agrupadas por dueño, como las jarras y las categorías por
+ * economía.
+ *
+ * En una lista plana cada renglón tenía que repetir de quién era —"BG
+ * principal · Abrinay", "BG ahorros · Abrinay", "BG principal · Avalon"— y con
+ * seis cuentas eso son seis veces el mismo par de nombres. El ojo termina
+ * leyendo la parte que cambia dos palabras adentro del renglón, que es justo
+ * al revés de como se busca: primero de quién, después cuál.
+ *
+ * Con el dueño de título, el nombre de la cuenta vuelve al principio del
+ * renglón y al lado le queda su saldo, que es el dato por el que se elige.
+ *
+ * El orden: primero las compartidas —son las de la casa, y la app preselecciona
+ * la primera de la lista—, después cada persona en el orden en que aparece en
+ * todas las demás pantallas, y al final las que quedaron sin dueño, que son las
+ * que hay que arreglar.
+ */
+export function cuentasPorDueno<C extends { id: string; owner: string }>(
+  cuentas: C[],
+  members: { id: string; displayName: string }[],
+): { clave: string; nombre: string; cuentas: C[] }[] {
+  const grupos: { clave: string; nombre: string; cuentas: C[] }[] = [];
+
+  const meter = (clave: string, nombre: string, lista: C[]) => {
+    if (lista.length > 0) grupos.push({ clave, nombre, cuentas: lista });
+  };
+
+  meter('compartida', 'Compartidas', cuentas.filter((c) => c.owner === 'compartida'));
+  for (const m of members) {
+    meter(m.id, m.displayName, cuentas.filter((c) => c.owner === m.id));
+  }
+  meter(
+    'sin-dueno',
+    'Sin dueño',
+    cuentas.filter((c) => c.owner !== 'compartida' && !members.some((m) => m.id === c.owner)),
+  );
+
+  return grupos;
 }
 
 export function CargaRapida({ abierta, alCerrar, editando }: {
@@ -155,6 +198,13 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
   }, [categories, tipoCategoria, entities, entidadActiva]);
 
   const cuentaSel = activas.find((c) => c.id === accountId);
+
+  /** Las cuentas del desplegable, agrupadas por dueño. */
+  const cuentasDesde = useMemo(() => cuentasPorDueno(activas, members), [activas, members]);
+  const cuentasHacia = useMemo(
+    () => cuentasPorDueno(activas.filter((c) => c.id !== accountId), members),
+    [activas, members, accountId],
+  );
 
   const puedeGuardar =
     montoMinor !== null && montoMinor > 0 &&
@@ -369,7 +419,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
               />
             </div>
             {lectura && lectura.razon !== 'ninguna' && (
-              <p className="text-xs txt-3 mt-1.5 px-1">
+              <p className="t-nota txt-3 mt-1.5 px-1">
                 {lectura.razon === 'historial'
                   ? 'Categoría sugerida por movimientos parecidos tuyos'
                   : 'Categoría sugerida por la descripción'}
@@ -393,7 +443,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
                  quedaba en «Transferen...»: el icono se comia el ancho que
                  necesitaba la palabra mas larga de las tres. */
               className={cn(
-                'min-h-14 rounded-xl text-xs font-medium border transition-all',
+                'min-h-14 rounded-xl t-nota font-medium border transition-all',
                 'flex flex-col items-center justify-center gap-0.5 px-1',
                 tipo === t.id ? 'text-white border-transparent' : 'superficie-2 borde txt-2',
               )}
@@ -406,7 +456,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
         </div>
 
         <div>
-          <span className="block text-xs font-medium txt-2 mb-1.5">Monto</span>
+          <span className="block t-nota font-medium txt-2 mb-1.5">Monto</span>
           <input
             ref={refMonto}
             value={montoTexto}
@@ -416,12 +466,12 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
             aria-label="Monto"
             className={cn(
               'w-full min-w-0 min-h-16 px-4 rounded-2xl superficie-2 borde border txt',
-              'text-3xl font-semibold tabular text-center outline-none',
+              't-cifra font-semibold tabular text-center outline-none',
               'focus:border-marca-500 focus:ring-2 focus:ring-marca-500/20',
             )}
           />
           {montoMinor !== null && montoMinor > 0 && (
-            <p className="text-xs txt-3 mt-1.5 text-center">{formatMonto(montoMinor, moneda)}</p>
+            <p className="t-nota txt-3 mt-1.5 text-center">{formatMonto(montoMinor, moneda)}</p>
           )}
         </div>
 
@@ -455,25 +505,40 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
         )}
 
         {/* Cuenta, y justo debajo la jarra: el dinero sale de una cuenta y se
-            imputa a una jarra, asi que van juntos y en ese orden. */}
+            imputa a una jarra, asi que van juntos y en ese orden.
+
+            Agrupadas por dueño, igual que las categorías y las jarras por
+            economía: el nombre de la persona va UNA vez, de título, y cada
+            renglón queda con lo que de verdad lo distingue —la cuenta y su
+            saldo— en vez de repetir «· Abrinay» seis veces. */}
         <Selector
           etiqueta={esTransferencia ? 'Desde' : 'Cuenta'}
           value={accountId}
           onChange={(e) => setAccountId(e.target.value)}
         >
           <option value="">Elige una cuenta</option>
-          {activas.map((c) => (
-            <option key={c.id} value={c.id}>
-              {etiquetaCuenta(c, members)} · {formatMonto(c.balanceMinor, c.currency, { compacto: true })}
-            </option>
+          {cuentasDesde.map((g) => (
+            <optgroup key={g.clave} label={g.nombre}>
+              {g.cuentas.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} · {formatMonto(c.balanceMinor, c.currency, { compacto: true })}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </Selector>
 
         {esTransferencia && (
           <Selector etiqueta="Hacia" value={destAccountId} onChange={(e) => setDestAccountId(e.target.value)}>
             <option value="">Elige una cuenta</option>
-            {activas.filter((c) => c.id !== accountId).map((c) => (
-              <option key={c.id} value={c.id}>{etiquetaCuenta(c, members)}</option>
+            {cuentasHacia.map((g) => (
+              <optgroup key={g.clave} label={g.nombre}>
+                {g.cuentas.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} · {formatMonto(c.balanceMinor, c.currency, { compacto: true })}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </Selector>
         )}
@@ -516,7 +581,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
         {sobregiro && (
           <div className="-mt-2 rounded-2xl p-3 border"
             style={{ borderColor: '#f59e0b66', background: '#f59e0b14' }}>
-            <p className="text-xs txt-2 leading-relaxed">
+            <p className="t-nota txt-2 leading-relaxed">
               <span className="font-semibold txt">{sobregiro.jarra.name}</span> queda en{' '}
               <span className="font-semibold tabular text-red-500">
                 {formatMonto(sobregiro.queda, moneda)}
@@ -531,7 +596,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
         {repartir && montoMinor !== null && montoMinor > 0 && vistaPrevia.length > 0 && (
           <div className="-mt-2 rounded-2xl superficie-2 borde border p-3 space-y-1">
             {vistaPrevia.map(({ jarra, monto }) => (
-              <div key={jarra.id} className="flex items-center justify-between gap-2 text-xs">
+              <div key={jarra.id} className="flex items-center justify-between gap-2 t-nota">
                 <span className="txt-2 truncate">{jarra.name}</span>
                 <span className="tabular font-medium txt shrink-0">
                   {formatMonto(monto, moneda)}
@@ -548,7 +613,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
             el formulario no se entera de que existen. */}
         {tipo === TxType.GASTO && eventosAbiertos.length > 0 && (
           <div>
-            <span className="block text-xs font-medium txt-2 mb-2">¿Es de algún presupuesto?</span>
+            <span className="block t-nota font-medium txt-2 mb-2">¿Es de algún presupuesto?</span>
             <div className="flex gap-2 overflow-x-auto sin-barra pb-1">
               {eventosAbiertos.map((b) => {
                 const elegido = budgetId === b.id;
@@ -557,7 +622,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
                     key={b.id}
                     onClick={() => setBudgetId(elegido ? '' : b.id)}
                     className={cn(
-                      'shrink-0 min-h-11 px-3 rounded-xl border text-sm font-medium flex items-center gap-1.5 transition-all',
+                      'shrink-0 min-h-11 px-3 rounded-xl border t-fila font-medium flex items-center gap-1.5 transition-all',
                       elegido
                         ? 'bg-marca-600 text-white border-transparent'
                         : 'superficie-2 borde txt-2',
@@ -582,8 +647,8 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           >
             <Ficha color="#10b981" icono="split" size={38} />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium txt">Repartir entre las jarras</p>
-              <p className="text-xs txt-3">
+              <p className="t-fila font-medium txt">Repartir entre las jarras</p>
+              <p className="t-nota txt-3">
                 {montoMinor
                   ? `Se reparten ${formatMonto(montoMinor, moneda)} según los porcentajes`
                   : 'Según los porcentajes de cada jarra'}
@@ -602,7 +667,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
             la pregunta no tiene sentido. */}
         {members.length > 1 && !esTransferencia && (
           <div>
-            <span className="block text-xs font-medium txt-2 mb-2">Quién lo hizo</span>
+            <span className="block t-nota font-medium txt-2 mb-2">Quién lo hizo</span>
             <div className="flex gap-2">
               {members.map((m) => (
                 <button
@@ -615,7 +680,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
                   style={paidBy === m.id ? { background: `${m.color}1f`, boxShadow: `0 0 0 2px ${m.color}` } : undefined}
                 >
                   <Avatar nombre={m.displayName} color={m.color} emoji={m.emoji} size={26} />
-                  <span className={cn('text-sm font-medium truncate', paidBy === m.id ? 'txt' : 'txt-2')}>
+                  <span className={cn('t-fila font-medium truncate', paidBy === m.id ? 'txt' : 'txt-2')}>
                     {m.displayName}
                   </span>
                 </button>
@@ -628,7 +693,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
             del formulario y se sale del ancho; casi siempre es hoy, así que se
             muestra escrita y solo se despliega si hay que cambiarla. */}
         <div>
-          <span className="block text-xs font-medium txt-2 mb-1.5">Fecha</span>
+          <span className="block t-nota font-medium txt-2 mb-1.5">Fecha</span>
           {fechaAbierta ? (
             <Campo
               type="date"
@@ -641,7 +706,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
             <button
               type="button"
               onClick={() => setFechaAbierta(true)}
-              className="w-full min-h-11 px-3.5 rounded-2xl superficie-2 borde border txt text-base text-left flex items-center justify-between gap-2"
+              className="w-full min-h-11 px-3.5 rounded-2xl superficie-2 borde border txt t-campo text-left flex items-center justify-between gap-2"
             >
               <span className="truncate">{fechaCorta(deInputDate(fecha))}</span>
               <Icono nombre="calendar-days" size={17} className="txt-3 shrink-0" />
@@ -657,12 +722,12 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
         />
 
         {cuentaSel && montoMinor !== null && montoMinor > 0 && tipo === TxType.GASTO && (
-          <p className="text-xs txt-3 text-center">
+          <p className="t-nota txt-3 text-center">
             Saldo después: {formatMonto(cuentaSel.balanceMinor - montoMinor, cuentaSel.currency)}
           </p>
         )}
 
-        {error && <p className="text-sm text-red-500 text-center px-2">{error}</p>}
+        {error && <p className="t-fila text-red-500 text-center px-2">{error}</p>}
       </div>
     </Hoja>
   );

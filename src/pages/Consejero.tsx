@@ -100,17 +100,17 @@ export function Consejero() {
   if (disponible === false) {
     return (
       <div className="space-y-4">
-        <h1 className="text-xl font-semibold txt tracking-tight">Consejero</h1>
+        <h1 className="t-titulo font-semibold txt tracking-tight">Consejero</h1>
         <Tarjeta>
           <Vacio
             icono="sparkles"
             titulo="Falta la clave"
             texto="El consejero necesita una clave de la API de Claude cargada en los secretos de Cloudflare. Mientras tanto, el resto de la app funciona igual."
           />
-          <p className="text-xs txt-3 text-center px-2 leading-relaxed -mt-2">
+          <p className="t-nota txt-3 text-center px-2 leading-relaxed -mt-2">
             Se carga una sola vez, desde la terminal:
             <br />
-            <code className="text-[11px]">wrangler secret put ANTHROPIC_API_KEY</code>
+            <code className="t-nota">wrangler secret put ANTHROPIC_API_KEY</code>
           </p>
         </Tarjeta>
       </div>
@@ -120,15 +120,15 @@ export function Consejero() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold txt tracking-tight">Consejero</h1>
-        <p className="text-xs txt-3 mt-0.5">
+        <h1 className="t-titulo font-semibold txt tracking-tight">Consejero</h1>
+        <p className="t-nota txt-3 mt-0.5">
           Ve todos tus números. La conversación no se guarda.
         </p>
       </div>
 
       {mensajes.length === 0 ? (
         <Tarjeta className="space-y-2.5">
-          <p className="text-sm txt-2 leading-relaxed mb-3">
+          <p className="t-fila txt-2 leading-relaxed mb-3">
             Preguntale lo que le preguntarías a alguien que tiene tus cuentas
             delante.
           </p>
@@ -136,7 +136,7 @@ export function Consejero() {
             <button
               key={s}
               onClick={() => void enviar(s)}
-              className="w-full text-left superficie-2 borde border rounded-2xl px-3.5 min-h-11 py-2.5 text-sm txt-2 active:scale-[0.99] transition-transform"
+              className="w-full text-left superficie-2 borde border rounded-2xl px-3.5 min-h-11 py-2.5 t-fila txt-2 active:scale-[0.99] transition-transform"
             >
               {s}
             </button>
@@ -150,7 +150,7 @@ export function Consejero() {
               className={cn('flex', m.rol === 'yo' ? 'justify-end' : 'justify-start')}
             >
               <div className={cn(
-                'max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap',
+                'max-w-[85%] rounded-2xl px-3.5 py-2.5 t-fila leading-relaxed whitespace-pre-wrap',
                 m.rol === 'yo'
                   ? 'bg-marca-600 text-white'
                   : 'superficie borde border txt',
@@ -180,7 +180,7 @@ export function Consejero() {
           onKeyDown={(e) => { if (e.key === 'Enter') void enviar(pregunta); }}
           placeholder="Pregunta algo..."
           disabled={pensando}
-          className="flex-1 min-w-0 min-h-12 px-4 rounded-2xl superficie borde border txt text-base outline-none focus:border-marca-500 disabled:opacity-50"
+          className="flex-1 min-w-0 min-h-12 px-4 rounded-2xl superficie borde border txt t-campo outline-none focus:border-marca-500 disabled:opacity-50"
         />
         <Boton
           onClick={() => void enviar(pregunta)}
@@ -195,13 +195,13 @@ export function Consejero() {
       {mensajes.length > 0 && (
         <button
           onClick={() => setMensajes([])}
-          className="w-full text-xs txt-3 py-2"
+          className="w-full t-nota txt-3 py-2"
         >
           Empezar de nuevo
         </button>
       )}
 
-      <p className="text-[11px] txt-3 text-center px-4 leading-relaxed">
+      <p className="t-nota txt-3 text-center px-4 leading-relaxed">
         Orienta con tus números, pero no es un asesor matriculado. Las
         decisiones grandes conviene consultarlas con alguien que responda por
         ellas.

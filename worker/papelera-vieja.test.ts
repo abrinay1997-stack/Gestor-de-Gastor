@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import { barrerPapelera } from './papelera-vieja.ts';
 import type { Env } from './env.ts';
+import { consultasDeAtadura, TIPO_POR_TABLA } from './routes/papelera.ts';
 
 interface Fila { id: string; tabla: string; trashedAt: number | null; atada: boolean }
 
@@ -103,5 +104,50 @@ describe('barrerPapelera', () => {
     const { borrados } = await barrerPapelera(env);
     expect(borrados).toBe(2);
     expect(vivas.map((f) => f.id).sort()).toEqual(['cat-usada', 'cuenta-usada', 'eco-nueva']);
+  });
+});
+
+/**
+ * La papelera de pantalla y el barrido nocturno tienen que decidir IGUAL.
+ *
+ * Eran dos listas de ataduras escritas a mano, una en cada archivo, y se
+ * habian separado sin que nada avisara: los ajustes de saldo frenaban al
+ * barrido pero no los contaba la pantalla, asi que una cuenta con ajustes
+ * mostraba «se borra en 12 dias» y a los 12 dias seguia exactamente donde
+ * estaba. Ahora las dos salen de la misma declaracion; esto es lo que impide
+ * que vuelvan a separarse.
+ */
+describe('las ataduras son una sola lista', () => {
+  it('cubre los tres tipos de la papelera', () => {
+    for (const tipo of ['categoria', 'cuenta', 'economia'] as const) {
+      expect(consultasDeAtadura(tipo).length).toBeGreaterThan(0);
+    }
+  });
+
+  it('cada tabla de la papelera tiene su tipo', () => {
+    expect(TIPO_POR_TABLA).toEqual({
+      category: 'categoria',
+      account: 'cuenta',
+      entity: 'economia',
+    });
+  });
+
+  it('una cuenta con ajustes de saldo está atada, no solo para el barrido', () => {
+    const sqls = consultasDeAtadura('cuenta');
+    expect(sqls.some((s) => s.includes('account_adjustment'))).toBe(true);
+  });
+
+  it('las subcategorías ya tiradas NO atan a su madre', () => {
+    // Sin esto, madre e hija tiradas juntas se trababan entre ellas y ninguna
+    // de las dos se podia borrar nunca.
+    const sqls = consultasDeAtadura('categoria');
+    const hijas = sqls.find((s) => s.includes('parent_id'));
+    expect(hijas).toContain('trashed_at IS NULL');
+  });
+
+  it('las categorías ya tiradas NO atan a su economía', () => {
+    const sqls = consultasDeAtadura('economia');
+    const suyas = sqls.find((s) => s.includes('FROM category'));
+    expect(suyas).toContain('trashed_at IS NULL');
   });
 });

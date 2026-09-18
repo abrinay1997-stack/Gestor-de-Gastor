@@ -76,7 +76,7 @@ export function SelectorPeriodo({ periodo, alCambiar }: {
           onClick={() => setAbierto(true)}
           className="flex-1 min-w-0 min-h-8 rounded-lg flex items-center justify-center gap-1 px-2 active:superficie-2 transition-colors"
         >
-          <span className="text-sm font-semibold txt truncate">
+          <span className="t-fila font-semibold txt truncate">
             {mayusculaInicial(describirPeriodo(periodo))}
           </span>
           <Icono nombre="chevron-down" size={13} className="txt-3 shrink-0" />
@@ -100,7 +100,7 @@ export function SelectorPeriodo({ periodo, alCambiar }: {
                 key={t.id}
                 onClick={() => elegirTipo(t.id)}
                 className={cn(
-                  'min-h-11 rounded-xl text-sm font-medium border transition-all',
+                  'min-h-11 rounded-xl t-fila font-medium border transition-all',
                   periodo.tipo === t.id
                     ? 'bg-marca-600 text-white border-transparent'
                     : 'superficie-2 borde txt-2',
@@ -135,7 +135,7 @@ export function SelectorPeriodo({ periodo, alCambiar }: {
                 setHasta(aInputDate(periodo.hasta));
                 alCambiar(periodoRango(periodo.desde, periodo.hasta));
               }}
-              className="w-full min-h-11 rounded-xl superficie-2 borde border text-sm txt-2 flex items-center justify-center gap-2"
+              className="w-full min-h-11 rounded-xl superficie-2 borde border t-fila txt-2 flex items-center justify-center gap-2"
             >
               <Icono nombre="calendar-days" size={16} /> Elegir un rango exacto
             </button>

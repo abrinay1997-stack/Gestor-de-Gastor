@@ -34,7 +34,7 @@ export default function App() {
     return (
       <div className="min-h-dvh flex flex-col items-center justify-center gap-3">
         <div className="w-9 h-9 rounded-full border-2 border-marca-500 border-t-transparent animate-spin" />
-        <p className="text-sm txt-3">Cargando...</p>
+        <p className="t-fila txt-3">Cargando...</p>
       </div>
     );
   }
@@ -96,7 +96,7 @@ export default function App() {
       {cola.length > 0 && (
         <div className="fixed bottom-24 left-4 md:bottom-6 z-40 superficie borde border rounded-2xl px-3.5 py-2 shadow-lg flex items-center gap-2">
           <Icono nombre="cloud-off" size={15} className="txt-3" />
-          <span className="text-xs txt-2">{cola.length} sin subir</span>
+          <span className="t-nota txt-2">{cola.length} sin subir</span>
         </div>
       )}
 
@@ -105,7 +105,7 @@ export default function App() {
           role="status"
           className={cn(
             'fixed top-4 inset-x-4 md:left-1/2 md:-translate-x-1/2 md:inset-x-auto md:w-96 z-[60]',
-            'rounded-2xl px-4 py-3 text-sm font-medium shadow-lg text-center safe-top',
+            'rounded-2xl px-4 py-3 t-fila font-medium shadow-lg text-center safe-top',
             'animate-[bajar_.2s_ease-out]',
             aviso.tipo === 'ok' ? 'bg-marca-600 text-white' : 'bg-red-600 text-white',
           )}

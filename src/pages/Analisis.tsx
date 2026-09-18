@@ -34,7 +34,8 @@ const formatearEje = (v: unknown, moneda: string, decimales: number): string => 
 
 export function Analisis() {
   const {
-    transactions: todos, categories, entities, entidadActiva, members, household,
+    transactions: todos, categories, categoriasTodas, entities, entidadActiva, members,
+    household,
   } = useStore();
   const moneda = household?.currency ?? 'USD';
   const decimales = decimalesDe(moneda);
@@ -49,8 +50,8 @@ export function Analisis() {
   // Todo lo de abajo respeta la entidad elegida. En "Todo" no filtra nada,
   // que es la vista consolidada.
   const transactions = useMemo(
-    () => filtrarPorEntidad(todos, categories, entidadActiva),
-    [todos, categories, entidadActiva],
+    () => filtrarPorEntidad(todos, categoriasTodas, entidadActiva),
+    [todos, categoriasTodas, entidadActiva],
   );
 
   const delMes = useMemo(
@@ -134,7 +135,7 @@ export function Analisis() {
 
       {porEntidad.length > 1 && (
         <Tarjeta>
-          <p className="text-xs txt-2 mb-3">Resultado por economía</p>
+          <p className="t-nota txt-2 mb-3">Resultado por economía</p>
           <div className="space-y-2.5">
             {porEntidad.map((r) => (
               <div key={r.entityId ?? 'sin'} className="flex items-center gap-3">
@@ -144,16 +145,16 @@ export function Analisis() {
                   size={36}
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium txt truncate">
+                  <p className="t-fila font-medium txt truncate">
                     {r.entidad?.name ?? 'Sin clasificar'}
                   </p>
-                  <p className="text-xs txt-3 tabular">
+                  <p className="t-nota txt-3 tabular">
                     {formatMonto(r.ingresoMinor, moneda, { compacto: true })} entró ·{' '}
                     {formatMonto(r.gastoMinor, moneda, { compacto: true })} salió
                   </p>
                 </div>
                 <p className={cn(
-                  'text-base font-semibold tabular shrink-0',
+                  't-fila font-semibold tabular shrink-0',
                   r.resultadoMinor < 0 ? 'text-red-500' : 'text-marca-600 dark:text-marca-500',
                 )}>
                   {r.resultadoMinor > 0 ? '+' : ''}{formatMonto(r.resultadoMinor, moneda)}
@@ -176,16 +177,16 @@ export function Analisis() {
         <>
           <div className="grid grid-cols-2 gap-3">
             <Tarjeta className="p-4">
-              <p className="text-xs txt-2 mb-1">Entró</p>
-              <p className="text-lg font-semibold tabular text-marca-600 dark:text-marca-500">
+              <p className="t-nota txt-2 mb-1">Entró</p>
+              <p className="t-monto font-semibold tabular text-marca-600 dark:text-marca-500">
                 {formatMonto(resumen.ingresoMinor, moneda, { compacto: true })}
               </p>
             </Tarjeta>
             <Tarjeta className="p-4">
-              <p className="text-xs txt-2 mb-1">Salió</p>
+              <p className="t-nota txt-2 mb-1">Salió</p>
               {/* Neutro, no rojo. Gastar no es un problema: es para lo que esta
                   la plata. El rojo se guarda para lo que si lo es. */}
-              <p className="text-lg font-semibold tabular txt">
+              <p className="t-monto font-semibold tabular txt">
                 {formatMonto(resumen.gastoMinor, moneda, { compacto: true })}
               </p>
             </Tarjeta>
@@ -193,7 +194,7 @@ export function Analisis() {
 
           {torta.length > 0 && (
             <Tarjeta>
-              <h2 className="font-semibold txt mb-3.5">Gastos por categoría</h2>
+              <h2 className="t-seccion font-semibold txt mb-3.5">Gastos por categoría</h2>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -223,11 +224,11 @@ export function Analisis() {
 
               <div className="space-y-2 mt-2">
                 {torta.slice(0, 6).map((d) => (
-                  <div key={d.nombre} className="flex items-center gap-2.5 text-sm">
+                  <div key={d.nombre} className="flex items-center gap-2.5 t-fila">
                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
                     <span className="flex-1 txt-2 truncate">{d.nombre}</span>
                     <span className="tabular txt shrink-0">{formatMonto(d.minor, moneda)}</span>
-                    <span className="tabular txt-3 text-xs w-10 text-right shrink-0">
+                    <span className="tabular txt-3 t-nota w-10 text-right shrink-0">
                       {resumen.gastoMinor > 0 ? Math.round((d.minor / resumen.gastoMinor) * 100) : 0}%
                     </span>
                   </div>
@@ -240,8 +241,8 @@ export function Analisis() {
               abajo, con la linea del acumulado encima. */}
           {mesesConDatos > 1 && (
             <Tarjeta>
-              <h2 className="font-semibold txt mb-1">Balance mes a mes</h2>
-              <p className="text-xs txt-3 mb-3">Último año. La línea es el acumulado.</p>
+              <h2 className="t-seccion font-semibold txt mb-1">Balance mes a mes</h2>
+              <p className="t-nota txt-3 mb-3">Último año. La línea es el acumulado.</p>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={balances} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
@@ -297,17 +298,17 @@ export function Analisis() {
 
               <div className="grid grid-cols-2 gap-3 mt-3">
                 <div className="superficie-2 rounded-2xl p-3">
-                  <p className="text-[10px] txt-3 mb-0.5">Mejor mes</p>
-                  <p className="text-sm font-semibold tabular text-marca-600 dark:text-marca-500 capitalize">
+                  <p className="t-nota txt-3 mb-0.5">Mejor mes</p>
+                  <p className="t-fila font-semibold tabular text-marca-600 dark:text-marca-500 capitalize">
                     {mejor?.mes} · {formatMonto(Math.round((mejor?.Balance ?? 0) * 10 ** decimales), moneda, { compacto: true })}
                   </p>
                 </div>
                 <div className="superficie-2 rounded-2xl p-3">
-                  <p className="text-[10px] txt-3 mb-0.5">Peor mes</p>
+                  <p className="t-nota txt-3 mb-0.5">Peor mes</p>
                   {/* El peor mes puede haber cerrado en positivo. Se pinta de
                       rojo solo si de verdad se gasto mas de lo que entro. */}
                   <p className={cn(
-                    'text-sm font-semibold tabular capitalize',
+                    't-fila font-semibold tabular capitalize',
                     (peor?.Balance ?? 0) < 0 ? 'text-red-500' : 'txt',
                   )}>
                     {peor?.mes} · {formatMonto(Math.round((peor?.Balance ?? 0) * 10 ** decimales), moneda, { compacto: true })}
@@ -318,7 +319,7 @@ export function Analisis() {
           )}
 
           <Tarjeta>
-            <h2 className="font-semibold txt mb-3.5">Últimos 6 meses</h2>
+            <h2 className="t-seccion font-semibold txt mb-3.5">Últimos 6 meses</h2>
             <div className="h-52">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={tendencia} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
@@ -355,10 +356,10 @@ export function Analisis() {
 
           {members.length > 1 && (
             <Tarjeta>
-              <h2 className="font-semibold txt mb-3.5">Comparativa</h2>
+              <h2 className="t-seccion font-semibold txt mb-3.5">Comparativa</h2>
               <div className="space-y-3">
                 {personas.map(({ member, resumen: r }) => (
-                  <div key={member.id} className="flex items-center justify-between text-sm">
+                  <div key={member.id} className="flex items-center justify-between t-fila">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: member.color }} />
                       <span className="txt truncate">{member.displayName}</span>

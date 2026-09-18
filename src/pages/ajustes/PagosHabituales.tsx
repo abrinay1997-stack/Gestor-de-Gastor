@@ -20,13 +20,15 @@ import {
 import { Boton, Campo, Ficha, Hoja, Icono, Selector } from '../../components/ui/base.tsx';
 import { OpcionesPorEconomia } from '../../components/ui/entidad.tsx';
 import { useConfirmar } from '../../components/ui/confirmar.tsx';
-import { etiquetaCuenta } from '../../components/transactions/CargaRapida.tsx';
+import { cuentasPorDueno } from '../../components/transactions/CargaRapida.tsx';
 import { cn } from '../../lib/utils.ts';
 
 export function PagosHabituales({ abierta, alCerrar }: {
   abierta: boolean; alCerrar: () => void;
 }) {
-  const { recurring, categories, accounts, household, borrarRecurrente, avisar } = useStore();
+  const {
+    recurring, categoriaPorId, accounts, household, borrarRecurrente, avisar,
+  } = useStore();
   const confirmar = useConfirmar();
   const moneda = household?.currency ?? 'USD';
 
@@ -56,14 +58,17 @@ export function PagosHabituales({ abierta, alCerrar }: {
           </Boton>
 
         {recurring.length === 0 ? (
-          <p className="text-sm txt-3 leading-relaxed">
+          <p className="t-fila txt-3 leading-relaxed">
             El alquiler, la luz, Netflix. Se cargan solos el día que corresponde,
             así no hay que acordarse ni anotarlos a mano.
           </p>
         ) : (
           <div className="space-y-2">
             {recurring.map((r) => {
-              const cat = categories.find((c) => c.id === r.categoryId);
+              // Incluida la que esté en la papelera: un pago habitual que apunta
+              // a una categoría tirada es justamente lo que impide borrarla, así
+              // que acá tiene que verse con su nombre y no en gris.
+              const cat = categoriaPorId(r.categoryId);
               const cuenta = accounts.find((a) => a.id === r.accountId);
               const dias = Math.ceil((r.nextRun - Date.now()) / 86_400_000);
 
@@ -74,11 +79,11 @@ export function PagosHabituales({ abierta, alCerrar }: {
                     onClick={() => { setEditando(r); setAbierto(true); }}
                     className="flex-1 min-w-0 text-left"
                   >
-                    <p className="text-sm font-medium txt truncate">
+                    <p className="t-fila font-medium txt truncate">
                       {r.name}
                       {!r.active && <span className="txt-3 font-normal"> · en pausa</span>}
                     </p>
-                    <p className="text-xs txt-3 truncate">
+                    <p className="t-nota txt-3 truncate">
                       {describirRegla(reglaDe(r))}
                       {cuenta && ` · ${cuenta.name}`}
                       {r.active && dias >= 0 && dias <= 31 &&
@@ -86,7 +91,7 @@ export function PagosHabituales({ abierta, alCerrar }: {
                     </p>
                   </button>
                   <p className={cn(
-                    'text-sm font-semibold tabular shrink-0',
+                    't-fila font-semibold tabular shrink-0',
                     r.type === TxType.INGRESO ? 'text-marca-600 dark:text-marca-500' : 'txt',
                   )}>
                     {r.type === TxType.INGRESO ? '+' : '−'}{formatMonto(r.amountMinor, moneda, { compacto: true })}
@@ -278,7 +283,7 @@ function FormularioPago({ abierto, alCerrar, editando }: {
               key={t.id}
               onClick={() => setTipo(t.id)}
               className={cn(
-                'min-h-11 rounded-xl text-sm font-medium border transition-all',
+                'min-h-11 rounded-xl t-fila font-medium border transition-all',
                 tipo === t.id ? 'text-white border-transparent' : 'superficie-2 borde txt-2',
               )}
               style={tipo === t.id ? { background: t.color } : undefined}
@@ -338,16 +343,21 @@ function FormularioPago({ abierto, alCerrar, editando }: {
         {/* Un día 29, 30 o 31 no existe en todos los meses. Decirlo acá evita
             la sorpresa de que el pago "se corrió". */}
         {frecuencia !== 'semanal' && Math.max(diaMes, frecuencia === 'quincenal' ? dia2Efectivo : 0) > 28 && (
-          <p className="text-xs txt-3 px-1 -mt-2 leading-relaxed">
+          <p className="t-nota txt-3 px-1 -mt-2 leading-relaxed">
             {frecuencia === 'quincenal'
               ? `${describirRegla(regla)}. En febrero, el último día es el 28 (o el 29).`
               : `En los meses que no tienen día ${diaMes}, se cobra el último día del mes.`}
           </p>
         )}
 
+        {/* Agrupadas por dueño, igual que en el formulario de movimientos. */}
         <Selector etiqueta="Cuenta" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
           <option value="">Elige una cuenta</option>
-          {activas.map((c) => <option key={c.id} value={c.id}>{etiquetaCuenta(c, members)}</option>)}
+          {cuentasPorDueno(activas, members).map((g) => (
+            <optgroup key={g.clave} label={g.nombre}>
+              {g.cuentas.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </optgroup>
+          ))}
         </Selector>
 
         {categoriasVisibles.length > 0 && (
@@ -359,7 +369,7 @@ function FormularioPago({ abierto, alCerrar, editando }: {
             {/* Con el desplegable cerrado, "Suscripciones" a secas no dice cual
                 de las dos es. Y de eso depende a que economia va el gasto. */}
             {economias.length > 1 && (
-              <p className="text-xs px-1 leading-relaxed" style={{ color: suEconomia?.color }}>
+              <p className="t-nota px-1 leading-relaxed" style={{ color: suEconomia?.color }}>
                 {suEconomia
                   ? `Va a ${suEconomia.name}`
                   : categoryId
@@ -391,8 +401,8 @@ function FormularioPago({ abierto, alCerrar, editando }: {
           >
             <Ficha color="#10b981" icono="split" size={38} />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium txt">Repartir entre las jarras</p>
-              <p className="text-xs txt-3">
+              <p className="t-fila font-medium txt">Repartir entre las jarras</p>
+              <p className="t-nota txt-3">
                 Cada vez que se cargue, según los porcentajes de cada jarra
               </p>
             </div>
@@ -421,8 +431,8 @@ function FormularioPago({ abierto, alCerrar, editando }: {
         >
           <Ficha color={activo ? '#10b981' : '#64748b'} icono={activo ? 'check' : 'circle'} size={38} />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium txt">{activo ? 'Activo' : 'En pausa'}</p>
-            <p className="text-xs txt-3">
+            <p className="t-fila font-medium txt">{activo ? 'Activo' : 'En pausa'}</p>
+            <p className="t-nota txt-3">
               {activo
                 ? `Próximo: ${new Date(proxima).toLocaleDateString('es', { day: 'numeric', month: 'long' })}`
                 : 'No se va a cargar hasta que lo reactives'}
@@ -433,7 +443,7 @@ function FormularioPago({ abierto, alCerrar, editando }: {
           </div>
         </button>
 
-        {error && <p className="text-sm text-red-500 text-center px-2">{error}</p>}
+        {error && <p className="t-fila text-red-500 text-center px-2">{error}</p>}
 
         <Boton onClick={() => void guardar()} disabled={!puedeGuardar} className="w-full min-h-12">
           {guardando ? 'Guardando...' : 'Guardar'}
