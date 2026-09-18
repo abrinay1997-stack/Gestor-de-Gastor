@@ -97,11 +97,14 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
   const secciones: Record<SeccionInicio, React.ReactNode> = {
     'resumen': (
       <Tarjeta>
-        <div className="flex items-baseline justify-between mb-3">
-          <p className="t-nota txt-2">
+        <div className="flex items-baseline justify-between gap-2 mb-3">
+          {/* El mismo título que «En qué se fue» o «Quién gastó»: son todos el
+              encabezado de una tarjeta del Inicio y no hay ninguna razón para
+              que este se lea más chico y más claro que los otros. */}
+          <h2 className="t-seccion font-semibold txt min-w-0 truncate">
             {periodo.tipo === 'mes' ? 'Balance del mes' : 'Balance del período'}
             {nombreActiva && ` · ${nombreActiva}`}
-          </p>
+          </h2>
           <p className={cn(
             't-monto font-semibold tabular tracking-tight',
             resumen.flujoMinor < 0 ? 'text-red-500' : 'txt',
@@ -217,7 +220,7 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
 
     'pagos-habituales': proximos.length > 0 ? (
       <Tarjeta className="py-3">
-        <p className="t-nota font-medium txt-3 px-1 mb-1">Pagos habituales</p>
+        <h2 className="t-seccion font-semibold txt px-1 mb-2">Pagos habituales</h2>
         <div className="divide-y divide-[var(--borde)] -mx-1">
           {proximos.map((r) => (
             <FilaHabitual key={r.id} recurrente={r} />
@@ -323,7 +326,10 @@ export function HeroPatrimonio({ montoMinor, moneda, pie, extra, accion, alineac
         {accion && !izquierda && <div className="absolute right-0 -top-1">{accion}</div>}
 
         <div className={cn('min-w-0', izquierda && 'text-left')}>
-          <p className="t-fila opacity-80 mb-1">Patrimonio</p>
+          {/* Del mismo tamaño y grosor que los demás encabezados de tarjeta.
+              La opacidad se queda: acá el fondo es verde y el blanco pleno lo
+              pondría a competir con la cifra, que es lo que hay que leer. */}
+          <h2 className="t-seccion font-semibold opacity-80 mb-1">Patrimonio</h2>
           <p className="t-cifra font-bold tabular tracking-tight">
             {formatMonto(montoMinor, moneda)}
           </p>

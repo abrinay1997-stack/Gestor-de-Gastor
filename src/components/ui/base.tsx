@@ -518,7 +518,7 @@ export function Hoja({ abierta, alCerrar, titulo, children, pie, accion }: {
       >
         <div className="shrink-0 barra-vidrio safe-top pt-3 pb-3 px-5 borde border-b sm:rounded-t-3xl">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="font-semibold t-titulo txt tracking-tight truncate">{titulo}</h2>
+            <h2 className="t-seccion font-semibold txt tracking-tight truncate">{titulo}</h2>
             <div className="flex items-center gap-2 shrink-0">
               {accion}
               <button

@@ -23,7 +23,7 @@ function Marco({ titulo, subtitulo, children }: {
           <div className="w-16 h-16 bg-marca-600 text-white border border-white/15 rounded-3xl flex items-center justify-center mb-5 shadow-xl shadow-marca-600/30">
             <Icono nombre="wallet" size={30} />
           </div>
-          <h1 className="t-titulo font-semibold txt tracking-tight text-balance mb-2">{titulo}</h1>
+          <h1 className="t-seccion font-semibold txt tracking-tight text-balance mb-2">{titulo}</h1>
           <p className="t-fila txt-2 leading-relaxed">{subtitulo}</p>
         </div>
         {children}

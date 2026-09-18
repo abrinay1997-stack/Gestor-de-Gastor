@@ -528,11 +528,25 @@
  * papelera, y las descripciones igual. No era una decision de diseño, era
  * lo que habia quedado.
  *
- * Ahora hay cinco tamaños y cada uno tiene un trabajo. La regla para elegir
- * es qué ES el texto, no cuánto se quiere que ocupe:
+ * Ahora hay cuatro tamaños de texto y cada uno tiene un trabajo. La regla
+ * para elegir es qué ES el texto, no cuánto se quiere que ocupe:
  *
- *   .t-titulo    el titulo de una pantalla o de una hoja. Uno por pantalla.
- *   .t-seccion   el encabezado de una tarjeta ("Quien gasto", "Presupuestos").
+ *   .t-seccion   UN TITULO, el que sea. El de una pantalla ("Nuevo
+ *                movimiento", "Ajustar jarras") y el de una tarjeta ("En qué
+ *                se fue", "Patrimonio", "Pagos habituales") son el mismo
+ *                tamaño a proposito.
+ *
+ *                Habia dos niveles, .t-titulo a 20px para las pantallas y
+ *                este a 15px para las tarjetas, y no se sostenia: el Inicio
+ *                es una pila de tarjetas donde cada una ES una seccion, asi
+ *                que "Patrimonio" y "Balance del mes" no son menos titulo
+ *                que "Nuevo movimiento". Con dos niveles habia que decidir
+ *                cual era cual cada vez que se escribia una pantalla nueva,
+ *                y se decidia distinto cada vez. Con uno no hay nada que
+ *                decidir: todo titulo va en .t-seccion y en font-semibold.
+ *
+ *                Lo que separa un titulo de lo que tiene debajo es el
+ *                GROSOR y el color, no el tamaño.
  *   .t-fila      el texto principal de una fila, un boton o una opcion.
  *   .t-nota      todo lo secundario: descripciones, metadatos, etiquetas.
  *   .t-campo     lo que se escribe. 16px es el minimo que evita el zoom
@@ -548,19 +562,22 @@
  *                usa el campo del monto, que a 30 se veia mas chico que el
  *                dato que estaba escribiendo.
  *
+ * Y .t-glifo, que no es texto: es el tamaño de un emoji dibujado dentro de
+ * un boton. Vive aca para que no vuelva a aparecer un `text-xl` suelto.
+ *
  * Solo tamaño e interlineado a proposito. El grosor (font-medium,
  * font-semibold) y el interletrado (tracking-tight) siguen siendo utilidades
  * sueltas: si viviesen aca, la clase le ganaria por orden a la utilidad y no
  * se podria poner un titulo en negrita sin pelearse con el CSS.
  */
 @layer utilities {
-  .t-titulo  { font-size: 1.25rem;   line-height: 1.6rem; }
   .t-seccion { font-size: 0.9375rem; line-height: 1.25rem; }
   .t-fila    { font-size: 0.875rem;  line-height: 1.25rem; }
   .t-nota    { font-size: 0.75rem;   line-height: 1rem; }
   .t-campo   { font-size: 1rem;      line-height: 1.5rem; }
   .t-monto   { font-size: 1.5rem;    line-height: 1.75rem; }
   .t-cifra   { font-size: 2.25rem;   line-height: 2.5rem; }
+  .t-glifo   { font-size: 1.25rem;   line-height: 1; }
 }
 
 /*
