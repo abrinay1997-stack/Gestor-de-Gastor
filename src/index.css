@@ -133,6 +133,23 @@
 
 @layer utilities {
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+  /*
+   * A cuanto del borde de abajo se planta la barra flotante.
+   *
+   * Sumarle el area segura ENTERA la mandaba a 36px del piso en un iPhone: en
+   * el emulador del navegador se veia pegada abajo (ahi el area segura es 0) y
+   * en el telefono de verdad quedaba flotando muy arriba, nada que ver con la
+   * de Instagram o la de Spotify.
+   *
+   * Esas apps no empujan la barra por encima del indicador de inicio: dejan
+   * que el fondo llegue hasta abajo y solo mantienen los iconos fuera de su
+   * camino. Acá, que es una pastilla flotante, se hace con una fraccion: sube
+   * lo justo para no pisar el indicador (~11px de los 34) y no mas.
+   */
+  :root {
+    --piso: max(0.5rem, calc(env(safe-area-inset-bottom, 0px) / 3));
+  }
   .safe-top { padding-top: env(safe-area-inset-top, 0px); }
   /* background-color, NO el atajo `background`.
      El atajo tambien reescribe background-image, y como estas viven en la

@@ -41,6 +41,10 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
 }) {
   const { me, members, online, estadoLive, salir } = useStore();
 
+  /** Las pantallas donde elegir economia cambia los numeros. */
+  const conEconomia = solapa === 'inicio' || solapa === 'movimientos'
+    || solapa === 'jarras' || solapa === 'analisis';
+
   const pareja = members.find((m) => m.id !== me?.id);
   const parejaEnLinea = pareja ? online.includes(pareja.id) : false;
   const enBarra = DESTINOS.filter((d) => d.enBarra);
@@ -170,7 +174,10 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
             cuando hay algo que decir —conectando o sin conexion—; cuando todo
             anda, el punto verde sobre el avatar de la pareja ya lo dice. */}
         <div className="md:hidden flex items-center justify-between gap-2 mb-3 safe-top">
-          <PastillaEntidad />
+          {/* Solo donde la economia cambia lo que se ve. En Cuentas no manda
+              —las cuentas estan mezcladas a proposito— y en Ajustes tampoco,
+              asi que ahi la pastilla seria un control que no hace nada. */}
+          {conEconomia && <PastillaEntidad />}
           <div className="flex items-center gap-2 ml-auto">
             {estadoLive !== 'conectado' && (
               <EstadoConexion estado={estadoLive} pareja={pareja?.displayName} enLinea={parejaEnLinea} />
@@ -205,8 +212,8 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
         )}
         style={{
           bottom: compacto
-            ? 'calc(3.75rem + env(safe-area-inset-bottom, 0px))'
-            : 'calc(5rem + env(safe-area-inset-bottom, 0px))',
+            ? 'calc(3.75rem + var(--piso))'
+            : 'calc(5rem + var(--piso))',
           transitionTimingFunction: 'cubic-bezier(.32,.72,0,1)',
         }}
       >
@@ -220,7 +227,7 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
           de esconder un texto que ya no existe. */}
       <nav
         className="md:hidden fixed inset-x-0 flex justify-center px-3 pointer-events-none z-30"
-        style={{ bottom: 'calc(0.125rem + env(safe-area-inset-bottom, 0px))' }}
+        style={{ bottom: 'var(--piso)' }}
       >
         <div className={cn(
           'barra-flotante pointer-events-auto relative w-full max-w-[430px] rounded-[26px] px-2',

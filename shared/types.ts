@@ -116,7 +116,7 @@ export type TransactionInput = Omit<
  *                totales del pasado y no se puede borrar mientras algo lo use.
  *   papelera  -> se tiro. Se restaura de un toque, y vaciarla lo borra.
  *
- * Se guarda quien lo tiro porque son dos personas y «¿esto lo tiraste vos?»
+ * Se guarda quien lo tiro porque son dos personas y «¿esto lo tiraste tú?»
  * tiene que tener respuesta.
  */
 export interface Descartable {

@@ -71,7 +71,7 @@ export function Ajustes({ alVerConsejero, alVerAnalisis }: {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium txt truncate">
                   {m.displayName}
-                  {m.id === me?.id && <span className="txt-3 font-normal"> (vos)</span>}
+                  {m.id === me?.id && <span className="txt-3 font-normal"> (tú)</span>}
                 </p>
                 <p className="text-xs txt-3 truncate">{m.email}</p>
               </div>
@@ -323,7 +323,7 @@ function HojaPerfil({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => v
 
         <div>
           <span className="block text-xs font-medium txt-2 mb-2">Tema</span>
-          {/* Guardado en tu perfil, no en el teléfono: vos y tu pareja pueden
+          {/* Guardado en tu perfil, no en el teléfono: tú y tu pareja pueden
               tener temas distintos, y el tuyo te sigue a donde entres. */}
           <div className="grid grid-cols-3 gap-2">
             {TEMAS.map((t) => (
@@ -390,7 +390,7 @@ function HojaOrdenInicio({ abierta, alCerrar }: { abierta: boolean; alCerrar: ()
     <Hoja abierta={abierta} alCerrar={alCerrar} titulo="Ordenar el inicio">
       <div className="space-y-4">
         <p className="text-sm txt-2 leading-relaxed">
-          Acomodá las secciones como las querés ver. Es tuyo: tu pareja tiene
+          Acomoda las secciones como las quieres ver. Es tuyo: tu pareja tiene
           su propio orden.
         </p>
 
@@ -899,7 +899,7 @@ function HojaCategorias({ abierta, alCerrar }: { abierta: boolean; alCerrar: () 
 
           {economias.length > 1 && (
             <p className="text-xs txt-3 leading-relaxed superficie-2 rounded-2xl p-3">
-              Un movimiento pertenece a la economía de su categoría. Mové una
+              Un movimiento pertenece a la economía de su categoría. Mueve una
               categoría de economía y toda su historia se va con ella, sin tocar
               ningún movimiento.
             </p>
@@ -1115,7 +1115,7 @@ function HojaPresupuestos({ abierta, alCerrar, alEditar }: {
         <p className="text-xs txt-3 leading-relaxed">
           Un presupuesto es un evento con nombre y tope: «Viaje a Cancún,
           $2.000». Solo mide — no aparta plata ni toca ninguna cuenta. Al
-          cargar un gasto elegís si es de acá.
+          cargar un gasto eliges si es de acá.
         </p>
 
         {eventos.length === 0 ? (
@@ -1348,8 +1348,8 @@ function HojaInvitar({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => 
     <Hoja abierta={abierta} alCerrar={alCerrar} titulo="Sumar a tu pareja">
       <div className="space-y-4">
         <p className="text-sm txt-2 leading-relaxed">
-          Le creás la cuenta vos y le pasás los datos. Va a ver exactamente lo
-          mismo que vos, en tiempo real. Que cambie la contraseña apenas entre.
+          Le creas la cuenta tú y le pasas los datos. Va a ver exactamente lo
+          mismo que tú, en tiempo real. Que cambie la contraseña apenas entre.
         </p>
         <Campo etiqueta="Nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Cómo se llama" />
         <Campo etiqueta="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="su@email.com" autoComplete="off" />

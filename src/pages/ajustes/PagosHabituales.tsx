@@ -346,7 +346,7 @@ function FormularioPago({ abierto, alCerrar, editando }: {
         )}
 
         <Selector etiqueta="Cuenta" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-          <option value="">Elegí una cuenta</option>
+          <option value="">Elige una cuenta</option>
           {activas.map((c) => <option key={c.id} value={c.id}>{etiquetaCuenta(c, members)}</option>)}
         </Selector>
 

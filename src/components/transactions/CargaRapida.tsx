@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../store/store.tsx';
 import { leer } from '@shared/parser';
-import { decimalesDe, formatMonto, montoPlano, parseMonto } from '@shared/money';
+import { formatMonto, montoPlano, parseMonto } from '@shared/money';
 import {
   entidadDe, entidadPorDefecto, imputacionJarras, indexarCategorias, jarrasDe,
 } from '@shared/domain';
@@ -39,75 +39,6 @@ export function etiquetaCuenta(
   if (cuenta.owner === 'compartida') return `${cuenta.name} · Compartida`;
   const duenio = members.find((m) => m.id === cuenta.owner);
   return duenio ? `${cuenta.name} · ${duenio.displayName}` : cuenta.name;
-}
-
-/**
- * Teclado de monto.
- *
- * El campo de monto era un <input inputMode="decimal">, asi que abria el
- * teclado del sistema: en un celular eso tapa media pantalla, empuja el
- * formulario y deja el resto fuera de alcance. Ademas el teclado del sistema
- * trae letras, comas, espacios y un "enter" que no hace nada aca.
- *
- * Este tiene diez teclas y un borrar, no se mueve, y no tapa nada porque es
- * parte del formulario. Y como escribe directo en `montoTexto`, el parser de
- * siempre sigue siendo el unico que interpreta lo que se escribio.
- */
-function Teclado({ valor, alCambiar, decimales, alListo }: {
-  valor: string;
-  alCambiar: (v: string) => void;
-  decimales: number;
-  alListo: () => void;
-}) {
-  const escribir = (tecla: string) => {
-    vibrar(8);
-    if (tecla === 'borrar') {
-      alCambiar(valor.slice(0, -1));
-      return;
-    }
-    if (tecla === '.') {
-      // Una sola coma, y ninguna si la moneda no tiene decimales.
-      if (decimales === 0 || valor.includes('.')) return;
-      alCambiar(valor === '' ? '0.' : `${valor}.`);
-      return;
-    }
-    // Ni mas decimales de los que la moneda tiene, ni un cero a la izquierda
-    // que despues haya que borrar a mano.
-    const punto = valor.indexOf('.');
-    if (punto >= 0 && valor.length - punto - 1 >= decimales) return;
-    if (valor === '0') { alCambiar(tecla); return; }
-    if (valor.replace('.', '').length >= 12) return;
-    alCambiar(valor + tecla);
-  };
-
-  const teclas = ['1', '2', '3', '4', '5', '6', '7', '8', '9', decimales > 0 ? '.' : '', '0', 'borrar'];
-
-  return (
-    <div className="grid grid-cols-3 gap-2">
-      {teclas.map((t, i) => (t === '' ? <div key={i} /> : (
-        <button
-          key={t}
-          type="button"
-          onClick={() => escribir(t)}
-          aria-label={t === 'borrar' ? 'Borrar un dígito' : t === '.' ? 'Coma decimal' : t}
-          className={cn(
-            'min-h-13 rounded-2xl superficie-2 borde border txt',
-            'text-xl font-medium tabular flex items-center justify-center',
-            'active:scale-[0.96] active:bg-marca-500/10 transition-transform duration-75',
-          )}
-        >
-          {t === 'borrar' ? <Icono nombre="delete" size={20} /> : t}
-        </button>
-      )))}
-      <button
-        type="button"
-        onClick={alListo}
-        className="col-span-3 min-h-11 rounded-2xl superficie borde border txt-2 text-sm font-medium active:scale-[0.98] transition-transform duration-75"
-      >
-        Listo
-      </button>
-    </div>
-  );
 }
 
 export function CargaRapida({ abierta, alCerrar, editando }: {
@@ -142,11 +73,8 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // El teclado arranca abierto en un movimiento nuevo: lo primero que se hace
-  // al abrir esta pantalla es teclear cuanto fue.
-  const [teclado, setTeclado] = useState(true);
-
   const refFrase = useRef<HTMLInputElement>(null);
+  const refMonto = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!abierta) return;
@@ -182,9 +110,10 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
       setNotas('');
       setFrase('');
     }
-    // Editando ya hay un monto: el teclado empieza cerrado y se abre tocando
-    // el numero. En uno nuevo, abierto.
-    setTeclado(!editando);
+    // En un movimiento nuevo el foco va al monto, que es lo primero que se
+    // teclea. `inputMode="decimal"` hace que el telefono abra el teclado
+    // numerico solo, sin que haya que dibujar ninguno.
+    if (!editando) setTimeout(() => refMonto.current?.focus(), 120);
     setError(null);
   }, [abierta, editando, moneda, activas, me]);
 
@@ -250,6 +179,32 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
     );
     return jarrasDe(jars, suya, entidadPorDefecto(entities));
   }, [jars, categories, entities, categoryId, editando]);
+
+  /**
+   * Las jarras agrupadas por economia, con la de este movimiento primero.
+   *
+   * Es lo que se va a elegir el 99% de las veces; las otras quedan abajo y
+   * con su nombre, porque sacar plata de los impuestos de un negocio para
+   * pagar la comida se puede, pero tiene que costar un scroll y verse escrito
+   * de quien es.
+   */
+  const economiasConJarras = useMemo(() => {
+    const nombreDe = (id: string | null) =>
+      entities.find((x) => x.id === id)?.name ?? 'Sin economía';
+
+    const suya = jarrasPropias[0]?.entityId ?? null;
+    const grupos: { id: string | null; nombre: string; jarras: typeof jars }[] = [];
+
+    if (jarrasPropias.length > 0) {
+      grupos.push({ id: suya, nombre: nombreDe(suya), jarras: jarrasPropias });
+    }
+    for (const e of entities) {
+      if (e.id === suya) continue;
+      const suyas = jars.filter((j) => j.entityId === e.id);
+      if (suyas.length > 0) grupos.push({ id: e.id, nombre: e.name, jarras: suyas });
+    }
+    return grupos;
+  }, [jars, entities, jarrasPropias]);
 
   /** A donde iria a parar el ingreso si se guarda asi. */
   const vistaPrevia = useMemo(() => {
@@ -388,8 +343,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
                 ref={refFrase}
                 value={frase}
                 onChange={(e) => setFrase(e.target.value)}
-                onFocus={() => setTeclado(false)}
-                placeholder='Escribí "super 12500" y listo'
+                placeholder='Escribe "super 12500" y listo'
                 inputMode="text"
                 enterKeyHint="done"
                 className="pr-10"
@@ -437,33 +391,23 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           ))}
         </div>
 
-        <div className="space-y-2">
-          <span className="block text-xs font-medium txt-2">Monto</span>
-          {/* El numero es un boton, no un campo: no abre el teclado del
-              sistema, y tocarlo trae el de abajo. */}
-          <button
-            type="button"
-            onClick={() => setTeclado(true)}
+        <div>
+          <span className="block text-xs font-medium txt-2 mb-1.5">Monto</span>
+          <input
+            ref={refMonto}
+            value={montoTexto}
+            onChange={(e) => setMontoTexto(e.target.value)}
+            placeholder="0.00"
+            inputMode="decimal"
             aria-label="Monto"
             className={cn(
-              'w-full min-h-16 px-4 rounded-2xl superficie-2 borde border',
-              'text-3xl font-semibold tabular text-center',
-              teclado && 'ring-2 ring-marca-500/25 border-marca-500',
-              montoTexto === '' ? 'txt-3' : 'txt',
+              'w-full min-w-0 min-h-16 px-4 rounded-2xl superficie-2 borde border txt',
+              'text-3xl font-semibold tabular text-center outline-none',
+              'focus:border-marca-500 focus:ring-2 focus:ring-marca-500/20',
             )}
-          >
-            {montoTexto === '' ? '0' : montoTexto}
-          </button>
+          />
           {montoMinor !== null && montoMinor > 0 && (
-            <p className="text-xs txt-3 text-center">{formatMonto(montoMinor, moneda)}</p>
-          )}
-          {teclado && (
-            <Teclado
-              valor={montoTexto}
-              alCambiar={setMontoTexto}
-              decimales={decimalesDe(moneda)}
-              alListo={() => setTeclado(false)}
-            />
+            <p className="text-xs txt-3 mt-1.5 text-center">{formatMonto(montoMinor, moneda)}</p>
           )}
         </div>
 
@@ -471,14 +415,13 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           etiqueta="Descripción"
           value={descripcion}
           onChange={(e) => setDescripcion(e.target.value)}
-          onFocus={() => setTeclado(false)}
           placeholder="En qué fue"
         />
 
         {!esTransferencia && categoriasVisibles.length > 0 && (
           <div>
             <span className="block text-xs font-medium txt-2 mb-2">Categoría</span>
-            <div className="flex gap-2 overflow-x-auto sin-barra pb-1 -mx-1 px-1">
+            <div className="flex gap-2 overflow-x-auto sin-barra pb-1">
               {categoriasVisibles.map((c) => {
                 const suya = economiaDe(c.entityId);
                 return (
@@ -521,7 +464,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           value={accountId}
           onChange={(e) => setAccountId(e.target.value)}
         >
-          <option value="">Elegí una cuenta</option>
+          <option value="">Elige una cuenta</option>
           {activas.map((c) => (
             <option key={c.id} value={c.id}>
               {etiquetaCuenta(c, members)} · {formatMonto(c.balanceMinor, c.currency, { compacto: true })}
@@ -531,7 +474,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
 
         {esTransferencia && (
           <Selector etiqueta="Hacia" value={destAccountId} onChange={(e) => setDestAccountId(e.target.value)}>
-            <option value="">Elegí una cuenta</option>
+            <option value="">Elige una cuenta</option>
             {activas.filter((c) => c.id !== accountId).map((c) => (
               <option key={c.id} value={c.id}>{etiquetaCuenta(c, members)}</option>
             ))}
@@ -553,18 +496,14 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
         {!esTransferencia && !repartir && jars.length > 0 && (
           <Selector etiqueta="Jarra" value={jarId} onChange={(e) => setJarId(e.target.value)}>
             <option value="">Sin jarra</option>
-            {jarrasPropias.map((j) => (
-              <option key={j.id} value={j.id}>
-                {j.name} · {formatMonto(j.balanceMinor, moneda, { compacto: true })}
-              </option>
-            ))}
-            {entities.filter((e) => (
-              !e.archived
-              && e.id !== (jarrasPropias[0]?.entityId ?? null)
-              && jars.some((j) => j.entityId === e.id)
-            )).map((e) => (
-              <optgroup key={e.id} label={e.name}>
-                {jars.filter((j) => j.entityId === e.id).map((j) => (
+            {/* TODOS los grupos dicen de qué economía son, el primero
+                incluido. Antes las de la economía actual iban sueltas y sin
+                título, y las otras sí con el suyo: la lista decía «PanaClaw»
+                y «BukoFlow» pero se callaba que las de arriba eran de la
+                familia, así que parecía que faltaba una. */}
+            {economiasConJarras.map((e) => (
+              <optgroup key={e.id ?? 'sueltas'} label={e.nombre}>
+                {e.jarras.map((j) => (
                   <option key={j.id} value={j.id}>
                     {j.name} · {formatMonto(j.balanceMinor, moneda, { compacto: true })}
                   </option>
@@ -585,7 +524,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
               <span className="font-semibold tabular text-red-500">
                 {formatMonto(sobregiro.queda, moneda)}
               </span>.
-              {' '}Se guarda igual; después podés moverle plata desde otra jarra.
+              {' '}Se guarda igual; después puedes moverle plata desde otra jarra.
             </p>
           </div>
         )}
@@ -613,7 +552,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
         {tipo === TxType.GASTO && eventosAbiertos.length > 0 && (
           <div>
             <span className="block text-xs font-medium txt-2 mb-2">¿Es de algún presupuesto?</span>
-            <div className="flex gap-2 overflow-x-auto sin-barra pb-1 -mx-1 px-1">
+            <div className="flex gap-2 overflow-x-auto sin-barra pb-1">
               {eventosAbiertos.map((b) => {
                 const elegido = budgetId === b.id;
                 return (

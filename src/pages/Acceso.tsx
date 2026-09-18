@@ -52,7 +52,7 @@ function Ingreso() {
   }
 
   return (
-    <Marco titulo="Nuestros gastos" subtitulo="Entrá con tu email y contraseña.">
+    <Marco titulo="Nuestros gastos" subtitulo="Entra con tu email y contraseña.">
       <form onSubmit={enviar} className="space-y-3">
         <Campo
           type="email"
@@ -115,7 +115,7 @@ function Instalacion() {
   return (
     <Marco
       titulo="Primera vez"
-      subtitulo="Creá tu hogar. Después sumás a tu pareja desde Ajustes."
+      subtitulo="Crea tu hogar. Después sumas a tu pareja desde Ajustes."
     >
       <form onSubmit={enviar} className="space-y-3">
         <Campo
@@ -136,7 +136,7 @@ function Instalacion() {
           etiqueta="Tu nombre"
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
-          placeholder="Cómo te llamás"
+          placeholder="Cómo te llamas"
           required
         />
         <Campo

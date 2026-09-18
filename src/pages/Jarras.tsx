@@ -154,27 +154,13 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold txt tracking-tight">Jarras</h1>
-        {jars.length > 0 && (
-          <div className="flex gap-2">
-            <Boton variante="secundario" onClick={() => setTraspasando(true)} className="px-3">
-              <Icono nombre="arrow-left-right" size={16} /> Mover
-            </Boton>
-            <Boton variante="secundario" onClick={() => setEditando(true)} className="px-3">
-              <Icono nombre="settings-2" size={16} /> Ajustar
-            </Boton>
-          </div>
-        )}
-      </div>
-
       {visibles.length === 0 ? (
         <Tarjeta>
           <Vacio
             icono="piggy-bank"
             titulo={entidadActiva === null ? 'Sin jarras' : 'Todavía no reparte'}
             texto={entidadActiva === null
-              ? 'Repartí cada ingreso en frascos con un propósito: necesidades, ahorro, diversión. Te da control sin llevar la cuenta a mano.'
+              ? 'Reparte cada ingreso en frascos con un propósito: necesidades, ahorro, diversión. Te da control sin llevar la cuenta a mano.'
               : 'Esta economía todavía no tiene jarras. Un negocio suele querer separar impuestos, insumos y publicidad de cada cobro, antes de que la plata se mezcle.'}
             accion={<Boton onClick={() => setEditando(true)}>Crear jarras</Boton>}
           />
@@ -287,30 +273,19 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
                       {/* Sin `truncate`: a 390px «10% de cada ingreso · acumula»
                           se cortaba en «... · ...» y el dato desaparecia. Que
                           baje a dos renglones es mejor que un puntito. */}
-                      <p className="text-xs txt-3 leading-snug">
-                        {describirLlenado(j, moneda)}
-                        {j.acumula && ' · acumula'}
-                      </p>
+                      <p className="text-xs txt-3 leading-snug">{describirLlenado(j, moneda)}</p>
                     </div>
                     {/* UN solo numero, y es lo que se puede gastar. Antes
-                        estaba el saldo arriba y abajo «Podés gastar» el MISMO
+                        estaba el saldo arriba y abajo «Puedes gastar» el MISMO
                         monto escrito de nuevo: dos renglones para un dato.
                         Queda el numero, porque es el que se busca, y la
                         palabra que lo explica va chiquita al lado. */}
-                    <div className="text-right shrink-0">
-                      <p className={cn(
-                        'text-lg font-semibold tabular leading-none',
-                        enRojo ? 'text-red-500' : 'txt',
-                      )}>
-                        {formatMonto(enRojo ? -j.balanceMinor : j.balanceMinor, moneda)}
-                      </p>
-                      <p className={cn(
-                        'text-[10px] mt-1',
-                        enRojo ? 'text-red-500' : 'txt-3',
-                      )}>
-                        {enRojo ? 'de más' : j.balanceMinor === 0 ? 'vacía' : 'disponible'}
-                      </p>
-                    </div>
+                    <p className={cn(
+                      'text-lg font-semibold tabular shrink-0',
+                      enRojo ? 'text-red-500' : 'txt',
+                    )}>
+                      {formatMonto(j.balanceMinor, moneda)}
+                    </p>
                     <Icono nombre="chevron-right" size={16} className="txt-3 shrink-0 -mr-1" />
                   </div>
 
@@ -327,7 +302,7 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
                   {enRojo ? (
                     <p className="text-[11px] text-red-500 mt-2 leading-relaxed">
                       Salió más de lo que esta jarra recibió en toda su vida.
-                      Movele plata desde otra con «Mover».
+                      Pásale plata desde otra con «Mover».
                     </p>
                   ) : (
                     <p className="text-[11px] txt-3 mt-2">
@@ -349,11 +324,6 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
           </div>
           ))}
 
-          <p className="text-xs txt-3 text-center px-4 leading-relaxed">
-            Al registrar un ingreso, marcá "Repartir entre las jarras" y el
-            monto se divide según estos porcentajes, al centavo. Lo que sobra de
-            un mes no se pierde: se queda en la jarra.
-          </p>
         </>
       )}
 
@@ -548,7 +518,7 @@ function HojaTraspaso({ abierta, alCerrar, desde }: {
             setEconomiaDestino('');
           }}
         >
-          <option value="">Elegí una jarra</option>
+          <option value="">Elige una jarra</option>
           {porEconomia
             ? porEconomia.map(({ economia, jarras }) => (
               <optgroup key={economia.id} label={economia.name}>
@@ -578,7 +548,7 @@ function HojaTraspaso({ abierta, alCerrar, desde }: {
             else { setEconomiaDestino(''); setDestino(v); }
           }}
         >
-          <option value="">Elegí a dónde va</option>
+          <option value="">Elige a dónde va</option>
           {jars.filter((j) => j.id !== origen).map((j) => (
             <option key={j.id} value={j.id}>
               {j.name} · {formatMonto(j.balanceMinor, moneda)}
@@ -754,15 +724,9 @@ function MovimientosDeJarra({ jarra, alCerrar, alVerMovimiento, alMover, alPoner
             'text-3xl font-bold tabular tracking-tight mt-3',
             jarra.balanceMinor < 0 ? 'text-red-500' : 'txt',
           )}>
-            {formatMonto(jarra.balanceMinor < 0 ? -jarra.balanceMinor : jarra.balanceMinor, moneda)}
+            {formatMonto(jarra.balanceMinor, moneda)}
           </p>
-          <p className={cn(
-            'text-xs mt-1',
-            jarra.balanceMinor < 0 ? 'text-red-500' : 'txt-3',
-          )}>
-            {jarra.balanceMinor < 0 ? 'gastado de más' : 'disponible'}
-            {' · '}{describirLlenado(jarra, moneda)}
-          </p>
+          <p className="text-xs txt-3 mt-1">{describirLlenado(jarra, moneda)}</p>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -793,7 +757,7 @@ function MovimientosDeJarra({ jarra, alCerrar, alVerMovimiento, alMover, alPoner
           <Vacio
             icono="receipt-text"
             titulo="Sin movimientos"
-            texto="Esta jarra todavía no recibió ni gastó nada. Repartí un ingreso o imputale un gasto."
+            texto="Esta jarra todavía no recibió ni gastó nada. Reparte un ingreso o impútale un gasto."
           />
         ) : (
           <div>
@@ -1319,7 +1283,7 @@ function HojaAsignar({ abierta, alCerrar, disponible, hacia }: {
       <div className="space-y-4">
         <p className="text-xs txt-3 leading-relaxed">
           No se mueve plata de ninguna cuenta: ya está ahí. Lo único que cambia
-          es para qué está guardada. Si te arrepentís, se deshace desde la jarra.
+          es para qué está guardada. Si te arrepientes, se deshace desde la jarra.
         </p>
 
         <Campo

@@ -63,7 +63,6 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
   // El patrimonio es la excepcion: las cuentas estan mezcladas, no hay una que
   // sea de un negocio. Filtrarlo seria inventar un numero que no existe.
   const patrimonio = useMemo(() => calcularPatrimonio(accounts), [accounts]);
-  const cuantasCuentas = useMemo(() => accounts.filter((c) => !c.archived).length, [accounts]);
   const porPers = useMemo(() => porPersona(delMes, members), [delMes, members]);
   const gastoPorCat = useMemo(() => porCategoria(delMes, categories, 'gasto').slice(0, 5), [delMes, categories]);
   const presupuestos = useMemo(
@@ -128,12 +127,10 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
       <HeroPatrimonio
         montoMinor={patrimonio}
         moneda={moneda}
-        /* Las cuentas estan mezcladas: no hay una que sea de un negocio.
-           Decirlo evita leer este numero como si fuera de la economia que
-           se esta mirando. */
-        pie={nombreActiva
-          ? 'Todas las economías juntas · las cuentas no se separan'
-          : `En ${cuantasCuentas} cuenta${cuantasCuentas === 1 ? '' : 's'}`}
+        /* Solo cuando hace falta: las cuentas estan mezcladas, no hay una que
+           sea de un negocio, y sin decirlo este numero se leeria como si
+           fuera de la economia que se esta mirando. */
+        pie={nombreActiva ? 'Todas las economías juntas' : undefined}
       />
     ),
 
@@ -148,7 +145,7 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
                 <div className="flex items-baseline justify-between mb-1.5">
                   <span className="text-sm font-medium txt truncate">
                     {member.displayName}
-                    {member.id === me?.id && <span className="txt-3 font-normal"> (vos)</span>}
+                    {member.id === me?.id && <span className="txt-3 font-normal"> (tú)</span>}
                   </span>
                   <span className="text-sm font-semibold tabular txt shrink-0 ml-2">
                     {formatMonto(r.gastoMinor, moneda)}
@@ -237,7 +234,7 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
             <Vacio
               icono="receipt-text"
               titulo="Todavía no hay nada"
-              texto="Registrá tu primer movimiento y va a aparecer acá, también en el teléfono de tu pareja."
+              texto="Registra tu primer movimiento y va a aparecer acá, también en el teléfono de tu pareja."
               accion={<Boton onClick={alAgregar}>Registrar el primero</Boton>}
             />
           ) : (
@@ -246,7 +243,7 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
             <Vacio
               icono="search-x"
               titulo="Nada en este período"
-              texto="Movete de período con el selector de arriba para ver otros movimientos."
+              texto="Muévete de período con el selector de arriba para ver otros movimientos."
             />
           )
         ) : (
@@ -286,17 +283,18 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
 export function HeroPatrimonio({ montoMinor, moneda, pie, extra }: {
   montoMinor: number;
   moneda: string;
-  pie: string;
+  /** Solo si hay algo que aclarar. Contar las cuentas no lo era. */
+  pie?: string;
   /** Lo que va debajo del pie, si la pantalla tiene algo mas que decir. */
   extra?: React.ReactNode;
 }) {
   return (
     <Tarjeta className="bg-linear-to-br from-marca-600 to-marca-700 border-transparent text-white">
-      <p className="text-sm opacity-80 mb-1">Lo que tenemos</p>
+      <p className="text-sm opacity-80 mb-1">Patrimonio neto</p>
       <p className="text-[2.75rem] leading-[1.05] font-bold tabular tracking-tight">
         {formatMonto(montoMinor, moneda)}
       </p>
-      <p className="text-xs opacity-70 mt-1.5">{pie}</p>
+      {pie && <p className="text-xs opacity-70 mt-1.5">{pie}</p>}
       {extra}
     </Tarjeta>
   );

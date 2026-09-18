@@ -29,7 +29,7 @@ export async function crear(req: Request, env: Env, sesion: Sesion): Promise<Res
 
   const fromJarId = texto(body.fromJarId, 'fromJarId', { max: 64, min: 1 });
   const toJarId = texto(body.toJarId, 'toJarId', { max: 64, min: 1 });
-  if (fromJarId === toJarId) return error('Elegí dos jarras distintas', 400);
+  if (fromJarId === toJarId) return error('Elige dos jarras distintas', 400);
 
   const amountMinor = entero(body.amountMinor, 'amountMinor', { min: 1, max: MAX_MONTO });
   const note = textoOpcional(body.note, 'note', 200);

@@ -128,7 +128,7 @@ async function manejarApi(req: Request, env: Env, url: URL): Promise<Response> {
 
   // --- de aca en adelante hace falta sesion -----------------------------
   const sesion = await sesionActual(req, env);
-  if (!sesion) return error('Necesitás iniciar sesión', 401);
+  if (!sesion) return error('Necesitas iniciar sesión', 401);
 
   // Conexion de tiempo real. Se valida la sesion aca y recien despues se
   // entrega al Durable Object del hogar, que es el unico que ve a ambos.

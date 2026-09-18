@@ -66,7 +66,7 @@ export function Campo({
       <input
         {...props}
         className={cn(
-          'w-full min-h-11 px-3.5 rounded-2xl superficie-2 borde border txt shadow-[inset_0_1px_2px_rgb(0_0_0/0.05)]',
+          'w-full min-w-0 max-w-full min-h-11 px-3.5 rounded-2xl superficie-2 borde border txt shadow-[inset_0_1px_2px_rgb(0_0_0/0.05)]',
           // 16px es el minimo que evita que iOS haga zoom al enfocar.
           'text-base outline-none transition-all duration-100',
           'focus:border-marca-500 focus:ring-4 focus:ring-marca-500/15',
@@ -531,7 +531,15 @@ export function Hoja({ abierta, alCerrar, titulo, children, pie, accion }: {
             </div>
           </div>
         </div>
-        <div className={cn('flex-1 overflow-y-auto sin-barra px-5 py-4', !pie && 'safe-bottom')}>
+        {/* `overflow-x-hidden` a proposito: si un hijo se pasa de ancho —un
+            campo de fecha con su calendario, una fila de fichas— la hoja
+            entera se podia arrastrar de lado y se rompia la proporcion. Que
+            se desplace algo a lo ancho es decision del hijo (una fila de
+            fichas lo pide), no un accidente de la hoja. */}
+        <div className={cn(
+          'flex-1 overflow-y-auto overflow-x-hidden sin-barra px-5 py-4',
+          !pie && 'safe-bottom',
+        )}>
           {children}
         </div>
         {pie && (

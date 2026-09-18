@@ -14,7 +14,7 @@ import {
 } from '@shared/types';
 import { calcularPatrimonio } from '@shared/domain';
 import {
-  Barra, Boton, Campo, COLORES, Ficha, Hoja, Icono, Selector, SelectorColor, Tarjeta, Vacio,
+  Boton, Campo, COLORES, Ficha, Hoja, Icono, Selector, SelectorColor, Tarjeta, Vacio,
 } from '../components/ui/base.tsx';
 import { HeroPatrimonio } from './Inicio.tsx';
 import { cn } from '../lib/utils.ts';
@@ -70,7 +70,7 @@ export function Cuentas() {
           <Vacio
             icono="wallet"
             titulo="Sin cuentas todavía"
-            texto="Creá una cuenta para empezar a registrar movimientos: efectivo, banco, tarjeta."
+            texto="Crea una cuenta para empezar a registrar movimientos: efectivo, banco, tarjeta."
             accion={<Boton onClick={abrirNueva}>Crear la primera</Boton>}
           />
         </Tarjeta>
@@ -82,15 +82,14 @@ export function Cuentas() {
           <HeroPatrimonio
             montoMinor={patrimonio}
             moneda={moneda}
-            pie={`En ${activas.length} cuenta${activas.length === 1 ? '' : 's'}`}
             extra={pasivos.length > 0 ? (
               <div className="grid grid-cols-2 gap-3 mt-4 pt-3.5 border-t border-white/15">
                 <div>
-                  <p className="text-[11px] opacity-70 mb-0.5">Tenés</p>
+                  <p className="text-[11px] opacity-70 mb-0.5">Tienes</p>
                   <p className="font-semibold tabular">{formatMonto(totalActivos, moneda)}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] opacity-70 mb-0.5">Debés</p>
+                  <p className="text-[11px] opacity-70 mb-0.5">Debes</p>
                   <p className="font-semibold tabular">{formatMonto(totalPasivos, moneda)}</p>
                 </div>
               </div>
@@ -98,22 +97,10 @@ export function Cuentas() {
           />
 
           {activos.length > 0 && (
-            <Grupo
-              titulo="Lo que tenés"
-              cuentas={activos}
-              alTocar={abrirEdicion}
-              members={members}
-              total={totalActivos}
-            />
+            <Grupo titulo="Lo que tienes" cuentas={activos} alTocar={abrirEdicion} members={members} />
           )}
           {pasivos.length > 0 && (
-            <Grupo
-              titulo="Lo que debés"
-              cuentas={pasivos}
-              alTocar={abrirEdicion}
-              members={members}
-              total={totalPasivos}
-            />
+            <Grupo titulo="Lo que debes" cuentas={pasivos} alTocar={abrirEdicion} members={members} />
           )}
           {archivadas.length > 0 && (
             <Grupo titulo="Archivadas" cuentas={archivadas} alTocar={abrirEdicion} members={members} />
@@ -130,13 +117,11 @@ export function Cuentas() {
   );
 }
 
-function Grupo({ titulo, cuentas, alTocar, members, total }: {
+function Grupo({ titulo, cuentas, alTocar, members }: {
   titulo: string;
   cuentas: Account[];
   alTocar: (c: Account) => void;
   members: { id: string; displayName: string }[];
-  /** Para la barra de reparto. Sin esto el grupo se dibuja sin barras. */
-  total?: number;
 }) {
   return (
     <Tarjeta className="py-3">
@@ -146,13 +131,6 @@ function Grupo({ titulo, cuentas, alTocar, members, total }: {
           const dueno = c.owner === 'compartida'
             ? 'Compartida'
             : members.find((m) => m.id === c.owner)?.displayName ?? 'Personal';
-          // Que parte del grupo es esta cuenta. La misma barra fina que usa
-          // "Quién gastó" en el Inicio: aca tambien es un reparto, no un
-          // limite, y por eso nunca se pone roja.
-          const parte = total && total > 0 && cuentas.length > 1
-            ? Math.abs(c.balanceMinor) / total
-            : null;
-
           return (
             <button
               key={c.id}
@@ -173,11 +151,6 @@ function Grupo({ titulo, cuentas, alTocar, members, total }: {
                 <p className="text-xs txt-3 truncate mt-0.5">
                   {ACCOUNT_CATEGORY_LABEL[c.category]} · {dueno}
                 </p>
-                {parte !== null && (
-                  <div className="mt-1.5">
-                    <Barra ratio={parte} color={c.color} fina />
-                  </div>
-                )}
               </div>
             </button>
           );
@@ -318,7 +291,7 @@ function FormularioCuenta({ abierta, alCerrar, editando }: {
         />
         {editando && !cambioElSaldo && (
           <p className="text-xs txt-3 px-1 -mt-2 leading-relaxed">
-            Se calcula solo con cada movimiento. Escribí otro número si la
+            Se calcula solo con cada movimiento. Escribe otro número si la
             cuenta real dice algo distinto y no aparece por qué.
           </p>
         )}

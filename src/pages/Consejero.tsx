@@ -178,7 +178,7 @@ export function Consejero() {
           value={pregunta}
           onChange={(e) => setPregunta(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') void enviar(pregunta); }}
-          placeholder="Preguntá algo..."
+          placeholder="Pregunta algo..."
           disabled={pensando}
           className="flex-1 min-w-0 min-h-12 px-4 rounded-2xl superficie borde border txt text-base outline-none focus:border-marca-500 disabled:opacity-50"
         />

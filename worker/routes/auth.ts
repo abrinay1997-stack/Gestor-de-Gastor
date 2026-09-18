@@ -26,14 +26,14 @@ export async function setup(req: Request, env: Env): Promise<Response> {
   const body = await cuerpo(req);
 
   if (!env.SETUP_KEY) {
-    return error('Falta configurar SETUP_KEY. Cargala como secreto en GitHub y volvé a publicar.', 503);
+    return error('Falta configurar SETUP_KEY. Cargala como secreto en GitHub y vuelve a publicar.', 503);
   }
   if (texto(body.setupKey, 'setupKey', { max: 200 }) !== env.SETUP_KEY) {
     return error('Clave de instalación incorrecta', 403);
   }
 
   const existente = await env.DB.prepare('SELECT id FROM household LIMIT 1').first();
-  if (existente) return error('El hogar ya fue creado. Entrá con tu email y contraseña.', 409);
+  if (existente) return error('El hogar ya fue creado. Entra con tu email y contraseña.', 409);
 
   const mail = email(body.email);
   const pass = claveDerivada(body.password);

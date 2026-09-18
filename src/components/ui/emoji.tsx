@@ -94,7 +94,7 @@ export function SelectorEmoji({ valor, alElegir, color }: {
       </div>
 
       {busqueda.trim() && visibles.length === 0 && (
-        <p className="text-xs txt-3 px-1">Nada con esa palabra. Probá con otra.</p>
+        <p className="text-xs txt-3 px-1">Nada con esa palabra. Prueba con otra.</p>
       )}
 
       <div className="grid grid-cols-8 gap-1.5">

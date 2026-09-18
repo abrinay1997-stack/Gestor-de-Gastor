@@ -242,9 +242,9 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
               ? `Nada en ${nombreActiva}`
               : activos > 0 ? 'Nada coincide' : 'Período sin movimientos'}
             texto={vacioPorLaEconomia
-              ? `Hay ${hayEnElPeriodo} movimiento${hayEnElPeriodo === 1 ? '' : 's'} este mes, pero ninguno es de ${nombreActiva}. Un movimiento pertenece a la economía de su categoría: asigná las categorías de ${nombreActiva} en Ajustes → Categorías.`
+              ? `Hay ${hayEnElPeriodo} movimiento${hayEnElPeriodo === 1 ? '' : 's'} este mes, pero ninguno es de ${nombreActiva}. Un movimiento pertenece a la economía de su categoría: asigna las categorías de ${nombreActiva} en Ajustes → Categorías.`
               : activos > 0
-                ? 'Probá cambiando los filtros o buscando otra cosa.'
+                ? 'Prueba cambiando los filtros o buscando otra cosa.'
                 : 'No hay movimientos registrados en este período.'}
             accion={vacioPorLaEconomia
               ? <Boton variante="secundario" onClick={() => verEntidad(null)}>Ver todo</Boton>
