@@ -168,7 +168,14 @@ export function sumarMinor(...valores: number[]): number {
 }
 
 /** Porcentaje en puntos base a texto legible: 250 -> "2,5%". */
+/**
+ * Un porcentaje, siempre entero.
+ *
+ * Los puntos base admiten decimales —2550 es 25,5%— pero una jarra con «25,5%
+ * de cada ingreso» no se lee, se descifra. Los porcentajes que se eligen a
+ * mano son enteros; el redondeo al centavo lo resuelve el reparto, no la
+ * etiqueta.
+ */
 export function formatBp(bp: number): string {
-  const pct = bp / 100;
-  return `${Number.isInteger(pct) ? pct : pct.toFixed(1).replace('.', ',')}%`;
+  return `${Math.round(bp / 100)}%`;
 }

@@ -471,6 +471,8 @@ export interface Member {
    * Es por persona: cada uno acomoda su pantalla como quiere.
    */
   homeLayout: SeccionInicio[];
+  /** Lo mismo, para la pantalla de movimientos. Vacio = el de fabrica. */
+  movesLayout: SeccionMovimientos[];
   /**
    * Tema de esta persona. 'auto' sigue al telefono, que es lo de siempre.
    * Es por persona y no por hogar: son dos telefonos y dos gustos.
@@ -498,9 +500,25 @@ export const SECCIONES_INICIO = [
 ] as const;
 export type SeccionInicio = (typeof SECCIONES_INICIO)[number];
 
+/**
+ * Las piezas de la pantalla de movimientos que se pueden ordenar u ocultar.
+ *
+ * La lista en si no esta: es la pantalla, no una seccion. Lo que se acomoda es
+ * lo que va ARRIBA de ella, que es justo lo que empuja los movimientos fuera de
+ * la vista al abrir.
+ */
+export const SECCIONES_MOVIMIENTOS = ['periodo', 'buscador', 'resumen'] as const;
+export type SeccionMovimientos = (typeof SECCIONES_MOVIMIENTOS)[number];
+
+export const SECCION_MOVIMIENTOS_LABEL: Record<SeccionMovimientos, string> = {
+  'periodo': 'Selector de período',
+  'buscador': 'Buscador y filtros',
+  'resumen': 'Totales del período',
+};
+
 export const SECCION_LABEL: Record<SeccionInicio, string> = {
   'resumen': 'Balance del mes',
-  'patrimonio': 'Patrimonio total',
+  'patrimonio': 'Patrimonio',
   'quien-gasto': 'Quién gastó',
   'presupuestos': 'Presupuestos',
   'por-categoria': 'En qué se fue',

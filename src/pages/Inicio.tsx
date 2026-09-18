@@ -18,7 +18,7 @@ import {
   SECCIONES_INICIO, TxType, type Recurring, type SeccionInicio, type Transaction,
 } from '@shared/types';
 import { describirRegla } from '@shared/recurrencia';
-import { fechaCorta, nombreMes } from '../lib/utils.ts';
+import { fechaCorta } from '../lib/utils.ts';
 import {
   Avatar, Barra, Boton, Deslizable, Ficha, Icono, Tarjeta, Vacio,
 } from '../components/ui/base.tsx';
@@ -165,10 +165,7 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
 
     'presupuestos': presupuestos.length > 0 ? (
       <Tarjeta>
-        <h2 className="font-semibold txt mb-0.5">Presupuestos</h2>
-        {/* Siempre del mes entero, aunque arriba haya un rango: es lo que un
-            tope mensual significa. Decirlo evita leerlo como del rango. */}
-        <p className="text-xs txt-3 mb-3">{nombreMes(mes)}</p>
+        <h2 className="font-semibold txt mb-3.5">Presupuestos</h2>
         <div className="space-y-3.5">
           {presupuestos.map(({ budget, gastadoMinor, ratio }) => {
             const cat = categories.find((c) => c.id === budget.categoryId);
@@ -183,7 +180,7 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
                     {formatMonto(gastadoMinor, moneda, { compacto: true })} / {formatMonto(budget.amountMinor, moneda, { compacto: true })}
                   </span>
                 </div>
-                <Barra ratio={ratio} color={cat?.color ?? '#10b981'} alerta />
+                <Barra ratio={ratio} color={cat?.color ?? '#10b981'} alerta fina />
               </div>
             );
           })}
@@ -228,7 +225,7 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
 
     'ultimos': (
       <Tarjeta>
-        <h2 className="font-semibold txt mb-1">Últimos movimientos</h2>
+        <h2 className="font-semibold txt mb-3.5">Últimos movimientos</h2>
         {ultimos.length === 0 ? (
           transactions.length === 0 ? (
             <Vacio
@@ -298,16 +295,17 @@ export function HeroPatrimonio({ montoMinor, moneda, pie, extra, accion }: {
 }) {
   return (
     <Tarjeta className="bg-linear-to-br from-marca-600 to-marca-700 border-transparent text-white">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm opacity-80 mb-1">Patrimonio neto</p>
-          <p className="text-[2.75rem] leading-[1.05] font-bold tabular tracking-tight">
-            {formatMonto(montoMinor, moneda)}
-          </p>
-        </div>
-        {accion && <div className="shrink-0 -mr-1 -mt-1">{accion}</div>}
+      {/* El botón flota arriba a la derecha para que el número quede centrado
+          de verdad: en una fila de dos columnas el texto se corría a la
+          izquierda por el ancho del botón. */}
+      <div className="relative text-center">
+        {accion && <div className="absolute right-0 -top-1">{accion}</div>}
+        <p className="text-sm opacity-80 mb-1">Patrimonio</p>
+        <p className="text-[2.75rem] leading-[1.05] font-bold tabular tracking-tight">
+          {formatMonto(montoMinor, moneda)}
+        </p>
+        {pie && <p className="text-xs opacity-70 mt-1.5">{pie}</p>}
       </div>
-      {pie && <p className="text-xs opacity-70 mt-1.5">{pie}</p>}
       {extra}
     </Tarjeta>
   );

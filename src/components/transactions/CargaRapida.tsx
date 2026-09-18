@@ -17,7 +17,7 @@ import {
   entidadDe, entidadPorDefecto, imputacionJarras, indexarCategorias, jarrasDe,
 } from '@shared/domain';
 import { esEvento, TxType, type Transaction, type TransactionInput } from '@shared/types';
-import { aInputDate, deInputDate, vibrar } from '../../lib/utils.ts';
+import { aInputDate, deInputDate, fechaCorta, vibrar } from '../../lib/utils.ts';
 import { Avatar, Boton, Campo, Ficha, Hoja, Icono, Selector } from '../ui/base.tsx';
 import { cn } from '../../lib/utils.ts';
 
@@ -73,6 +73,9 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // La fecha empieza plegada: casi siempre es hoy.
+  const [fechaAbierta, setFechaAbierta] = useState(false);
+
   const refFrase = useRef<HTMLInputElement>(null);
   const refMonto = useRef<HTMLInputElement>(null);
 
@@ -114,6 +117,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
     // teclea. `inputMode="decimal"` hace que el telefono abra el teclado
     // numerico solo, sin que haya que dibujar ninguno.
     if (!editando) setTimeout(() => refMonto.current?.focus(), 120);
+    setFechaAbierta(false);
     setError(null);
   }, [abierta, editando, moneda, activas, me]);
 
@@ -150,15 +154,6 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
       });
   }, [categories, tipoCategoria, entities, entidadActiva]);
 
-  // Con una sola economia el nombre no aporta nada. Con dos, es la diferencia
-  // entre cargar "Suscripciones" de la casa o la del negocio, que son gastos
-  // de dueños distintos y terminan en jarras distintas.
-  const variasEconomias = useMemo(
-    () => entities.filter((e) => !e.archived).length > 1,
-    [entities],
-  );
-  const economiaDe = (id: string | null) => entities.find((e) => e.id === id);
-
   const cuentaSel = activas.find((c) => c.id === accountId);
 
   const puedeGuardar =
@@ -179,6 +174,25 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
     );
     return jarrasDe(jars, suya, entidadPorDefecto(entities));
   }, [jars, categories, entities, categoryId, editando]);
+
+  /** Las categorias visibles, agrupadas por economia para el desplegable. */
+  const categoriasPorEconomia = useMemo(() => {
+    const grupos: { id: string | null; nombre: string; categorias: typeof categories }[] = [];
+    for (const c of categoriasVisibles) {
+      const clave = c.entityId;
+      let g = grupos.find((x) => x.id === clave);
+      if (!g) {
+        g = {
+          id: clave,
+          nombre: entities.find((e) => e.id === clave)?.name ?? 'Sin economía',
+          categorias: [],
+        };
+        grupos.push(g);
+      }
+      g.categorias.push(c);
+    }
+    return grupos;
+  }, [categoriasVisibles, entities]);
 
   /**
    * Las jarras agrupadas por economia, con la de este movimiento primero.
@@ -419,42 +433,25 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
         />
 
         {!esTransferencia && categoriasVisibles.length > 0 && (
-          <div>
-            <span className="block text-xs font-medium txt-2 mb-2">Categoría</span>
-            <div className="flex gap-2 overflow-x-auto sin-barra pb-1">
-              {categoriasVisibles.map((c) => {
-                const suya = economiaDe(c.entityId);
-                return (
-                  <button
-                    key={c.id}
-                    onClick={() => setCategoryId(categoryId === c.id ? '' : c.id)}
-                    className={cn(
-                      'shrink-0 min-h-11 px-3 rounded-xl border text-sm font-medium flex items-center gap-1.5 transition-all',
-                      categoryId === c.id ? 'border-transparent text-white' : 'superficie-2 borde txt-2',
-                    )}
-                    style={categoryId === c.id ? { background: c.color } : undefined}
-                  >
-                    <Icono nombre={c.icon} size={15} />
-                    <span className="flex flex-col items-start leading-tight">
-                      {c.name}
-                      {variasEconomias && (
-                        <span
-                          className="text-[10px] font-normal"
-                          style={{
-                            color: categoryId === c.id
-                              ? 'rgb(255 255 255 / 0.75)'
-                              : (suya?.color ?? 'var(--texto-3)'),
-                          }}
-                        >
-                          {suya?.name ?? 'Sin economía'}
-                        </span>
-                      )}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          /* Un desplegable, igual que cuenta y jarra. La fila de fichas se veia
+             bien con seis categorias; con treinta hay que arrastrar a ciegas
+             buscando una, y las de las otras economias quedan siempre al final
+             del recorrido. Un `select` las agrupa por economia y el telefono
+             lo dibuja a pantalla completa. */
+          <Selector
+            etiqueta="Categoría"
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+          >
+            <option value="">Sin categoría</option>
+            {categoriasPorEconomia.map((g) => (
+              <optgroup key={g.id ?? 'sueltas'} label={g.nombre}>
+                {g.categorias.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </optgroup>
+            ))}
+          </Selector>
         )}
 
         {/* Cuenta, y justo debajo la jarra: el dinero sale de una cuenta y se
@@ -627,7 +624,30 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           </div>
         )}
 
-        <Campo etiqueta="Fecha" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+        {/* La fecha, plegada. El campo `date` nativo abre su calendario dentro
+            del formulario y se sale del ancho; casi siempre es hoy, así que se
+            muestra escrita y solo se despliega si hay que cambiarla. */}
+        <div>
+          <span className="block text-xs font-medium txt-2 mb-1.5">Fecha</span>
+          {fechaAbierta ? (
+            <Campo
+              type="date"
+              value={fecha}
+              autoFocus
+              onChange={(e) => setFecha(e.target.value)}
+              onBlur={() => setFechaAbierta(false)}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setFechaAbierta(true)}
+              className="w-full min-h-11 px-3.5 rounded-2xl superficie-2 borde border txt text-base text-left flex items-center justify-between gap-2"
+            >
+              <span className="truncate">{fechaCorta(deInputDate(fecha))}</span>
+              <Icono nombre="calendar-days" size={17} className="txt-3 shrink-0" />
+            </button>
+          )}
+        </div>
 
         <Campo
           etiqueta="Notas"

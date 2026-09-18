@@ -22,7 +22,7 @@ import { calcularJarras, calcularSaldos } from '@shared/domain';
 import type {
   Account, Budget, Category, Entity, Jar, JarAporte, JarImputacion, JarTransfer, LiveEvent,
   Tema,
-  Member, Recurring, SeccionInicio, Snapshot, Transaction, TransactionInput,
+  Member, Recurring, SeccionInicio, SeccionMovimientos, Snapshot, Transaction, TransactionInput,
 } from '@shared/types';
 
 const CLAVE_COLA = 'gg_cola_v1';
@@ -373,6 +373,7 @@ interface Acciones {
   guardarPerfil: (d: {
     displayName?: string; color?: string; emoji?: string;
     homeLayout?: SeccionInicio[];
+    movesLayout?: SeccionMovimientos[];
     /** Data URI ya recortada y achicada en el navegador. '' la quita. */
     photo?: string;
     theme?: Tema;

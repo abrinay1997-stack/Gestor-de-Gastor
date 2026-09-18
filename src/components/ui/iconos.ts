@@ -24,7 +24,7 @@ import {
   Glasses, GraduationCap, GripVertical, Guitar, Hammer, HandCoins, HandHeart,
   Handshake, Headphones, Heart, HeartHandshake, HeartPulse, House,
   IceCreamCone, Key, Lamp, Landmark, Laptop, Leaf, Library, Lightbulb, Lock,
-  LogOut, Luggage, Mail, MapPin, Mic, Milk, Mountain, Music, Newspaper,
+  LogOut, Luggage, Mail, MapPin, Mic, Milk, Minus, Mountain, Music, Newspaper,
   NotebookPen, Package, PaintRoller, Palette, Palmtree, ParkingMeter,
   PartyPopper, PawPrint, Pencil, Percent, Phone, PiggyBank, Pill, Pizza,
   Plane, PlaneLanding, PlaneTakeoff, Plug, Plus, Popcorn, Printer,
@@ -304,6 +304,7 @@ export const ICONOS: Record<string, LucideIcon> = {
   'toy-brick': ToyBrick,
   'train-front': TrainFront,
   'trash': Trash,
+  'minus': Minus,
   'trash-2': Trash2,
   /* El borrar del teclado de monto: la tecla con la flecha, no un tacho. */
   'delete': Delete,

@@ -17,10 +17,10 @@
 
 import type {
   Account, Adjustment, Budget, Category, Entity, Household, Jar, JarImputacion,
-  JarAporte, JarTransfer, Member, Recurring, SeccionInicio,
+  JarAporte, JarTransfer, Member, Recurring,
   Snapshot, Transaction,
 } from '../shared/types.ts';
-import { SECCIONES_INICIO, TEMAS } from '../shared/types.ts';
+import { SECCIONES_INICIO, SECCIONES_MOVIMIENTOS, TEMAS } from '../shared/types.ts';
 import type { AccountCategory, Tema, TxType } from '../shared/types.ts';
 import { calcularJarras } from '../shared/domain.ts';
 import type { Env } from './env.ts';
@@ -181,7 +181,8 @@ export const aMember = (f: Fila): Member => ({
   displayName: str(f.display_name),
   color: str(f.color),
   emoji: str(f.emoji),
-  homeLayout: aSecciones(f.home_layout),
+  homeLayout: aSecciones(f.home_layout, SECCIONES_INICIO),
+  movesLayout: aSecciones(f.moves_layout, SECCIONES_MOVIMIENTOS),
   theme: TEMAS.includes(f.theme as Tema) ? (f.theme as Tema) : 'auto',
   photo: str(f.photo),
   createdAt: int(f.created_at),
@@ -194,13 +195,13 @@ export const aMember = (f: Fila): Member => ({
  * algun dia se renombra o se quita una seccion, los ordenes viejos siguen
  * siendo utiles en lugar de romper la pantalla con una seccion fantasma.
  */
-function aSecciones(v: unknown): SeccionInicio[] {
+function aSecciones<T extends string>(v: unknown, validas: readonly T[]): T[] {
   if (typeof v !== 'string' || v === '') return [];
   try {
     const datos = JSON.parse(v);
     if (!Array.isArray(datos)) return [];
-    return datos.filter((x): x is SeccionInicio =>
-      typeof x === 'string' && (SECCIONES_INICIO as readonly string[]).includes(x));
+    return datos.filter((x): x is T =>
+      typeof x === 'string' && (validas as readonly string[]).includes(x));
   } catch {
     return [];
   }

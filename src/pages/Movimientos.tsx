@@ -10,7 +10,9 @@ import { useStore } from '../store/store.tsx';
 import { formatMonto } from '@shared/money';
 import { autorDe, filtrarPorEntidad, resumir } from '@shared/domain';
 import { dentroDe, periodoMes, type Periodo } from '@shared/periodo';
-import { TxType, type Transaction } from '@shared/types';
+import {
+  SECCIONES_MOVIMIENTOS, TxType, type SeccionMovimientos, type Transaction,
+} from '@shared/types';
 import { fechaCorta } from '../lib/utils.ts';
 import { Boton, Campo, Icono, Tarjeta, Vacio } from '../components/ui/base.tsx';
 import { SelectorPeriodo } from '../components/ui/periodo.tsx';
@@ -26,7 +28,7 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
   alAgregar: () => void;
 }) {
   const {
-    transactions: todos, categories, accounts, members, household, entities,
+    transactions: todos, categories, accounts, members, me, household, entities,
     entidadActiva, verEntidad,
   } = useStore();
 
@@ -100,15 +102,12 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
     setQuien('todos'); setTipo('todos'); setCategoria(''); setCuenta(''); setBusqueda('');
   };
 
-  return (
-    <div className="space-y-4">
-      <SelectorPeriodo periodo={periodo} alCambiar={setPeriodo} />
+  // Cada pieza de arriba, por separado. La lista no esta: es la pantalla, no
+  // una seccion. Lo que se acomoda es lo que la empuja fuera de la vista.
+  const piezas: Record<SeccionMovimientos, React.ReactNode> = {
+    'periodo': <SelectorPeriodo periodo={periodo} alCambiar={setPeriodo} />,
 
-      {/* El buscador se lleva todo el ancho que sobra y el filtro es un
-          cuadrado de su misma altura al lado. Lo que descuadraba antes no era
-          compartir fila sino que el filtro fuera una pastilla ancha con texto:
-          dejaba el campo corto y la fila coja. Cuadrado y del mismo alto, los
-          dos se leen como una sola pieza. */}
+    'buscador': (
       <div className="flex items-center gap-2">
         <div className="flex-1 min-w-0">
           <Campo
@@ -134,15 +133,33 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
           )}
         >
           <Icono nombre="filter" size={activos > 0 ? 16 : 18} />
-          {/* El numero adentro del cuadrado y no en un globito rojo encima:
-              el globito ya habia molestado, y aca no tapa nada. */}
           {activos > 0 && (
             <span className="text-[10px] font-semibold leading-none mt-0.5">{activos}</span>
           )}
         </button>
       </div>
+    ),
 
-      {verFiltros && (
+    'resumen': filtrados.length > 0 ? (
+      <div className="grid grid-cols-3 gap-2">
+        <Mini etiqueta="Movimientos" valor={String(resumen.cantidad)} />
+        <Mini etiqueta="Gastos" valor={formatMonto(resumen.gastoMinor, moneda, { compacto: true })} />
+        <Mini etiqueta="Ingresos" valor={formatMonto(resumen.ingresoMinor, moneda, { compacto: true })} />
+      </div>
+    ) : null,
+  };
+
+  const orden: SeccionMovimientos[] = me?.movesLayout?.length
+    ? me.movesLayout
+    : [...SECCIONES_MOVIMIENTOS];
+
+  return (
+    <div className="space-y-4">
+      {orden.map((k) => (piezas[k] ? <div key={k}>{piezas[k]}</div> : null))}
+
+      {/* Los filtros van pegados al buscador, esté donde esté: son su detalle
+          desplegado, no una sección aparte que se pueda mandar a otro lado. */}
+      {verFiltros && orden.includes('buscador') && (
         <div className="space-y-3 superficie-2 rounded-2xl p-3">
           {members.length > 1 && (
             <Segmentado
@@ -166,8 +183,6 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
             ]}
           />
 
-          {/* Cuando hay varias economias, la ficha dice de cual es: sin eso,
-              dos "Suscripciones" se ven identicas y el filtro parece roto. */}
           <div className="flex gap-2 overflow-x-auto sin-barra pb-1">
             {categories.filter((c) => (
               !c.archived && (entidadActiva === null || c.entityId === entidadActiva)
@@ -184,7 +199,7 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
                 <Icono nombre={c.icon} size={13} />
                 <span className="flex flex-col items-start leading-tight">
                   {c.name}
-                  {entidadActiva === null && entities.filter((e) => !e.archived).length > 1 && (
+                  {entidadActiva === null && entities.length > 1 && (
                     <span
                       className="text-[9px] font-normal"
                       style={{
@@ -202,7 +217,7 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
           </div>
 
           <div className="flex gap-2 overflow-x-auto sin-barra pb-1">
-            {accounts.filter((a) => !a.archived).map((a) => (
+            {accounts.map((a) => (
               <button
                 key={a.id}
                 onClick={() => setCuenta(cuenta === a.id ? '' : a.id)}
@@ -223,14 +238,6 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
               Limpiar filtros
             </button>
           )}
-        </div>
-      )}
-
-      {filtrados.length > 0 && (
-        <div className="grid grid-cols-3 gap-2">
-          <Mini etiqueta="Movimientos" valor={String(resumen.cantidad)} />
-          <Mini etiqueta="Gastos" valor={formatMonto(resumen.gastoMinor, moneda, { compacto: true })} />
-          <Mini etiqueta="Ingresos" valor={formatMonto(resumen.ingresoMinor, moneda, { compacto: true })} />
         </div>
       )}
 

@@ -66,7 +66,6 @@ export default function App() {
         {solapa === 'jarras' && <Jarras alVerMovimiento={setViendo} />}
         {solapa === 'ajustes' && (
           <Ajustes
-            alVerAnalisis={() => setSolapa('analisis')}
             alVerConsejero={() => setSolapa('consejero')}
           />
         )}

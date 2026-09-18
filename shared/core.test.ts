@@ -441,8 +441,8 @@ describe('autorDe', () => {
 });
 
 describe('porPersona', () => {
-  const ana: Member = { id: 'u1', householdId: 'h', email: 'a@a', displayName: 'Ana', color: '#f00', emoji: '', homeLayout: [], theme: 'auto', photo: '', createdAt: 0 };
-  const beto: Member = { id: 'u2', householdId: 'h', email: 'b@b', displayName: 'Beto', color: '#00f', emoji: '', homeLayout: [], theme: 'auto', photo: '', createdAt: 0 };
+  const ana: Member = { id: 'u1', householdId: 'h', email: 'a@a', displayName: 'Ana', color: '#f00', emoji: '', homeLayout: [], movesLayout: [], theme: 'auto', photo: '', createdAt: 0 };
+  const beto: Member = { id: 'u2', householdId: 'h', email: 'b@b', displayName: 'Beto', color: '#00f', emoji: '', homeLayout: [], movesLayout: [], theme: 'auto', photo: '', createdAt: 0 };
 
   it('atribuye a quien gasto, no a quien cargo', () => {
     const movs = [

@@ -12,7 +12,9 @@ import {
   ahora, booleano, color, cuerpo, difundir, entero, error, idOpcional,
   json, nuevoId, periodo, texto, unoDe,
 } from '../http.ts';
-import { AccountCategory, SECCIONES_INICIO, TEMAS, type Jar } from '../../shared/types.ts';
+import {
+  AccountCategory, SECCIONES_INICIO, SECCIONES_MOVIMIENTOS, TEMAS, type Jar,
+} from '../../shared/types.ts';
 import { validarJarras } from '../../shared/domain.ts';
 
 const CATEGORIAS_CUENTA = Object.values(AccountCategory);
@@ -530,6 +532,14 @@ export async function editarPerfil(req: Request, env: Env, sesion: Sesion): Prom
       typeof x === 'string' && validas.has(x)))] as typeof actual.homeLayout;
   }
 
+  let movesLayout = actual.movesLayout;
+  if (body.movesLayout !== undefined) {
+    if (!Array.isArray(body.movesLayout)) return error('movesLayout debe ser una lista', 400);
+    const validas = new Set<string>(SECCIONES_MOVIMIENTOS);
+    movesLayout = [...new Set(body.movesLayout.filter((x): x is string =>
+      typeof x === 'string' && validas.has(x)))] as typeof actual.movesLayout;
+  }
+
   const theme = body.theme === undefined
     ? actual.theme
     : unoDe(body.theme, TEMAS, 'theme');
@@ -556,11 +566,12 @@ export async function editarPerfil(req: Request, env: Env, sesion: Sesion): Prom
 
   await env.DB.prepare(
     `UPDATE member SET display_name = ?1, color = ?2, emoji = ?3, home_layout = ?4,
-       theme = ?5, photo = ?6 WHERE id = ?7`,
+       theme = ?5, photo = ?6, moves_layout = ?7 WHERE id = ?8`,
   ).bind(
     displayName, nuevoColor, emoji,
     homeLayout.length > 0 ? JSON.stringify(homeLayout) : '',
     theme, photo,
+    movesLayout.length > 0 ? JSON.stringify(movesLayout) : '',
     sesion.memberId,
   ).run();
 

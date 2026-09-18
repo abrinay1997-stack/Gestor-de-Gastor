@@ -21,16 +21,24 @@ import { PastillaEntidad } from '../ui/entidad.tsx';
 export type Solapa =
   | 'inicio' | 'cuentas' | 'jarras' | 'movimientos' | 'analisis' | 'consejero' | 'ajustes';
 
+/**
+ * A donde se puede ir.
+ *
+ * En la barra van los cinco lugares donde se MIRA plata. Los ajustes salieron
+ * de ahi: se entra tocando la propia foto, que es donde uno va a buscar lo
+ * suyo en cualquier app, y asi el quinto lugar queda libre para estadisticas,
+ * que si es una pantalla de plata.
+ */
 const DESTINOS: { id: Solapa; etiqueta: string; icono: string; enBarra: boolean }[] = [
   { id: 'inicio', etiqueta: 'Inicio', icono: 'house', enBarra: true },
   { id: 'movimientos', etiqueta: 'Movimientos', icono: 'receipt-text', enBarra: true },
   { id: 'jarras', etiqueta: 'Jarras', icono: 'piggy-bank', enBarra: true },
   { id: 'cuentas', etiqueta: 'Cuentas', icono: 'wallet', enBarra: true },
-  // Fuera de la barra: con seis destinos las etiquetas se tocan, y a 320px
-  // no entra ninguna. Se llega desde Ajustes, arriba de todo.
-  { id: 'analisis', etiqueta: 'Análisis', icono: 'chart-pie', enBarra: false },
+  { id: 'analisis', etiqueta: 'Estadísticas', icono: 'chart-pie', enBarra: true },
+  // Fuera de la barra. Al consejero se entra desde los ajustes; a los ajustes,
+  // por la foto de perfil de la cabecera.
   { id: 'consejero', etiqueta: 'Consejero', icono: 'sparkles', enBarra: false },
-  { id: 'ajustes', etiqueta: 'Ajustes', icono: 'settings', enBarra: true },
+  { id: 'ajustes', etiqueta: 'Ajustes', icono: 'settings', enBarra: false },
 ];
 
 export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
@@ -190,7 +198,19 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
                 )}
               </div>
             )}
-            <Avatar nombre={me?.displayName ?? '?'} color={me?.color ?? '#10b981'} emoji={me?.emoji} foto={me?.photo} size={30} />
+            {/* La propia foto es la puerta a los ajustes: es donde uno va a
+                buscar lo suyo en cualquier app, y libera un lugar en la barra
+                de abajo para una pantalla de plata. */}
+            <button
+              onClick={() => alCambiar('ajustes')}
+              aria-label="Ajustes"
+              className={cn(
+                'rounded-full active:scale-[0.92] transition-transform duration-100',
+                solapa === 'ajustes' && 'ring-2 ring-marca-500 ring-offset-2 ring-offset-[var(--fondo)]',
+              )}
+            >
+              <Avatar nombre={me?.displayName ?? '?'} color={me?.color ?? '#10b981'} emoji={me?.emoji} foto={me?.photo} size={30} />
+            </button>
           </div>
         </div>
 

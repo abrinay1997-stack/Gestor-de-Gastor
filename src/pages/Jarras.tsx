@@ -14,13 +14,14 @@ import {
   entidadDe, entidadPorDefecto, flujoDeJarras, indexarCategorias, jarrasDe,
   repartirEnJarras, sinAsignar, validarJarras,
 } from '@shared/domain';
-import { describirPeriodo, periodoMes, type Periodo } from '@shared/periodo';
+import { periodoMes, type Periodo } from '@shared/periodo';
 import type { Entity, Jar, Transaction } from '@shared/types';
 import { FilaMovimiento } from './Inicio.tsx';
 import {
   Barra, Boton, Campo, Ficha, Hoja, Icono, Selector, SelectorIcono, Tarjeta, Vacio,
 } from '../components/ui/base.tsx';
 import { SelectorPeriodo } from '../components/ui/periodo.tsx';
+import { useConfirmar } from '../components/ui/confirmar.tsx';
 import { cn, fechaCorta } from '../lib/utils.ts';
 
 
@@ -279,14 +280,16 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
                       Pásale plata desde otra con «Mover».
                     </p>
                   ) : (
+                    /* Sin el nombre del mes: lo dice el selector de arriba, y
+                       repetirlo en cada una de las seis jarras es la misma
+                       palabra seis veces. */
                     <p className="text-[11px] txt-3 mt-2">
                       {f.entroMinor === 0 && f.salioMinor === 0 ? (
-                        <>Sin movimientos en {describirPeriodo(periodo).toLowerCase()}</>
+                        'Sin movimientos'
                       ) : (
                         <>
-                          {describirPeriodo(periodo).toLowerCase()}: entró{' '}
-                          <span className="tabular">{formatMonto(f.entroMinor, moneda)}</span>
-                          {', salió '}
+                          Entró <span className="tabular">{formatMonto(f.entroMinor, moneda)}</span>
+                          {' · Salió '}
                           <span className="tabular">{formatMonto(f.salioMinor, moneda)}</span>
                         </>
                       )}
@@ -804,7 +807,8 @@ function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
   jarras: Jar[];
   alGuardar: (jars: Partial<Jar>[]) => Promise<void>;
 }) {
-  const { entities, entidadActiva, household } = useStore();
+  const { entities, entidadActiva, household, imputaciones } = useStore();
+  const confirmar = useConfirmar();
   const moneda = household?.currency ?? 'USD';
 
   const economias = useMemo(() => entities.filter((e) => !e.archived), [entities]);
@@ -855,6 +859,43 @@ function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
 
   const cambiar = (i: number, campo: keyof Borrador, valor: string | number | boolean | null) => {
     setBorradores((prev) => prev.map((b, k) => (k === i ? { ...b, [campo]: valor } : b)));
+  };
+
+  /**
+   * Quitar una jarra, preguntando primero.
+   *
+   * Borrar una jarra con plata adentro no pierde ni un centavo —el saldo se
+   * calcula, no se guarda, y vuelve a «sin asignar»— pero SÍ se lleva por
+   * delante el reparto de todo lo que le entró alguna vez. Eso no se deshace
+   * con un toque, así que no puede salir de un toque.
+   */
+  const quitar = async (i: number) => {
+    const b = borradores[i];
+    const nueva = !b.id;
+
+    // Lo que esta jarra tiene hoy y lo que le pasó en su vida, para poder
+    // decirlo antes en vez de que se descubra después.
+    const jarra = b.id ? jarras.find((j) => j.id === b.id) : undefined;
+    const movimientos = b.id
+      ? imputaciones.filter((x) => x.jarId === b.id && x.amountMinor !== 0).length
+      : 0;
+
+    if (!nueva) {
+      const ok = await confirmar({
+        titulo: `¿Quitar "${b.name || 'esta jarra'}"?`,
+        detalle: movimientos > 0
+          ? `Tiene ${formatMonto(jarra?.balanceMinor ?? 0, moneda)} y ${movimientos} `
+            + `movimiento${movimientos === 1 ? '' : 's'} repartidos. No se pierde plata: `
+            + 'vuelve a «sin asignar». Lo que no vuelve es el reparto.'
+          : 'Todavía no recibió nada.',
+        confirmar: 'Quitar',
+        cancelar: 'Dejarla',
+        destructivo: true,
+      });
+      if (ok !== true) return;
+    }
+
+    setBorradores((p) => p.filter((_, k) => k !== i));
   };
 
   /**
@@ -914,8 +955,8 @@ function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
                 falte lo absorbe ella. Decir "suman 40%" ahi asustaria sin
                 motivo. */}
             {hayResto
-              ? <>Los porcentajes suman {(sumaBp / 100).toFixed(2)}% · el resto va a la última</>
-              : <>Suman {(sumaBp / 100).toFixed(2)}%{!ok && ' · tienen que sumar 100%'}</>}
+              ? <>Los porcentajes suman {formatBp(sumaBp)} · el resto va a la última</>
+              : <>Suman {formatBp(sumaBp)}{!ok && ' · tienen que sumar 100%'}</>}
           </span>
           {!ok && !hayResto && (
             <button onClick={emparejar} className="font-medium underline shrink-0">
@@ -950,7 +991,7 @@ function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
                 className="flex-1 min-w-0 min-h-10 px-3 rounded-xl superficie borde border txt text-base outline-none focus:border-marca-500"
               />
               <button
-                onClick={() => setBorradores((p) => p.filter((_, k) => k !== i))}
+                onClick={() => void quitar(i)}
                 aria-label={`Quitar ${b.name}`}
                 className="w-10 h-10 rounded-xl flex items-center justify-center txt-3 shrink-0"
               >
@@ -1031,20 +1072,49 @@ function EditorJarras({ abierta, alCerrar, jarras, alGuardar }: {
             </div>
 
             {b.fillKind === 'porcentaje' && (
-              <div className="flex items-center gap-3">
+              /*
+               * Antes era un `range` pelado de 0 a 100 en 200px: cada píxel
+               * valía medio punto, así que el dedo movía el porcentaje de a
+               * saltos y no había forma de dejarlo en un número redondo.
+               *
+               * Ahora el número está en el medio, con un botón a cada lado que
+               * mueve de a UNO —esa es la precisión— y la barra abajo para
+               * llegar rápido a la zona, ya con paso de 1%. Los dos escriben
+               * el mismo valor entero.
+               */
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => cambiar(i, 'percentageBp', Math.max(0, b.percentageBp - 100))}
+                    disabled={b.percentageBp <= 0}
+                    aria-label={`Bajar un punto el porcentaje de ${b.name}`}
+                    className="w-11 h-11 rounded-xl superficie borde border flex items-center justify-center txt-2 shrink-0 active:scale-[0.94] transition-transform disabled:opacity-30"
+                  >
+                    <Icono nombre="minus" size={18} />
+                  </button>
+                  <span className="flex-1 text-center text-lg font-semibold tabular txt">
+                    {formatBp(b.percentageBp)}
+                  </span>
+                  <button
+                    onClick={() => cambiar(i, 'percentageBp', Math.min(10000, b.percentageBp + 100))}
+                    disabled={b.percentageBp >= 10000}
+                    aria-label={`Subir un punto el porcentaje de ${b.name}`}
+                    className="w-11 h-11 rounded-xl superficie borde border flex items-center justify-center txt-2 shrink-0 active:scale-[0.94] transition-transform disabled:opacity-30"
+                  >
+                    <Icono nombre="plus" size={18} />
+                  </button>
+                </div>
                 <input
                   type="range"
                   min={0}
                   max={10000}
-                  step={50}
+                  step={100}
                   value={b.percentageBp}
                   onChange={(e) => cambiar(i, 'percentageBp', Number(e.target.value))}
-                  className="flex-1 accent-marca-600"
+                  className="deslizador w-full"
+                  style={{ ['--avance' as string]: `${b.percentageBp / 100}%`, ['--c' as string]: b.color }}
                   aria-label={`Porcentaje de ${b.name}`}
                 />
-                <span className="text-sm font-semibold tabular txt w-16 text-right shrink-0">
-                  {formatBp(b.percentageBp)}
-                </span>
               </div>
             )}
 

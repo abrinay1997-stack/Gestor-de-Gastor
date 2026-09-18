@@ -11,8 +11,9 @@ import { formatMonto, montoPlano, parseMonto } from '@shared/money';
 import { claveMes, estadoPresupuestos, gastadoEnEvento } from '@shared/domain';
 import { MIN_PASSWORD } from '@shared/kdf';
 import {
-  esEvento, SECCIONES_INICIO, SECCION_LABEL, TEMA_LABEL, TEMAS, TX_TYPE_LABEL, TxType,
-  type Budget, type Category, type Entity, type SeccionInicio, type Tema,
+  esEvento, SECCIONES_INICIO, SECCIONES_MOVIMIENTOS, SECCION_LABEL,
+  SECCION_MOVIMIENTOS_LABEL, TEMA_LABEL, TEMAS, TX_TYPE_LABEL, TxType,
+  type Budget, type Category, type Entity, type Tema,
 } from '@shared/types';
 import { fechaCorta } from '../lib/utils.ts';
 import {
@@ -24,17 +25,16 @@ import { useConfirmar } from '../components/ui/confirmar.tsx';
 import { PagosHabituales } from './ajustes/PagosHabituales.tsx';
 import { cn } from '../lib/utils.ts';
 
-type Hoja1 = null | 'invitar' | 'password' | 'presupuestos' | 'presupuesto'
+type Hoja1 = null | 'invitar' | 'password' | 'presupuestos' | 'presupuesto' | 'movimientos'
   | 'habituales' | 'categorias' | 'entidades' | 'perfil' | 'inicio' | 'papelera';
 
-export function Ajustes({ alVerConsejero, alVerAnalisis }: {
-  /** Consejero y Analisis no estan en la barra de abajo: se entra por aca. */
+export function Ajustes({ alVerConsejero }: {
+  /** El consejero no esta en la barra de abajo: se entra por aca. */
   alVerConsejero?: () => void;
-  alVerAnalisis?: () => void;
 }) {
   const {
     me, members, household, categories, entities, budgets, accounts, transactions,
-    recurring, papelera, salir,
+    recurring, papelera, guardarPerfil, salir,
   } = useStore();
 
   const enLaPapelera = papelera.categories.length + papelera.accounts.length
@@ -54,7 +54,7 @@ export function Ajustes({ alVerConsejero, alVerAnalisis }: {
     <div className="space-y-4">
       {/* Perfil y hogar */}
       <Tarjeta>
-        <h2 className="font-semibold txt mb-3">{household?.name ?? 'Nuestra casa'}</h2>
+        <h2 className="font-semibold txt mb-3.5">{household?.name ?? 'Nuestra casa'}</h2>
         <div className="space-y-2.5">
           {members.map((m) => (
             <button
@@ -96,15 +96,6 @@ export function Ajustes({ alVerConsejero, alVerAnalisis }: {
             alTocar={alVerConsejero}
           />
         )}
-        {alVerAnalisis && (
-          <Opcion
-            icono="chart-pie"
-            color="#3b82f6"
-            titulo="Análisis"
-            detalle="Gráficos"
-            alTocar={alVerAnalisis}
-          />
-        )}
         <Opcion
           icono="scale"
           titulo="Presupuestos"
@@ -136,6 +127,7 @@ export function Ajustes({ alVerConsejero, alVerAnalisis }: {
           alTocar={() => setHoja('papelera')}
         />
         <Opcion icono="grip-vertical" titulo="Ordenar el inicio" alTocar={() => setHoja('inicio')} />
+        <Opcion icono="grip-vertical" titulo="Ordenar movimientos" alTocar={() => setHoja('movimientos')} />
         <Opcion icono="lock" titulo="Cambiar contraseña" alTocar={() => setHoja('password')} />
         <Opcion
           icono="download"
@@ -150,7 +142,24 @@ export function Ajustes({ alVerConsejero, alVerAnalisis }: {
       </Boton>
 
       <HojaPerfil abierta={hoja === 'perfil'} alCerrar={() => setHoja(null)} />
-      <HojaOrdenInicio abierta={hoja === 'inicio'} alCerrar={() => setHoja(null)} />
+      <HojaOrden
+        abierta={hoja === 'inicio'}
+        alCerrar={() => setHoja(null)}
+        titulo="Ordenar el inicio"
+        todas={SECCIONES_INICIO}
+        etiquetas={SECCION_LABEL}
+        actual={me?.homeLayout ?? []}
+        alGuardar={(orden) => guardarPerfil({ homeLayout: orden })}
+      />
+      <HojaOrden
+        abierta={hoja === 'movimientos'}
+        alCerrar={() => setHoja(null)}
+        titulo="Ordenar movimientos"
+        todas={SECCIONES_MOVIMIENTOS}
+        etiquetas={SECCION_MOVIMIENTOS_LABEL}
+        actual={me?.movesLayout ?? []}
+        alGuardar={(orden) => guardarPerfil({ movesLayout: orden })}
+      />
       <HojaInvitar abierta={hoja === 'invitar'} alCerrar={() => setHoja(null)} />
       <HojaPassword abierta={hoja === 'password'} alCerrar={() => setHoja(null)} />
       <HojaPresupuestos
@@ -355,17 +364,34 @@ function HojaPerfil({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => v
  * hoja que ya scrollea pelea con el scroll y en el celular termina siendo
  * frustrante; las flechas siempre hacen lo que dicen.
  */
-function HojaOrdenInicio({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => void }) {
-  const { me, guardarPerfil, avisar } = useStore();
-  const [orden, setOrden] = useState<SeccionInicio[]>([]);
+/**
+ * Acomodar las secciones de una pantalla: subirlas, bajarlas y ocultarlas.
+ *
+ * Sirve para el Inicio y para Movimientos, que es la misma idea sobre listas
+ * distintas. Antes estaba escrita solo para el Inicio; copiarla habría dejado
+ * dos versiones que se van separando en el primer retoque.
+ */
+function HojaOrden<T extends string>({
+  abierta, alCerrar, titulo, todas, etiquetas, actual, alGuardar,
+}: {
+  abierta: boolean;
+  alCerrar: () => void;
+  titulo: string;
+  todas: readonly T[];
+  etiquetas: Record<T, string>;
+  actual: T[];
+  alGuardar: (orden: T[]) => Promise<void>;
+}) {
+  const { avisar } = useStore();
+  const [orden, setOrden] = useState<T[]>([]);
   const [guardando, setGuardando] = useState(false);
 
   useEffect(() => {
     if (!abierta) return;
-    setOrden(me?.homeLayout?.length ? me.homeLayout : [...SECCIONES_INICIO]);
-  }, [abierta, me]);
+    setOrden(actual.length ? actual : [...todas]);
+  }, [abierta, actual, todas]);
 
-  const ocultas = SECCIONES_INICIO.filter((s) => !orden.includes(s));
+  const ocultas = todas.filter((s) => !orden.includes(s));
 
   const mover = (i: number, delta: number) => {
     const j = i + delta;
@@ -376,21 +402,44 @@ function HojaOrdenInicio({ abierta, alCerrar }: { abierta: boolean; alCerrar: ()
   };
 
   return (
-    <Hoja abierta={abierta} alCerrar={alCerrar} titulo="Ordenar el inicio">
+    <Hoja
+      abierta={abierta}
+      alCerrar={alCerrar}
+      titulo={titulo}
+      pie={(
+        <div className="flex gap-2">
+          <Boton variante="secundario" onClick={() => setOrden([...todas])} className="px-4">
+            Restaurar
+          </Boton>
+          <Boton
+            onClick={async () => {
+              setGuardando(true);
+              try {
+                await alGuardar(orden);
+                alCerrar();
+              } catch (e) {
+                avisar(e instanceof Error ? e.message : 'No se pudo guardar');
+              } finally {
+                setGuardando(false);
+              }
+            }}
+            disabled={guardando}
+            className="flex-1 min-h-12"
+          >
+            {guardando ? 'Guardando...' : 'Guardar'}
+          </Boton>
+        </div>
+      )}
+    >
       <div className="space-y-4">
-        <p className="text-sm txt-2 leading-relaxed">
-          Acomoda las secciones como las quieres ver. Es tuyo: tu pareja tiene
-          su propio orden.
-        </p>
-
         <div className="space-y-2">
           {orden.map((s, i) => (
             <div key={s} className="flex items-center gap-2 superficie-2 rounded-xl p-2">
-              <span className="flex-1 text-sm font-medium txt px-1.5 truncate">{SECCION_LABEL[s]}</span>
+              <span className="flex-1 text-sm font-medium txt px-1.5 truncate">{etiquetas[s]}</span>
               <button
                 onClick={() => mover(i, -1)}
                 disabled={i === 0}
-                aria-label="Subir"
+                aria-label={`Subir ${etiquetas[s]}`}
                 className="w-9 h-9 rounded-lg superficie flex items-center justify-center txt-2 disabled:opacity-25"
               >
                 <Icono nombre="chevron-up" size={16} />
@@ -398,14 +447,14 @@ function HojaOrdenInicio({ abierta, alCerrar }: { abierta: boolean; alCerrar: ()
               <button
                 onClick={() => mover(i, 1)}
                 disabled={i === orden.length - 1}
-                aria-label="Bajar"
+                aria-label={`Bajar ${etiquetas[s]}`}
                 className="w-9 h-9 rounded-lg superficie flex items-center justify-center txt-2 disabled:opacity-25"
               >
                 <Icono nombre="chevron-down" size={16} />
               </button>
               <button
                 onClick={() => setOrden(orden.filter((x) => x !== s))}
-                aria-label="Ocultar"
+                aria-label={`Ocultar ${etiquetas[s]}`}
                 className="w-9 h-9 rounded-lg superficie flex items-center justify-center txt-3"
               >
                 <Icono nombre="eye" size={16} />
@@ -424,35 +473,12 @@ function HojaOrdenInicio({ abierta, alCerrar }: { abierta: boolean; alCerrar: ()
                   onClick={() => setOrden([...orden, s])}
                   className="min-h-9 px-3 rounded-full superficie-2 borde border text-xs font-medium txt-2 flex items-center gap-1.5"
                 >
-                  <Icono nombre="plus" size={13} /> {SECCION_LABEL[s]}
+                  <Icono nombre="plus" size={13} /> {etiquetas[s]}
                 </button>
               ))}
             </div>
           </div>
         )}
-
-        <div className="flex gap-2 pt-1">
-          <Boton variante="secundario" onClick={() => setOrden([...SECCIONES_INICIO])} className="flex-1">
-            Restaurar
-          </Boton>
-          <Boton
-            onClick={async () => {
-              setGuardando(true);
-              try {
-                await guardarPerfil({ homeLayout: orden });
-                alCerrar();
-              } catch (e) {
-                avisar(e instanceof Error ? e.message : 'No se pudo guardar');
-              } finally {
-                setGuardando(false);
-              }
-            }}
-            disabled={guardando}
-            className="flex-1 min-h-12"
-          >
-            {guardando ? 'Guardando...' : 'Guardar'}
-          </Boton>
-        </div>
       </div>
     </Hoja>
   );
@@ -495,11 +521,21 @@ function HojaPapelera({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =>
   const { papelera, restaurar, vaciarPapelera, avisar, members } = useStore();
   const confirmar = useConfirmar();
   const [trabajando, setTrabajando] = useState(false);
+  /**
+   * Qué ata a cada cosa y cuánto le queda. Lo dice el Worker, no el snapshot.
+   *
+   * `cargado` existe por un parpadeo: mientras la respuesta venía en camino,
+   * `motivos` estaba vacío, así que TODO se dibujaba en «se borran solas», con
+   * su casilla y con el botón de borrar al pie. Al llegar la respuesta, lo que
+   * tiene historia se mudaba al otro grupo y la casilla y el botón desaparecían
+   * en menos de un segundo, justo cuando el dedo iba hacia ellos.
+   */
   const [datos, setDatos] = useState<{
     motivos: Record<string, string | null>;
     dias: Record<string, number | null>;
     plazo: number;
-  }>({ motivos: {}, dias: {}, plazo: 30 });
+    cargado: boolean;
+  }>({ motivos: {}, dias: {}, plazo: 30, cargado: false });
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
 
   // Qué ata a cada cosa y cuánto le queda, para poder decirlo ANTES de que
@@ -514,13 +550,18 @@ function HojaPapelera({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =>
           motivos: Object.fromEntries(r.items.map((i) => [i.id, i.motivo])),
           dias: Object.fromEntries(r.items.map((i) => [i.id, i.diasQueQuedan])),
           plazo: r.diasHastaBorrar,
+          cargado: true,
         });
       })
       .catch(() => { /* sin esto la pantalla sigue siendo usable */ });
     return () => { vivo = false; };
   }, [abierta, papelera]);
 
-  useEffect(() => { if (!abierta) setMarcados(new Set()); }, [abierta]);
+  useEffect(() => {
+    if (abierta) return;
+    setMarcados(new Set());
+    setDatos((d) => ({ ...d, cargado: false }));
+  }, [abierta]);
 
   const todo: Tirado[] = [
     ...papelera.categories.map((c) => ({ tipo: 'categoria' as Descarte, x: c })),
@@ -542,8 +583,10 @@ function HojaPapelera({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =>
 
   // Dos grupos, porque se comportan distinto: unas se van solas y otras no se
   // van nunca. Mezclarlas obligaba a leer cada renglón para saber cuál era cuál.
-  const seVan = todo.filter((t) => t.motivo === null);
-  const seQuedan = todo.filter((t) => t.motivo !== null);
+  // Antes de saber cuál es cuál no se parte nada: ver aparecer los dos grupos
+  // ya armados es mejor que verlos rearmarse solos.
+  const seVan = datos.cargado ? todo.filter((t) => t.motivo === null) : [];
+  const seQuedan = datos.cargado ? todo.filter((t) => t.motivo !== null) : [];
 
   // Solo se puede borrar lo que no tiene historia, así que marcar lo otro no
   // haría nada: la casilla directamente no se dibuja.
@@ -675,7 +718,21 @@ function HojaPapelera({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =>
         </Boton>
       ) : undefined}
     >
-      {todo.length === 0 ? (
+      {!datos.cargado && todo.length > 0 ? (
+        /* El mismo alto que van a ocupar las filas, para que no salte. */
+        <div className="divide-y divide-[var(--borde)]">
+          {todo.map((t) => (
+            <div key={t.id} className="flex items-center gap-2.5 py-2 opacity-50">
+              <span className="w-6 shrink-0" aria-hidden />
+              <Ficha color={t.color} icono={t.icon} size={34} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium txt truncate">{t.nombre}</p>
+                <p className="text-[11px] txt-3">{ETIQUETA_DESCARTE[t.tipo]}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : todo.length === 0 ? (
         <Vacio
           icono="trash-2"
           titulo="Papelera vacía"

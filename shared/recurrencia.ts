@@ -230,12 +230,12 @@ export function describirRegla(regla: ReglaRecurrencia): string {
       return `Cada ${DIAS_SEMANA[regla.diaDeSemana ?? 1].toLowerCase()}`;
     case 'quincenal': {
       const [a, b] = diasQuincena(regla);
-      return `El ${a} y ${b === 31 ? 'el último día' : `el ${b}`} de cada mes`;
+      return `${a} y ${b === 31 ? 'último día' : b} del mes`;
     }
     case 'mensual':
-      return `El ${regla.diaDelMes ?? 1} de cada mes`;
+      return `${regla.diaDelMes ?? 1} del mes`;
     case 'anual':
-      return `El ${regla.diaDelMes ?? 1} de ${MESES[(regla.mesDelAnio ?? 1) - 1]}`;
+      return `${regla.diaDelMes ?? 1} de ${MESES[(regla.mesDelAnio ?? 1) - 1]}`;
     default:
       return '';
   }

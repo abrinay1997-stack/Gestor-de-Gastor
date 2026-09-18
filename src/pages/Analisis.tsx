@@ -193,7 +193,7 @@ export function Analisis() {
 
           {torta.length > 0 && (
             <Tarjeta>
-              <h2 className="font-semibold txt mb-3">Gastos por categoría</h2>
+              <h2 className="font-semibold txt mb-3.5">Gastos por categoría</h2>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -318,7 +318,7 @@ export function Analisis() {
           )}
 
           <Tarjeta>
-            <h2 className="font-semibold txt mb-3">Últimos 6 meses</h2>
+            <h2 className="font-semibold txt mb-3.5">Últimos 6 meses</h2>
             <div className="h-52">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={tendencia} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
@@ -355,7 +355,7 @@ export function Analisis() {
 
           {members.length > 1 && (
             <Tarjeta>
-              <h2 className="font-semibold txt mb-3">Comparativa</h2>
+              <h2 className="font-semibold txt mb-3.5">Comparativa</h2>
               <div className="space-y-3">
                 {personas.map(({ member, resumen: r }) => (
                   <div key={member.id} className="flex items-center justify-between text-sm">

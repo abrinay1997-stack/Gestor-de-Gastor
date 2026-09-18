@@ -101,7 +101,7 @@ export function Cuentas() {
           />
 
           {activos.length > 0 && (
-            <Grupo titulo="Lo que tienes" cuentas={activos} alTocar={abrirEdicion} members={members} />
+            <Grupo cuentas={activos} alTocar={abrirEdicion} members={members} />
           )}
           {pasivos.length > 0 && (
             <Grupo titulo="Lo que debes" cuentas={pasivos} alTocar={abrirEdicion} members={members} />
@@ -119,14 +119,16 @@ export function Cuentas() {
 }
 
 function Grupo({ titulo, cuentas, alTocar, members }: {
-  titulo: string;
+  /** Solo cuando distingue algo. Con un grupo solo, decir «lo que tienes»
+      encima de la lista de cuentas es nombrar lo que ya se ve. */
+  titulo?: string;
   cuentas: Account[];
   alTocar: (c: Account) => void;
   members: { id: string; displayName: string }[];
 }) {
   return (
     <Tarjeta className="py-3">
-      <p className="text-xs font-medium txt-3 px-1 mb-1">{titulo}</p>
+      {titulo && <h2 className="font-semibold txt px-1 mb-2">{titulo}</h2>}
       <div className="divide-y divide-[var(--borde)] -mx-1">
         {cuentas.map((c) => {
           const dueno = c.owner === 'compartida'

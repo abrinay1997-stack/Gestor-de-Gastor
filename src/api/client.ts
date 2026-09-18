@@ -5,7 +5,7 @@
 import { derivarClave } from '@shared/kdf';
 import type {
   Account, Adjustment, Budget, Category, Entity, Jar, JarAporte, JarImputacion, JarTransfer,
-  Member, Recurring, SeccionInicio, Snapshot, Transaction, TransactionInput,
+  Member, Recurring, SeccionInicio, SeccionMovimientos, Snapshot, Transaction, TransactionInput,
 } from '@shared/types';
 
 export class ApiError extends Error {
@@ -237,6 +237,7 @@ export const api = {
 
   editarPerfil: (d: {
     displayName?: string; color?: string; emoji?: string; homeLayout?: SeccionInicio[];
+    movesLayout?: SeccionMovimientos[];
   }) => put<{ member: Member }>('/api/profile', d),
 
   crearRecurrente: (r: Partial<Recurring> & { startAt?: number }) =>

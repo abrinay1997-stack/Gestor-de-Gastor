@@ -182,7 +182,7 @@ describe('fechasVencidas', () => {
 
 describe('describirRegla', () => {
   it('describe la mensual', () => {
-    expect(describirRegla({ frecuencia: 'mensual', diaDelMes: 10 })).toBe('El 10 de cada mes');
+    expect(describirRegla({ frecuencia: 'mensual', diaDelMes: 10 })).toBe('10 del mes');
   });
 
   it('describe la semanal', () => {
@@ -191,7 +191,7 @@ describe('describirRegla', () => {
 
   it('describe la anual', () => {
     expect(describirRegla({ frecuencia: 'anual', diaDelMes: 25, mesDelAnio: 12 }))
-      .toBe('El 25 de diciembre');
+      .toBe('25 de diciembre');
   });
 });
 
@@ -312,11 +312,11 @@ describe('quincenal / fechasVencidas', () => {
 
 describe('quincenal / describirRegla', () => {
   it('llama al 31 "el ultimo dia"', () => {
-    expect(describirRegla(sueldo)).toBe('El 15 y el último día de cada mes');
+    expect(describirRegla(sueldo)).toBe('15 y último día del mes');
   });
 
   it('con dos dias normales los nombra a los dos', () => {
     expect(describirRegla({ frecuencia: 'quincenal', diaDelMes: 1, diaDelMes2: 16 }))
-      .toBe('El 1 y el 16 de cada mes');
+      .toBe('1 y 16 del mes');
   });
 });
