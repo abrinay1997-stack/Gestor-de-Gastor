@@ -43,9 +43,9 @@ const TABLAS: Record<string, string> = {
   jar_transfer: 'Mover plata entre jarras sin tocar ninguna cuenta.',
   jar_aporte: 'Plata puesta a mano en una jarra, sin que venga de repartir un ingreso. Tambien suma al saldo de la jarra.',
   budget: 'Dos cosas distintas en la misma tabla: con name en NULL es un tope mensual (category_id en NULL = tope global del mes); con name es un presupuesto de evento, que solo mide lo que se le carga y no aparta plata.',
-  recurring: 'Pagos habituales. frequency: semanal|quincenal|mensual|anual.',
+  recurring: 'Pagos habituales. frequency: semanal|quincenal|mensual|trimestral|semestral|anual. En trimestral y semestral month_of_year es el ANCLA del ciclo, no el unico mes: con 3 (marzo) una trimestral cae en marzo, junio, septiembre y diciembre. esperando_desde con fecha = se esperaba y todavia no lo confirmaron.',
   account_adjustment: 'Correcciones manuales de saldo, con su rastro. No inventan ni borran movimientos.',
-  'category/account/entity.trashed_at': 'Si tiene fecha, esta en la papelera y no cuenta para nada. archived es otra cosa: sigue contando, solo que no se ofrece al cargar.',
+  'category/account/entity.trashed_at': 'Si tiene fecha, esta en la papelera y no cuenta para nada de aca. Se restaura de un toque. Lo que no tiene historia se borra solo a los 30 dias; lo que si la tiene no se borra nunca. archived es lo que quedo de antes de unificar archivo y papelera: sigue contando su historia y solo deja de ofrecerse al cargar.',
 };
 
 const INVARIANTES = [
@@ -57,6 +57,7 @@ const INVARIANTES = [
   'Las transferencias entre cuentas propias y los ajustes de saldo no son ni ingreso ni gasto: no entran en ningun resultado.',
   'El saldo de una jarra es repartos de ingresos + aportes a mano + traspasos recibidos - lo que se gasto de ella. En negativo significa que salio mas de lo que entro, no que este mal calculado.',
   'Lo que esta en la papelera no aparece en ningun numero de aca. Lo archivado si: sigue sumando su historia, solo que no se ofrece al cargar.',
+  'Cada cuenta guarda su moneda, pero el patrimonio las suma sin convertir: hoy solo es correcto si todas las cuentas estan en la moneda del hogar.',
 ];
 
 /**

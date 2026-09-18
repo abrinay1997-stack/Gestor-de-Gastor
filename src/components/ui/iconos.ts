@@ -13,7 +13,7 @@
 
 import {
   Activity, Apple, Archive, ArrowDownLeft, ArrowLeft, ArrowLeftRight,
-  ArrowUpRight, Baby, Backpack, Banknote, Bed, Beer, Bell, Bike, Book,
+  ArrowUp, ArrowUpRight, Baby, Backpack, Banknote, Bed, Beer, Bell, Bike, Book,
   BookOpen, Brain, Briefcase, Building2, Bus, Cake, Calculator, Calendar,
   CalendarDays, Camera, Car, CarTaxiFront, Carrot, Cat, ChartColumn,
   ChartLine, ChartPie, Check, ChevronDown, ChevronLeft, ChevronRight,
@@ -23,7 +23,8 @@ import {
   Filter, Fish, Flame, Flower2, Footprints, Fuel, Gamepad2, Gem, Gift,
   Glasses, GraduationCap, GripVertical, Guitar, Hammer, HandCoins, HandHeart,
   Handshake, Headphones, Heart, HeartHandshake, HeartPulse, House,
-  IceCreamCone, Key, Lamp, Landmark, Laptop, Leaf, Library, Lightbulb, Lock,
+  IceCreamCone, Key, Lamp, Landmark, Laptop, Leaf, Library, Lightbulb,
+  LoaderCircle, Lock, Square,
   LogOut, Luggage, Mail, MapPin, Mic, Milk, Minus, Mountain, Music, Newspaper,
   NotebookPen, Package, PaintRoller, Palette, Palmtree, ParkingMeter,
   PartyPopper, PawPrint, Pencil, Percent, Phone, PiggyBank, Pill, Pizza,
@@ -153,6 +154,10 @@ export const ICONOS: Record<string, LucideIcon> = {
   'arrow-down-left': ArrowDownLeft,
   'arrow-left': ArrowLeft,
   'arrow-left-right': ArrowLeftRight,
+  // El de mandar un mensaje en el consejero, y el que gira mientras responde.
+  // Los dos se estaban pidiendo por nombre sin estar registrados, asi que el
+  // boton dibujaba el generico —un circulo vacio— en vez de una flecha.
+  'arrow-up': ArrowUp,
   'arrow-up-right': ArrowUpRight,
   'baby': Baby,
   'backpack': Backpack,
@@ -236,6 +241,7 @@ export const ICONOS: Record<string, LucideIcon> = {
   'leaf': Leaf,
   'library': Library,
   'lightbulb': Lightbulb,
+  'loader-circle': LoaderCircle,
   'lock': Lock,
   'log-out': LogOut,
   'luggage': Luggage,
@@ -289,6 +295,7 @@ export const ICONOS: Record<string, LucideIcon> = {
   'snowflake': Snowflake,
   'sofa': Sofa,
   'soup': Soup,
+  'square': Square,
   'sparkles': Sparkles,
   'split': Split,
   'sprout': Sprout,
