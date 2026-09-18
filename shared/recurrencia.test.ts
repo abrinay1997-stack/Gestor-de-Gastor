@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  describirRegla, diasDelMes, fechaSegura, fechasVencidas,
+  describirRegla, diasDelMes, fechaSegura, fechasVencidas, mesesDelCiclo,
   primeraFecha, siguienteFecha, type ReglaRecurrencia,
 } from './recurrencia.ts';
 
@@ -318,5 +318,140 @@ describe('quincenal / describirRegla', () => {
   it('con dos dias normales los nombra a los dos', () => {
     expect(describirRegla({ frecuencia: 'quincenal', diaDelMes: 1, diaDelMes2: 16 }))
       .toBe('1 y 16 del mes');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Trimestral y semestral
+//
+// Las dos son la misma regla que la mensual con otro paso, y el ancla
+// (mesDelAnio) es lo unico que las distingue entre si: "cada 3 meses" no dice
+// nada hasta que se sabe desde cual.
+// ---------------------------------------------------------------------------
+
+const trimestral: ReglaRecurrencia = {
+  frecuencia: 'trimestral', diaDelMes: 15, mesDelAnio: 1,
+};
+const semestral: ReglaRecurrencia = {
+  frecuencia: 'semestral', diaDelMes: 10, mesDelAnio: 3,
+};
+
+describe('mesesDelCiclo', () => {
+  it('la trimestral cae cuatro veces, desde su ancla', () => {
+    expect(mesesDelCiclo(trimestral)).toEqual([0, 3, 6, 9]);
+    expect(mesesDelCiclo({ frecuencia: 'trimestral', mesDelAnio: 2 })).toEqual([1, 4, 7, 10]);
+  });
+
+  it('la semestral, dos', () => {
+    expect(mesesDelCiclo(semestral)).toEqual([2, 8]);
+  });
+
+  it('el ancla de diciembre no se va del año', () => {
+    expect(mesesDelCiclo({ frecuencia: 'trimestral', mesDelAnio: 12 })).toEqual([2, 5, 8, 11]);
+  });
+
+  it('la mensual y la semanal no tienen ciclo de meses', () => {
+    expect(mesesDelCiclo({ frecuencia: 'mensual' })).toEqual([]);
+    expect(mesesDelCiclo({ frecuencia: 'semanal' })).toEqual([]);
+  });
+});
+
+describe('trimestral / primeraFecha', () => {
+  it('si hoy es el dia, es hoy', () => {
+    expect(f(primeraFecha(trimestral, en(2026, 4, 15)))).toBe('2026-04-15');
+  });
+
+  it('dentro de un mes del ciclo pero pasado el dia, salta al ciclo siguiente', () => {
+    // No al mes que viene: mayo no es del ciclo.
+    expect(f(primeraFecha(trimestral, en(2026, 4, 20)))).toBe('2026-07-15');
+  });
+
+  it('en un mes que no es del ciclo, va al proximo que si lo es', () => {
+    expect(f(primeraFecha(trimestral, en(2026, 5, 3)))).toBe('2026-07-15');
+  });
+
+  it('desde noviembre cruza al enero siguiente', () => {
+    expect(f(primeraFecha(trimestral, en(2026, 11, 20)))).toBe('2027-01-15');
+  });
+
+  it('respeta el ancla: con febrero de ancla, cae en febrero y no en enero', () => {
+    const r: ReglaRecurrencia = { frecuencia: 'trimestral', diaDelMes: 5, mesDelAnio: 2 };
+    expect(f(primeraFecha(r, en(2026, 1, 10)))).toBe('2026-02-05');
+  });
+
+  it('recorta el dia al ultimo real del mes', () => {
+    const r: ReglaRecurrencia = { frecuencia: 'trimestral', diaDelMes: 31, mesDelAnio: 2 };
+    expect(f(primeraFecha(r, en(2026, 2, 1)))).toBe('2026-02-28');
+  });
+});
+
+describe('semestral / primeraFecha', () => {
+  it('cae en su ancla', () => {
+    expect(f(primeraFecha(semestral, en(2026, 1, 1)))).toBe('2026-03-10');
+  });
+
+  it('pasada la primera, va a la segunda del año', () => {
+    expect(f(primeraFecha(semestral, en(2026, 4, 1)))).toBe('2026-09-10');
+  });
+
+  it('pasadas las dos, cruza de año', () => {
+    expect(f(primeraFecha(semestral, en(2026, 10, 1)))).toBe('2027-03-10');
+  });
+});
+
+describe('trimestral y semestral / siguienteFecha', () => {
+  it('la trimestral suma tres meses', () => {
+    expect(f(siguienteFecha(trimestral, en(2026, 1, 15)))).toBe('2026-04-15');
+    expect(f(siguienteFecha(trimestral, en(2026, 10, 15)))).toBe('2027-01-15');
+  });
+
+  it('la semestral suma seis', () => {
+    expect(f(siguienteFecha(semestral, en(2026, 3, 10)))).toBe('2026-09-10');
+    expect(f(siguienteFecha(semestral, en(2026, 9, 10)))).toBe('2027-03-10');
+  });
+
+  it('el dia recortado no se queda pegado: vuelve al de la regla', () => {
+    // Un cobro "el 31" que en febrero cayo el 28 tiene que volver al 31.
+    const r: ReglaRecurrencia = { frecuencia: 'trimestral', diaDelMes: 31, mesDelAnio: 2 };
+    expect(f(siguienteFecha(r, en(2026, 2, 28)))).toBe('2026-05-31');
+  });
+});
+
+describe('trimestral / fechasVencidas', () => {
+  it('recupera las que se saltearon, de a una', () => {
+    const r = fechasVencidas(trimestral, en(2026, 1, 15), en(2026, 8, 1));
+    expect(r.map(f)).toEqual(['2026-01-15', '2026-04-15', '2026-07-15']);
+  });
+});
+
+describe('trimestral y semestral / describirRegla', () => {
+  it('nombra los cuatro meses en vez de decir "cada 3 meses"', () => {
+    expect(describirRegla(trimestral)).toBe('15 de enero, abril, julio y octubre');
+  });
+
+  it('nombra los dos de la semestral', () => {
+    expect(describirRegla(semestral)).toBe('10 de marzo y septiembre');
+  });
+});
+
+describe('la mensual y la anual no cambiaron', () => {
+  it('la mensual sigue cayendo todos los meses', () => {
+    const r: ReglaRecurrencia = { frecuencia: 'mensual', diaDelMes: 10 };
+    expect(f(primeraFecha(r, en(2026, 5, 3)))).toBe('2026-05-10');
+    expect(f(primeraFecha(r, en(2026, 5, 20)))).toBe('2026-06-10');
+    expect(f(siguienteFecha(r, en(2026, 5, 10)))).toBe('2026-06-10');
+  });
+
+  it('la mensual del 31 se recorta en febrero y despues vuelve al 31', () => {
+    const r: ReglaRecurrencia = { frecuencia: 'mensual', diaDelMes: 31 };
+    expect(f(siguienteFecha(r, en(2026, 1, 31)))).toBe('2026-02-28');
+    expect(f(siguienteFecha(r, en(2026, 2, 28)))).toBe('2026-03-31');
+  });
+
+  it('la anual sigue cayendo una vez al año, en su mes', () => {
+    const r: ReglaRecurrencia = { frecuencia: 'anual', diaDelMes: 20, mesDelAnio: 6 };
+    expect(f(primeraFecha(r, en(2026, 1, 1)))).toBe('2026-06-20');
+    expect(f(primeraFecha(r, en(2026, 7, 1)))).toBe('2027-06-20');
+    expect(f(siguienteFecha(r, en(2026, 6, 20)))).toBe('2027-06-20');
   });
 });

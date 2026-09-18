@@ -9,13 +9,13 @@
  * forma de que quien lo configura sepa que va a pasar y cuando.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { useStore } from '../../store/store.tsx';
 import { formatMonto, montoPlano, parseMonto } from '@shared/money';
 import { TxType, type Recurring } from '@shared/types';
 import {
-  DIAS_SEMANA, describirRegla, MESES, primeraFecha, QUINCENA_POR_DEFECTO,
-  reglaDe, type Frecuencia,
+  DIAS_SEMANA, describirRegla, FRECUENCIA_LABEL, FRECUENCIAS, MESES,
+  primeraFecha, QUINCENA_POR_DEFECTO, reglaDe, type Frecuencia,
 } from '@shared/recurrencia';
 import { Boton, Campo, Ficha, Hoja, Icono, Selector } from '../../components/ui/base.tsx';
 import { OpcionesPorEconomia } from '../../components/ui/entidad.tsx';
@@ -123,6 +123,24 @@ export function PagosHabituales({ abierta, alCerrar }: {
 const DIAS_DEL_MES = Array.from({ length: 31 }, (_, i) => i + 1);
 
 /**
+ * Un bloque del formulario.
+ *
+ * El formulario tenia catorce controles seguidos, todos con el mismo peso
+ * visual, y con seis frecuencias los de fecha pasaron a ser hasta tres. Sin
+ * nada que los agrupe hay que leerlos de arriba abajo para encontrar el que
+ * se busca. Son tres preguntas distintas —que es, cuando cae, de donde sale—
+ * y separarlas es lo que deja ver de un vistazo en cual estas.
+ */
+function Bloque({ titulo, children }: { titulo: string; children: ReactNode }) {
+  return (
+    <section className="space-y-3">
+      <h3 className="t-nota font-semibold uppercase tracking-wide txt-3 px-1">{titulo}</h3>
+      {children}
+    </section>
+  );
+}
+
+/**
  * El 31 se muestra como "ultimo dia" porque es lo que de verdad significa:
  * el calculo lo recorta al ultimo dia real de cada mes. Poner "31" a secas
  * haria dudar a cualquiera que cobre a fin de mes en febrero.
@@ -209,13 +227,28 @@ function FormularioPago({ abierto, alCerrar, editando }: {
     ? (diaMes === 31 ? 15 : 31)
     : diaMes2;
 
-  const regla = reglaDe({
-    frequency: frecuencia,
-    dayOfMonth: frecuencia !== 'semanal' ? diaMes : null,
-    dayOfMonth2: frecuencia === 'quincenal' ? dia2Efectivo : null,
-    dayOfWeek: frecuencia === 'semanal' ? diaSemana : null,
-    monthOfYear: frecuencia === 'anual' ? mesAnio : null,
-  });
+  /**
+   * Que campos pide cada frecuencia.
+   *
+   * Se calcula una vez y se usa en los tres lugares que lo necesitan —dibujar
+   * el formulario, armar la regla de la vista previa y guardar— porque la
+   * version anterior lo repetia escrito a mano en cada uno. Con cuatro
+   * frecuencias ya era facil que se desincronizaran; con seis, seguro.
+   */
+  const conDiaDeSemana = frecuencia === 'semanal';
+  const conDiaDelMes = !conDiaDeSemana;
+  const conSegundoDia = frecuencia === 'quincenal';
+  const conMesAncla = frecuencia === 'trimestral' || frecuencia === 'semestral'
+    || frecuencia === 'anual';
+
+  const campos = {
+    dayOfMonth: conDiaDelMes ? diaMes : null,
+    dayOfMonth2: conSegundoDia ? dia2Efectivo : null,
+    dayOfWeek: conDiaDeSemana ? diaSemana : null,
+    monthOfYear: conMesAncla ? mesAnio : null,
+  };
+
+  const regla = reglaDe({ frequency: frecuencia, ...campos });
   const proxima = primeraFecha(regla);
 
   /**
@@ -233,6 +266,12 @@ function FormularioPago({ abierto, alCerrar, editando }: {
     }
     if (nueva !== 'quincenal' && frecuencia === 'quincenal') {
       setDiaMes(new Date().getDate());
+    }
+    // Al pasar a una que se ancla a un mes, el ancla arranca en el mes
+    // actual: es lo que hace que el primer cobro caiga lo antes posible en
+    // vez de en enero del año que viene.
+    if ((nueva === 'trimestral' || nueva === 'semestral') && !conMesAncla) {
+      setMesAnio(new Date().getMonth() + 1);
     }
   }
 
@@ -253,10 +292,7 @@ function FormularioPago({ abierto, alCerrar, editando }: {
         distributeToJars: tipo === TxType.INGRESO && repartir,
         paidBy: paidBy || null,
         frequency: frecuencia,
-        dayOfMonth: frecuencia !== 'semanal' ? diaMes : null,
-        dayOfMonth2: frecuencia === 'quincenal' ? dia2Efectivo : null,
-        dayOfWeek: frecuencia === 'semanal' ? diaSemana : null,
-        monthOfYear: frecuencia === 'anual' ? mesAnio : null,
+        ...campos,
         active: activo,
       }, editando?.id);
       alCerrar();
@@ -270,8 +306,21 @@ function FormularioPago({ abierto, alCerrar, editando }: {
   }
 
   return (
-    <Hoja abierta={abierto} alCerrar={alCerrar} titulo={editando ? 'Editar pago habitual' : 'Nuevo pago habitual'}>
-      <div className="space-y-4">
+    <Hoja
+      abierta={abierto}
+      alCerrar={alCerrar}
+      titulo={editando ? 'Editar pago habitual' : 'Nuevo pago habitual'}
+      /* Guardar al pie y siempre visible, como en el formulario de
+         movimientos. Con tres bloques y hasta catorce controles, al final del
+         scroll significa recorrer todo para abajo cada vez. */
+      pie={(
+        <Boton onClick={() => void guardar()} disabled={!puedeGuardar} className="w-full min-h-12">
+          {guardando ? 'Guardando...' : 'Guardar'}
+        </Boton>
+      )}
+    >
+      <div className="space-y-6">
+        <Bloque titulo="Qué es">
         <Campo etiqueta="Nombre" value={name} onChange={(e) => setName(e.target.value)} placeholder="Alquiler, Netflix, Luz..." />
 
         <div className="grid grid-cols-2 gap-2">
@@ -301,20 +350,29 @@ function FormularioPago({ abierto, alCerrar, editando }: {
           inputMode="decimal"
         />
 
+        </Bloque>
+
+        <Bloque titulo="Cuándo se cobra">
+        {/* En orden, de la mas seguida a la mas espaciada, y desde la lista
+            de shared/recurrencia.ts para que agregar una frecuencia nueva no
+            haya que acordarse de escribirla tambien aca. Estaban sueltas y
+            desordenadas —mensual, quincenal, semanal, anual—, que obliga a
+            leer las cuatro para encontrar la que se busca. */}
         <Selector etiqueta="Frecuencia" value={frecuencia} onChange={(e) => cambiarFrecuencia(e.target.value as Frecuencia)}>
-          <option value="mensual">Cada mes</option>
-          <option value="quincenal">Cada quincena (dos veces al mes)</option>
-          <option value="semanal">Cada semana</option>
-          <option value="anual">Cada año</option>
+          {FRECUENCIAS.map((f) => (
+            <option key={f} value={f}>
+              {FRECUENCIA_LABEL[f]}{f === 'quincenal' ? ' (dos veces al mes)' : ''}
+            </option>
+          ))}
         </Selector>
 
-        {frecuencia === 'semanal' && (
+        {conDiaDeSemana && (
           <Selector etiqueta="Día" value={diaSemana} onChange={(e) => setDiaSemana(Number(e.target.value))}>
             {DIAS_SEMANA.map((d, i) => <option key={d} value={i}>{d}</option>)}
           </Selector>
         )}
 
-        {frecuencia === 'quincenal' && (
+        {conSegundoDia && (
           <div className="grid grid-cols-2 gap-3">
             <Selector etiqueta="Primer cobro" value={diaMes} onChange={(e) => setDiaMes(Number(e.target.value))}>
               {DIAS_DEL_MES.map((d) => <option key={d} value={d}>{etiquetaDia(d)}</option>)}
@@ -327,22 +385,40 @@ function FormularioPago({ abierto, alCerrar, editando }: {
           </div>
         )}
 
-        {(frecuencia === 'mensual' || frecuencia === 'anual') && (
-          <div className={cn('grid gap-3', frecuencia === 'anual' ? 'grid-cols-2' : 'grid-cols-1')}>
+        {conDiaDelMes && (
+          <div className={cn('grid gap-3', conMesAncla ? 'grid-cols-2' : 'grid-cols-1')}>
             <Selector etiqueta="Día del mes" value={diaMes} onChange={(e) => setDiaMes(Number(e.target.value))}>
               {DIAS_DEL_MES.map((d) => <option key={d} value={d}>{etiquetaDia(d)}</option>)}
             </Selector>
-            {frecuencia === 'anual' && (
-              <Selector etiqueta="Mes" value={mesAnio} onChange={(e) => setMesAnio(Number(e.target.value))}>
+            {conMesAncla && (
+              /* En la anual es el mes en que se cobra. En la trimestral y la
+                 semestral es desde dónde arranca el ciclo, y por eso la
+                 etiqueta cambia: elegir «marzo» en una trimestral no quiere
+                 decir «en marzo», quiere decir «marzo, junio, septiembre y
+                 diciembre». Lo que se eligió se escribe entero debajo. */
+              <Selector
+                etiqueta={frecuencia === 'anual' ? 'Mes' : 'Empezando en'}
+                value={mesAnio}
+                onChange={(e) => setMesAnio(Number(e.target.value))}
+              >
                 {MESES.map((m, i) => <option key={m} value={i + 1} className="capitalize">{m}</option>)}
               </Selector>
             )}
           </div>
         )}
 
+        {/* Los meses del ciclo, escritos. «Cada 3 meses» no dice CUÁLES, y
+            para un impuesto trimestral eso es lo único que hace falta saber
+            para poder anticiparlo. */}
+        {(frecuencia === 'trimestral' || frecuencia === 'semestral') && (
+          <p className="t-nota txt-3 px-1 -mt-2 leading-relaxed">
+            Cae el {describirRegla(regla)}.
+          </p>
+        )}
+
         {/* Un día 29, 30 o 31 no existe en todos los meses. Decirlo acá evita
             la sorpresa de que el pago "se corrió". */}
-        {frecuencia !== 'semanal' && Math.max(diaMes, frecuencia === 'quincenal' ? dia2Efectivo : 0) > 28 && (
+        {conDiaDelMes && Math.max(diaMes, conSegundoDia ? dia2Efectivo : 0) > 28 && (
           <p className="t-nota txt-3 px-1 -mt-2 leading-relaxed">
             {frecuencia === 'quincenal'
               ? `${describirRegla(regla)}. En febrero, el último día es el 28 (o el 29).`
@@ -350,6 +426,24 @@ function FormularioPago({ abierto, alCerrar, editando }: {
           </p>
         )}
 
+        {/* La próxima fecha, acá y no escondida dentro del interruptor de
+            «Activo», que es donde estaba: es el resultado de todo este bloque
+            —lo único que confirma que la regla quedó como se quería— y tiene
+            que leerse junto a los campos que la producen. */}
+        <div className="rounded-2xl superficie-2 borde border px-3.5 py-3 flex items-center gap-2.5">
+          <Icono nombre="calendar-days" size={17} className="txt-3 shrink-0" />
+          <p className="t-fila txt-2 min-w-0">
+            {activo ? 'Próximo cobro: ' : 'Cuando lo reactives: '}
+            <span className="font-semibold txt">
+              {new Date(proxima).toLocaleDateString('es', {
+                day: 'numeric', month: 'long', year: 'numeric',
+              })}
+            </span>
+          </p>
+        </div>
+        </Bloque>
+
+        <Bloque titulo="De dónde sale">
         {/* Agrupadas por dueño, igual que en el formulario de movimientos. */}
         <Selector etiqueta="Cuenta" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
           <option value="">Elige una cuenta</option>
@@ -422,6 +516,8 @@ function FormularioPago({ abierto, alCerrar, editando }: {
           </Selector>
         )}
 
+        </Bloque>
+
         <button
           onClick={() => setActivo(!activo)}
           className={cn(
@@ -434,7 +530,7 @@ function FormularioPago({ abierto, alCerrar, editando }: {
             <p className="t-fila font-medium txt">{activo ? 'Activo' : 'En pausa'}</p>
             <p className="t-nota txt-3">
               {activo
-                ? `Próximo: ${new Date(proxima).toLocaleDateString('es', { day: 'numeric', month: 'long' })}`
+                ? 'Se carga solo el día que corresponde'
                 : 'No se va a cargar hasta que lo reactives'}
             </p>
           </div>
@@ -444,10 +540,6 @@ function FormularioPago({ abierto, alCerrar, editando }: {
         </button>
 
         {error && <p className="t-fila text-red-500 text-center px-2">{error}</p>}
-
-        <Boton onClick={() => void guardar()} disabled={!puedeGuardar} className="w-full min-h-12">
-          {guardando ? 'Guardando...' : 'Guardar'}
-        </Boton>
       </div>
     </Hoja>
   );

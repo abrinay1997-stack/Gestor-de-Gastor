@@ -15,10 +15,10 @@ import {
 } from '../http.ts';
 import { TxType } from '../../shared/types.ts';
 import {
-  primeraFecha, QUINCENA_POR_DEFECTO, reglaDe, siguienteFecha, type Frecuencia,
+  FRECUENCIAS, primeraFecha, QUINCENA_POR_DEFECTO, reglaDe, siguienteFecha,
+  type Frecuencia,
 } from '../../shared/recurrencia.ts';
 
-const FRECUENCIAS = ['semanal', 'quincenal', 'mensual', 'anual'] as const;
 /** Solo ingreso o gasto: una transferencia automatica no tiene sentido aca. */
 const TIPOS = [TxType.INGRESO, TxType.GASTO] as const;
 const MAX_MONTO = 999_999_999_999;
@@ -108,7 +108,9 @@ async function validar(
   if (frequency === 'semanal') {
     dayOfWeek = entero(body.dayOfWeek ?? 1, 'dayOfWeek', { min: 0, max: 6 });
   }
-  if (frequency === 'anual') {
+  // Las tres que se anclan a un mes del año. En la anual es el mes en que se
+  // cobra; en las otras dos, el punto del año donde arranca el ciclo.
+  if (frequency === 'anual' || frequency === 'trimestral' || frequency === 'semestral') {
     monthOfYear = entero(body.monthOfYear ?? 1, 'monthOfYear', { min: 1, max: 12 });
   }
 
