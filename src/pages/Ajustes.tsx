@@ -410,7 +410,8 @@ function HojaEntidades({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =
 
           <Boton onClick={() => setEditando({
             id: '', householdId: '', name: '', kind: 'negocio', color: '#9a6a06',
-            icon: 'briefcase', displayOrder: visibles.length, archived: false, createdAt: 0,
+            icon: 'briefcase', displayOrder: visibles.length, archived: false,
+            trashedAt: null, trashedBy: null, createdAt: 0,
           })} className="w-full">
             <Icono nombre="plus" size={17} /> Nueva economía
           </Boton>
@@ -582,8 +583,8 @@ function HojaCategorias({ abierta, alCerrar }: { abierta: boolean; alCerrar: () 
         <div className="space-y-5">
           <Boton onClick={() => setEditando({
             id: '', householdId: '', name: '', type: 'gasto', parentId: null,
-            icon: 'tag', color: '#64748b', archived: false, displayOrder: 0,
-            createdAt: 0, entityId: entidadPorDefecto,
+            icon: 'tag', color: '#64748b', archived: false, trashedAt: null,
+            trashedBy: null, displayOrder: 0, createdAt: 0, entityId: entidadPorDefecto,
           })} className="w-full">
             <Icono nombre="plus" size={17} /> Nueva categoría
           </Boton>

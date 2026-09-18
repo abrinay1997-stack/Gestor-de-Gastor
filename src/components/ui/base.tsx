@@ -4,7 +4,8 @@
  */
 
 import {
-  type ButtonHTMLAttributes, type ComponentPropsWithRef, type CSSProperties, type ReactNode,
+  type ButtonHTMLAttributes, type ComponentPropsWithRef, type CSSProperties,
+  type ReactNode, useEffect,
 } from 'react';
 import { cn } from '../../lib/utils.ts';
 import { X } from 'lucide-react';
@@ -318,15 +319,46 @@ export function SelectorColor({ valor, alElegir }: {
 }
 
 /** Hoja que sube desde abajo. El patron nativo en celular. */
-export function Hoja({ abierta, alCerrar, titulo, children }: {
+/**
+ * Hoja a pantalla completa.
+ *
+ * Subia hasta el 92% de la altura dejando una franja del fondo asomando
+ * arriba, que no servia para nada: no se podia tocar para cerrar y encima
+ * recortaba los formularios largos. Ahora ocupa todo, con su cabecera pegada,
+ * y entra deslizando desde abajo.
+ *
+ * `pie` es para la accion principal —Guardar— que se queda fija abajo en vez
+ * de irse al final del scroll, donde en un formulario largo hay que bajar
+ * hasta el fondo para encontrarla.
+ */
+export function Hoja({ abierta, alCerrar, titulo, children, pie, accion }: {
   abierta: boolean; alCerrar: () => void; titulo: string; children: ReactNode;
+  pie?: ReactNode;
+  /** Un boton extra en la cabecera, a la izquierda del cerrar. */
+  accion?: ReactNode;
 }) {
+  // Con la hoja abierta el fondo no se desplaza: en el celular el scroll se
+  // "contagiaba" a la pagina de atras y al cerrar habias perdido el lugar.
+  useEffect(() => {
+    if (!abierta) return;
+    const previo = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previo; };
+  }, [abierta]);
+
+  useEffect(() => {
+    if (!abierta) return;
+    const escape = (e: KeyboardEvent) => { if (e.key === 'Escape') alCerrar(); };
+    document.addEventListener('keydown', escape);
+    return () => document.removeEventListener('keydown', escape);
+  }, [abierta, alCerrar]);
+
   if (!abierta) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center">
+    <div className="fixed inset-0 z-50 flex sm:items-center sm:justify-center">
       <div
-        className="hoja-scrim absolute inset-0"
+        className="hoja-scrim absolute inset-0 hidden sm:block"
         onClick={alCerrar}
         aria-hidden
       />
@@ -335,27 +367,34 @@ export function Hoja({ abierta, alCerrar, titulo, children }: {
         aria-modal="true"
         aria-label={titulo}
         className={cn(
-          'relative w-full sm:max-w-lg superficie borde border rounded-t-3xl sm:rounded-3xl',
-          'max-h-[92vh] overflow-y-auto sin-barra safe-bottom shadow-[var(--shadow-flotante)]',
-          'animate-[subir_.22s_cubic-bezier(.32,.72,0,1)]',
+          'relative flex flex-col w-full h-full sm:h-auto sm:max-h-[92vh] sm:max-w-lg',
+          'superficie sm:borde sm:border sm:rounded-3xl',
+          'shadow-[var(--shadow-flotante)] animate-[subir_.26s_cubic-bezier(.32,.72,0,1)]',
         )}
       >
-        {/* Agarradera: indica que se puede arrastrar para cerrar. */}
-        <div className="sticky top-0 superficie pt-2.5 pb-3 px-5 z-10 rounded-t-3xl">
-          <div className="w-9 h-1 rounded-full bg-black/15 dark:bg-white/20 mx-auto mb-3 sm:hidden" />
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-lg txt tracking-tight">{titulo}</h2>
-            <button
-              onClick={alCerrar}
-              aria-label="Cerrar"
-              className="w-9 h-9 rounded-full superficie-2 text-base flex items-center justify-center txt-2 active:scale-[0.97] active:brightness-95 transition-all duration-100"
-              style={{ fontSize: 16 }}
-            >
-              <X size={18} />
-            </button>
+        <div className="shrink-0 barra-vidrio safe-top pt-3 pb-3 px-5 borde border-b sm:rounded-t-3xl">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-semibold text-xl txt tracking-tight truncate">{titulo}</h2>
+            <div className="flex items-center gap-2 shrink-0">
+              {accion}
+              <button
+                onClick={alCerrar}
+                aria-label="Cerrar"
+                className="w-9 h-9 rounded-full superficie-2 flex items-center justify-center txt-2 active:scale-[0.92] transition-transform duration-100"
+              >
+                <X size={18} />
+              </button>
+            </div>
           </div>
         </div>
-        <div className="px-5 pb-5">{children}</div>
+        <div className={cn('flex-1 overflow-y-auto sin-barra px-5 py-4', !pie && 'safe-bottom')}>
+          {children}
+        </div>
+        {pie && (
+          <div className="shrink-0 barra-vidrio borde border-t px-5 pt-3 pb-3 safe-bottom">
+            {pie}
+          </div>
+        )}
       </div>
 
       <style>{`@keyframes subir { from { transform: translateY(100%) } to { transform: translateY(0) } }`}</style>

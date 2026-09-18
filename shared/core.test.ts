@@ -19,15 +19,15 @@ const tx = (p: Partial<Transaction>): Transaction => ({
   id: crypto.randomUUID(), householdId: 'h', type: TxType.GASTO, amountMinor: 0,
   accountId: 'a1', destAccountId: null, destAmountMinor: null, categoryId: null,
   jarId: null, distributeToJars: false, description: '', notes: null,
-  date: Date.now(), createdBy: 'u1', paidBy: null, recurringId: null,
+  date: Date.now(), createdBy: 'u1', paidBy: null, recurringId: null, budgetId: null,
   entityId: null, createdAt: 0, updatedAt: 0, ...p,
 });
 
 const cuenta = (p: Partial<Account>): Account => ({
   id: 'a1', householdId: 'h', name: 'Cuenta', category: AccountCategory.EFECTIVO,
   currency: 'USD', initialBalanceMinor: 0, balanceMinor: 0, color: '#000',
-  icon: 'wallet', owner: 'compartida', archived: false, displayOrder: 0,
-  createdAt: 0, updatedAt: 0, entityId: null, ...p,
+  icon: 'wallet', owner: 'compartida', archived: false, trashedAt: null,
+  trashedBy: null, displayOrder: 0, createdAt: 0, updatedAt: 0, entityId: null, ...p,
 });
 
 const jarra = (id: string, bp: number, orden: number, acumula = false, extra: Partial<Jar> = {}): Jar => ({
@@ -54,8 +54,8 @@ const fechasDe = (movs: Transaction[]) => {
 
 const categoria = (p: Partial<Category>): Category => ({
   id: 'c1', householdId: 'h', name: 'Categoría', type: 'gasto', parentId: null,
-  icon: 'tag', color: '#000', archived: false, displayOrder: 0, createdAt: 0,
-  entityId: null, ...p,
+  icon: 'tag', color: '#000', archived: false, trashedAt: null, trashedBy: null,
+  displayOrder: 0, createdAt: 0, entityId: null, ...p,
 });
 
 const traspaso = (p: Partial<JarTransfer>): JarTransfer => ({
@@ -441,8 +441,8 @@ describe('autorDe', () => {
 });
 
 describe('porPersona', () => {
-  const ana: Member = { id: 'u1', householdId: 'h', email: 'a@a', displayName: 'Ana', color: '#f00', emoji: '', homeLayout: [], createdAt: 0 };
-  const beto: Member = { id: 'u2', householdId: 'h', email: 'b@b', displayName: 'Beto', color: '#00f', emoji: '', homeLayout: [], createdAt: 0 };
+  const ana: Member = { id: 'u1', householdId: 'h', email: 'a@a', displayName: 'Ana', color: '#f00', emoji: '', homeLayout: [], theme: 'auto', photo: '', createdAt: 0 };
+  const beto: Member = { id: 'u2', householdId: 'h', email: 'b@b', displayName: 'Beto', color: '#00f', emoji: '', homeLayout: [], theme: 'auto', photo: '', createdAt: 0 };
 
   it('atribuye a quien gasto, no a quien cargo', () => {
     const movs = [
@@ -479,8 +479,8 @@ describe('balancePorMes', () => {
 
 describe('leer', () => {
   const categorias: Category[] = [
-    { id: 'c1', householdId: 'h', name: 'Comida', type: 'gasto', parentId: null, icon: 'x', color: '#000', archived: false, displayOrder: 0, createdAt: 0, entityId: null },
-    { id: 'c2', householdId: 'h', name: 'Sueldo', type: 'ingreso', parentId: null, icon: 'x', color: '#000', archived: false, displayOrder: 0, createdAt: 0, entityId: null },
+    { id: 'c1', householdId: 'h', name: 'Comida', type: 'gasto', parentId: null, icon: 'x', color: '#000', archived: false, trashedAt: null, trashedBy: null, displayOrder: 0, createdAt: 0, entityId: null },
+    { id: 'c2', householdId: 'h', name: 'Sueldo', type: 'ingreso', parentId: null, icon: 'x', color: '#000', archived: false, trashedAt: null, trashedBy: null, displayOrder: 0, createdAt: 0, entityId: null },
   ];
   const vacio = { categories: categorias, historial: [] as Transaction[] };
 
@@ -746,7 +746,7 @@ describe('validarJarras con reglas de llenado', () => {
 
 const entidad = (id: string, orden: number, p: Partial<Entity> = {}): Entity => ({
   id, householdId: 'h', name: id, kind: 'personal', color: '#000', icon: 'house',
-  displayOrder: orden, archived: false, createdAt: 0, ...p,
+  displayOrder: orden, archived: false, trashedAt: null, trashedBy: null, createdAt: 0, ...p,
 });
 
 describe('entidadPorDefecto', () => {

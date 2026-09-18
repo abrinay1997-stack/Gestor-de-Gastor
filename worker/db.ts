@@ -20,8 +20,8 @@ import type {
   JarAporte, JarTransfer, Member, Recurring, SeccionInicio,
   Snapshot, Transaction,
 } from '../shared/types.ts';
-import { SECCIONES_INICIO } from '../shared/types.ts';
-import type { AccountCategory, TxType } from '../shared/types.ts';
+import { SECCIONES_INICIO, TEMAS } from '../shared/types.ts';
+import type { AccountCategory, Tema, TxType } from '../shared/types.ts';
 import { calcularJarras } from '../shared/domain.ts';
 import type { Env } from './env.ts';
 
@@ -47,6 +47,8 @@ export const aAccount = (f: Fila): Account => ({
   icon: str(f.icon),
   owner: str(f.owner),
   archived: bool(f.archived),
+  trashedAt: intOpt(f.trashed_at),
+  trashedBy: strOpt(f.trashed_by),
   displayOrder: int(f.display_order),
   createdAt: int(f.created_at),
   updatedAt: int(f.updated_at),
@@ -62,6 +64,8 @@ export const aCategory = (f: Fila): Category => ({
   icon: str(f.icon),
   color: str(f.color),
   archived: bool(f.archived),
+  trashedAt: intOpt(f.trashed_at),
+  trashedBy: strOpt(f.trashed_by),
   displayOrder: int(f.display_order),
   createdAt: int(f.created_at),
   entityId: strOpt(f.entity_id),
@@ -94,6 +98,8 @@ export const aEntity = (f: Fila): Entity => ({
   icon: str(f.icon),
   displayOrder: int(f.display_order),
   archived: bool(f.archived),
+  trashedAt: intOpt(f.trashed_at),
+  trashedBy: strOpt(f.trashed_by),
   createdAt: int(f.created_at),
 });
 
@@ -148,6 +154,7 @@ export const aTransaction = (f: Fila): Transaction => ({
   createdBy: str(f.created_by),
   paidBy: strOpt(f.paid_by),
   recurringId: strOpt(f.recurring_id),
+  budgetId: strOpt(f.budget_id),
   createdAt: int(f.created_at),
   updatedAt: int(f.updated_at),
   entityId: strOpt(f.entity_id),
@@ -159,6 +166,8 @@ export const aBudget = (f: Fila): Budget => ({
   categoryId: strOpt(f.category_id),
   amountMinor: int(f.amount_minor),
   period: str(f.period),
+  name: strOpt(f.name),
+  closedAt: intOpt(f.closed_at),
   createdAt: int(f.created_at),
   updatedAt: int(f.updated_at),
   entityId: strOpt(f.entity_id),
@@ -172,6 +181,8 @@ export const aMember = (f: Fila): Member => ({
   color: str(f.color),
   emoji: str(f.emoji),
   homeLayout: aSecciones(f.home_layout),
+  theme: TEMAS.includes(f.theme as Tema) ? (f.theme as Tema) : 'auto',
+  photo: str(f.photo),
   createdAt: int(f.created_at),
 });
 

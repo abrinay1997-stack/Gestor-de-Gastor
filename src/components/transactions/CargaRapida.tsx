@@ -62,11 +62,12 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
   const [destAccountId, setDestAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [jarId, setJarId] = useState('');
+  const [budgetId, setBudgetId] = useState('');
   const [paidBy, setPaidBy] = useState('');
   // Encendido por defecto. Estuvo apagado los primeros 44 movimientos y no lo
   // prendio nadie: las jarras solo veian gastos y quedaban en rojo. Un ingreso
   // que no se reparte es la excepcion, no la regla.
-  const [repartir, setRepartir] = useState(true);
+  const [repartir, setRepartir] = useState(false);
   const [fecha, setFecha] = useState(aInputDate(Date.now()));
   const [notas, setNotas] = useState('');
   const [guardando, setGuardando] = useState(false);
@@ -85,6 +86,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
       setDestAccountId(editando.destAccountId ?? '');
       setCategoryId(editando.categoryId ?? '');
       setJarId(editando.jarId ?? '');
+      setBudgetId(editando.budgetId ?? '');
       setPaidBy(editando.paidBy ?? editando.createdBy);
       setRepartir(editando.distributeToJars);
       setFecha(aInputDate(editando.date));
@@ -98,8 +100,11 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
       setDestAccountId('');
       setCategoryId('');
       setJarId('');
+      setBudgetId('');
+      // Un movimiento nuevo arranca como gasto, y un gasto no se reparte.
+      // Al pasar a Ingreso se prende solo, abajo.
       setPaidBy(me?.id ?? '');
-      setRepartir(true);
+      setRepartir(false);
       setFecha(aInputDate(Date.now()));
       setNotas('');
       setFrase('');
@@ -183,6 +188,45 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
       .filter((x) => x.monto !== 0);
   }, [repartir, tipo, montoMinor, jarrasPropias]);
 
+  /**
+   * La jarra que suelen usar con esta categoria.
+   *
+   * Se mira el historial y gana la mas usada de los ultimos movimientos de esa
+   * categoria. Asi el caso normal es confirmar, no elegir: el campo viene con
+   * la respuesta puesta y solo se toca cuando ese dia fue distinto.
+   */
+  const jarraPorCostumbre = useMemo(() => {
+    if (!categoryId) return '';
+    const cuenta = new Map<string, number>();
+    for (const t of transactions) {
+      if (t.categoryId !== categoryId || !t.jarId) continue;
+      cuenta.set(t.jarId, (cuenta.get(t.jarId) ?? 0) + 1);
+      if (cuenta.size > 0 && t.date < Date.now() - 180 * 86_400_000) break;
+    }
+    let mejor = '';
+    let masVeces = 0;
+    for (const [id, veces] of cuenta) {
+      if (veces > masVeces && jarrasPropias.some((j) => j.id === id)) {
+        mejor = id;
+        masVeces = veces;
+      }
+    }
+    return mejor;
+  }, [categoryId, transactions, jarrasPropias]);
+
+  // Al elegir categoria se propone su jarra de siempre, si todavia no hay una
+  // puesta a mano. Nunca pisa una eleccion explicita.
+  useEffect(() => {
+    if (tipo !== TxType.GASTO || jarId || !jarraPorCostumbre) return;
+    setJarId(jarraPorCostumbre);
+  }, [tipo, jarId, jarraPorCostumbre]);
+
+  // Si la categoria cambio de economia, la jarra elegida puede ya no
+  // pertenecerle. Se suelta en vez de guardar un gasto en la jarra de otro.
+  useEffect(() => {
+    if (jarId && !jarrasPropias.some((j) => j.id === jarId)) setJarId('');
+  }, [jarId, jarrasPropias]);
+
   /** Si este gasto deja la jarra en rojo, cuanto queda. */
   const sobregiro = useMemo(() => {
     if (tipo !== TxType.GASTO || !jarId || montoMinor === null || montoMinor <= 0) return null;
@@ -208,7 +252,10 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
       destAccountId: esTransferencia ? destAccountId : null,
       destAmountMinor: null,
       categoryId: esTransferencia ? null : (categoryId || null),
+      // Un gasto sale de una jarra; un ingreso va a una sola si no se
+      // reparte; una transferencia no toca ninguna.
       jarId: !esTransferencia && !repartir ? (jarId || null) : null,
+      budgetId: tipo === TxType.GASTO ? (budgetId || null) : null,
       distributeToJars: tipo === TxType.INGRESO && repartir,
       description: descripcion.trim() || 'Movimiento',
       notes: notas.trim() || null,
@@ -268,7 +315,13 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           {TIPOS.map((t) => (
             <button
               key={t.id}
-              onClick={() => { setTipo(t.id); if (t.id !== TxType.INGRESO) setRepartir(false); }}
+              onClick={() => {
+                setTipo(t.id);
+                // Un ingreso se reparte salvo que digan lo contrario; un gasto
+                // sale de UNA jarra y una transferencia no toca ninguna.
+                setRepartir(t.id === TxType.INGRESO);
+                if (t.id !== TxType.GASTO) setJarId('');
+              }}
               className={cn(
                 'min-h-11 rounded-xl text-sm font-medium border transition-all flex items-center justify-center gap-1.5',
                 tipo === t.id ? 'text-white border-transparent' : 'superficie-2 borde txt-2',
@@ -373,6 +426,14 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
             las veces. Las otras quedan abajo y agrupadas: sacar plata de los
             impuestos de un negocio para pagar la comida se puede, pero tiene
             que costar un scroll y verse escrito de quien es. */}
+        {/* De que jarra sale.
+            `repartir` significa ahora lo que dice —repartir un INGRESO entre
+            varias jarras— y por eso arranca apagado y se enciende solo al
+            elegir Ingreso. Antes arrancaba encendido incluso en un gasto, y
+            como su interruptor solo se dibuja para los ingresos, en un gasto
+            nuevo este campo no aparecia nunca... salvo que tocaras el chip de
+            «Gasto», que ya estaba elegido. Segun si lo tocabas o no, el mismo
+            gasto se guardaba con jarra o sin ella. */}
         {!esTransferencia && !repartir && jars.length > 0 && (
           <Selector etiqueta="Jarra" value={jarId} onChange={(e) => setJarId(e.target.value)}>
             <option value="">Sin jarra</option>

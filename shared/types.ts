@@ -74,6 +74,13 @@ export interface Transaction {
   /** Si nacio de un pago habitual, cual. */
   recurringId: string | null;
   /**
+   * Presupuesto de evento al que cuenta este gasto: «esto fue del viaje».
+   * NULL es lo normal: la enorme mayoria de los gastos no son de un evento.
+   * Se elige al cargar y no se deduce de fechas ni categorias, porque en un
+   * viaje se sigue pagando el alquiler de casa y ese no es del viaje.
+   */
+  budgetId: string | null;
+  /**
    * De quien es este movimiento. NULL = la de su categoria, que es el caso
    * normal. Solo se escribe cuando se corrige a mano uno suelto, o cuando no
    * hay categoria (una transferencia).
@@ -100,7 +107,27 @@ export type TransactionInput = Omit<
  * cruzarlos. `kind` no cambia ninguna logica, solo el vocabulario de la
  * pantalla y las jarras que se proponen al crearla.
  */
-export interface Entity {
+/**
+ * Lo que se puede sacar de circulacion sin perder su historia.
+ *
+ * `archived` y la papelera son dos cosas distintas a proposito:
+ *
+ *   archivado -> se jubila pero su historia importa. Sigue contando en los
+ *                totales del pasado y no se puede borrar mientras algo lo use.
+ *   papelera  -> se tiro. Se restaura de un toque, y vaciarla lo borra.
+ *
+ * Se guarda quien lo tiro porque son dos personas y «¿esto lo tiraste vos?»
+ * tiene que tener respuesta.
+ */
+export interface Descartable {
+  archived: boolean;
+  /** Epoch en que se mando a la papelera. null = no esta en la papelera. */
+  trashedAt: number | null;
+  /** Quien la mando. */
+  trashedBy: string | null;
+}
+
+export interface Entity extends Descartable {
   id: string;
   householdId: string;
   name: string;
@@ -108,7 +135,6 @@ export interface Entity {
   color: string;
   icon: string;
   displayOrder: number;
-  archived: boolean;
   createdAt: number;
 }
 
@@ -157,7 +183,7 @@ export const ACCOUNT_CATEGORY_LABEL: Record<AccountCategory, string> = {
   [AccountCategory.POR_COBRAR]: 'Por cobrar',
 };
 
-export interface Account {
+export interface Account extends Descartable {
   id: string;
   householdId: string;
   name: string;
@@ -179,7 +205,6 @@ export interface Account {
    * se separa en los totales individuales.
    */
   owner: 'compartida' | string;
-  archived: boolean;
   displayOrder: number;
   createdAt: number;
   updatedAt: number;
@@ -195,7 +220,7 @@ export interface Account {
 // Categorias (dos niveles, como ezBookkeeping)
 // ---------------------------------------------------------------------------
 
-export interface Category {
+export interface Category extends Descartable {
   id: string;
   householdId: string;
   name: string;
@@ -204,7 +229,6 @@ export interface Category {
   parentId: string | null;
   icon: string;
   color: string;
-  archived: boolean;
   displayOrder: number;
   createdAt: number;
   /**
@@ -315,19 +339,39 @@ export interface JarAporte {
 // Presupuestos
 // ---------------------------------------------------------------------------
 
+/**
+ * Un presupuesto es un evento con nombre y tope: «Viaje a Cancún, $2.000».
+ *
+ * NO es un tope mensual por categoria: eso es una jarra, que acumula mes a mes
+ * y vive sola. Un presupuesto nace, se gasta y se cierra.
+ *
+ * Solo mide: no aparta plata ni toca ninguna cuenta. La plata sale de las
+ * jarras como cualquier gasto; el presupuesto lleva la cuenta.
+ *
+ * Un gasto entra al evento porque ustedes lo dicen al cargarlo (`tx.budgetId`),
+ * no por fechas ni por categorias: en un viaje se sigue pagando el alquiler de
+ * casa, y ese no es del viaje.
+ */
 export interface Budget {
   id: string;
   householdId: string;
+  /** Nombre del evento. Los viejos, por mes y categoria, no lo tienen. */
+  name: string | null;
   /** El presupuesto de publicidad de un negocio no come el de comida. */
   entityId: string | null;
-  /** null = presupuesto global del mes. */
+  /** null = presupuesto global del mes. Solo lo usan los viejos. */
   categoryId: string | null;
   amountMinor: number;
-  /** Mes en formato YYYY-MM. */
+  /** Mes en formato YYYY-MM. En un evento es solo el mes en que nacio. */
   period: string;
+  /** Epoch del cierre. null = abierto. */
+  closedAt: number | null;
   createdAt: number;
   updatedAt: number;
 }
+
+/** Un presupuesto de evento es el que tiene nombre. */
+export const esEvento = (b: Budget): boolean => b.name !== null && b.name !== '';
 
 // ---------------------------------------------------------------------------
 // Ajustes manuales de saldo
@@ -402,6 +446,15 @@ export interface Recurring {
 // Personas y hogar
 // ---------------------------------------------------------------------------
 
+export const TEMAS = ['auto', 'claro', 'oscuro'] as const;
+export type Tema = (typeof TEMAS)[number];
+
+export const TEMA_LABEL: Record<Tema, string> = {
+  auto: 'Automático',
+  claro: 'Claro',
+  oscuro: 'Oscuro',
+};
+
 export interface Member {
   id: string;
   householdId: string;
@@ -416,6 +469,16 @@ export interface Member {
    * Es por persona: cada uno acomoda su pantalla como quiere.
    */
   homeLayout: SeccionInicio[];
+  /**
+   * Tema de esta persona. 'auto' sigue al telefono, que es lo de siempre.
+   * Es por persona y no por hogar: son dos telefonos y dos gustos.
+   */
+  theme: Tema;
+  /**
+   * Foto del avatar como data URI, ya recortada y achicada en el navegador.
+   * Vacia = se usa el emoji, y sin emoji las iniciales.
+   */
+  photo: string;
   createdAt: number;
 }
 
