@@ -16,7 +16,7 @@ import { formatMonto, montoPlano, parseMonto } from '@shared/money';
 import {
   entidadDe, entidadPorDefecto, imputacionJarras, indexarCategorias, jarrasDe,
 } from '@shared/domain';
-import { TxType, type Transaction, type TransactionInput } from '@shared/types';
+import { esEvento, TxType, type Transaction, type TransactionInput } from '@shared/types';
 import { aInputDate, deInputDate, vibrar } from '../../lib/utils.ts';
 import { Avatar, Boton, Campo, Ficha, Hoja, Icono, Selector } from '../ui/base.tsx';
 import { cn } from '../../lib/utils.ts';
@@ -48,7 +48,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
 }) {
   const {
     accounts, categories, jars, entities, entidadActiva, transactions, members, me,
-    household, guardarTx,
+    household, budgets, guardarTx,
   } = useStore();
   const moneda = household?.currency ?? 'USD';
 
@@ -226,6 +226,17 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
   useEffect(() => {
     if (jarId && !jarrasPropias.some((j) => j.id === jarId)) setJarId('');
   }, [jarId, jarrasPropias]);
+
+  /**
+   * Los presupuestos de evento abiertos.
+   *
+   * Solo se ofrecen en un gasto: un ingreso no consume un tope. Y solo los
+   * abiertos: cerrar un evento es justamente dejar de que se le carguen cosas.
+   */
+  const eventosAbiertos = useMemo(
+    () => budgets.filter((b) => esEvento(b) && !b.closedAt),
+    [budgets],
+  );
 
   /** Si este gasto deja la jarra en rojo, cuanto queda. */
   const sobregiro = useMemo(() => {
@@ -492,6 +503,34 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
         {/* Solo si la economia de este movimiento tiene jarras. Si PanaClaw
             todavia no reparte, el interruptor seria un boton que no hace
             nada. */}
+        {/* ¿Es de algún evento? Solo aparece si hay uno abierto: sin eventos
+            el formulario no se entera de que existen. */}
+        {tipo === TxType.GASTO && eventosAbiertos.length > 0 && (
+          <div>
+            <span className="block text-xs font-medium txt-2 mb-2">¿Es de algún presupuesto?</span>
+            <div className="flex gap-2 overflow-x-auto sin-barra pb-1 -mx-1 px-1">
+              {eventosAbiertos.map((b) => {
+                const elegido = budgetId === b.id;
+                return (
+                  <button
+                    key={b.id}
+                    onClick={() => setBudgetId(elegido ? '' : b.id)}
+                    className={cn(
+                      'shrink-0 min-h-11 px-3 rounded-xl border text-sm font-medium flex items-center gap-1.5 transition-all',
+                      elegido
+                        ? 'bg-marca-600 text-white border-transparent'
+                        : 'superficie-2 borde txt-2',
+                    )}
+                  >
+                    <Icono nombre={elegido ? 'check' : 'scale'} size={15} />
+                    {b.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {tipo === TxType.INGRESO && jarrasPropias.length > 0 && (
           <button
             onClick={() => { setRepartir(!repartir); if (!repartir) setJarId(''); }}

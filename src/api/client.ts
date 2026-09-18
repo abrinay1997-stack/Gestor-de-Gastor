@@ -217,7 +217,13 @@ export const api = {
     post<{ repartidos: number; jars: Jar[] }>('/api/jars/poner-al-dia', {}),
 
   guardarPresupuesto: (b: {
-    categoryId: string | null; entityId?: string | null; amountMinor: number; period: string;
+    id?: string;
+    name?: string;
+    categoryId?: string | null;
+    entityId?: string | null;
+    amountMinor: number;
+    period?: string;
+    closedAt?: number | null;
   }) =>
     put<{ budget: Budget }>('/api/budgets', b),
   borrarPresupuesto: (id: string) => del<{ ok: true }>(`/api/budgets/${id}`),

@@ -339,8 +339,18 @@ interface Acciones {
     amountMinor: number; jarId?: string | null; entityId?: string | null; note?: string;
   }) => Promise<void>;
   borrarAporte: (id: string) => Promise<void>;
+  /**
+   * Un presupuesto de EVENTO lleva `name` y nada mas que el tope.
+   * Uno mensual de los viejos lleva `categoryId` y `period`.
+   */
   guardarPresupuesto: (b: {
-    categoryId: string | null; entityId?: string | null; amountMinor: number; period: string;
+    id?: string;
+    name?: string;
+    categoryId?: string | null;
+    entityId?: string | null;
+    amountMinor: number;
+    period?: string;
+    closedAt?: number | null;
   }) => Promise<void>;
   borrarPresupuesto: (id: string) => Promise<void>;
   guardarPerfil: (d: {

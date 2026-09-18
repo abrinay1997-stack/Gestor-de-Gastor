@@ -31,6 +31,7 @@ interface Validado {
   destAmountMinor: number | null;
   categoryId: string | null;
   jarId: string | null;
+  budgetId: string | null;
   distributeToJars: boolean;
   description: string;
   notes: string | null;
@@ -113,9 +114,18 @@ async function validar(
     if (!m) return error('Esa persona no pertenece al hogar', 400);
   }
 
+  // A que evento cuenta este gasto. Se comprueba que exista y que sea de este
+  // hogar: sin esto un id inventado dejaria el gasto apuntando a la nada.
+  const budgetId = idOpcional(body.budgetId, 'budgetId');
+  if (budgetId) {
+    const b = await env.DB.prepare('SELECT id FROM budget WHERE id = ?1 AND household_id = ?2')
+      .bind(budgetId, householdId).first();
+    if (!b) return error('Ese presupuesto no existe', 404);
+  }
+
   return {
     type, amountMinor, accountId, destAccountId, destAmountMinor, categoryId,
-    jarId, distributeToJars, paidBy, entityId,
+    jarId, budgetId, distributeToJars, paidBy, entityId,
     description: texto(body.description ?? '', 'description', { max: 200 }),
     notes: textoOpcional(body.notes, 'notes', 2000),
     date,
@@ -154,12 +164,13 @@ export async function crear(req: Request, env: Env, sesion: Sesion): Promise<Res
       `INSERT INTO tx (id, household_id, type, amount_minor, account_id, dest_account_id,
                        dest_amount_minor, category_id, jar_id, distribute_to_jars,
                        description, notes, date, created_by, paid_by, entity_id,
-                       created_at, updated_at)
-       VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?17)`,
+                       budget_id, created_at, updated_at)
+       VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?18,?17,?17)`,
     ).bind(
       id, sesion.householdId, v.type, v.amountMinor, v.accountId, v.destAccountId,
       v.destAmountMinor, v.categoryId, v.jarId, v.distributeToJars ? 1 : 0,
       v.description, v.notes, v.date, sesion.memberId, v.paidBy, v.entityId, t,
+      v.budgetId,
     ),
     ...sentenciasImputacion(env, sesion.householdId, id, v, ambito.jarrasPara(v), t),
   ]);
@@ -195,12 +206,12 @@ export async function editar(
     `UPDATE tx SET type=?1, amount_minor=?2, account_id=?3, dest_account_id=?4,
                    dest_amount_minor=?5, category_id=?6, jar_id=?7, distribute_to_jars=?8,
                    description=?9, notes=?10, date=?11, paid_by=?12, entity_id=?13,
-                   updated_at=?14
+                   budget_id=?17, updated_at=?14
      WHERE id=?15 AND household_id=?16`,
   ).bind(
     v.type, v.amountMinor, v.accountId, v.destAccountId, v.destAmountMinor,
     v.categoryId, v.jarId, v.distributeToJars ? 1 : 0, v.description, v.notes,
-    v.date, v.paidBy, v.entityId, t, id, sesion.householdId,
+    v.date, v.paidBy, v.entityId, t, id, sesion.householdId, v.budgetId,
   );
 
   // Solo se vuelve a congelar si de verdad cambio el reparto. Corregir una

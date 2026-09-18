@@ -8,10 +8,10 @@ import { useStore } from '../store/store.tsx';
 import { api } from '../api/client.ts';
 import type { Descarte } from '../api/client.ts';
 import { formatMonto, montoPlano, parseMonto } from '@shared/money';
-import { claveMes, estadoPresupuestos } from '@shared/domain';
+import { claveMes, estadoPresupuestos, gastadoEnEvento } from '@shared/domain';
 import { MIN_PASSWORD } from '@shared/kdf';
 import {
-  SECCIONES_INICIO, SECCION_LABEL, TEMA_LABEL, TEMAS, TX_TYPE_LABEL, TxType,
+  esEvento, SECCIONES_INICIO, SECCION_LABEL, TEMA_LABEL, TEMAS, TX_TYPE_LABEL, TxType,
   type Budget, type Category, type Entity, type SeccionInicio, type Tema,
 } from '@shared/types';
 import { fechaCorta, nombreMes } from '../lib/utils.ts';
@@ -20,7 +20,6 @@ import {
   SelectorIcono, Selector, Tarjeta,
 } from '../components/ui/base.tsx';
 import { SelectorEmoji } from '../components/ui/emoji.tsx';
-import { OpcionesPorEconomia } from '../components/ui/entidad.tsx';
 import { useConfirmar } from '../components/ui/confirmar.tsx';
 import { PagosHabituales } from './ajustes/PagosHabituales.tsx';
 import { cn } from '../lib/utils.ts';
@@ -1082,66 +1081,104 @@ function EditorCategoria({ categoria, alCerrar }: {
 function HojaPresupuestos({ abierta, alCerrar, alEditar }: {
   abierta: boolean; alCerrar: () => void; alEditar: (b: Budget | null) => void;
 }) {
-  const { categories, entities, budgets, transactions, household } = useStore();
+  const { budgets, transactions, entities, household } = useStore();
   const moneda = household?.currency ?? 'USD';
-  const mesActual = claveMes(Date.now());
 
-  const delMes = useMemo(
-    () => estadoPresupuestos(budgets, transactions, mesActual, categories),
-    [budgets, transactions, mesActual, categories],
+  // Los de evento son los que tienen nombre. Los viejos por mes y categoria
+  // siguen existiendo y se muestran aparte, pero no se crean mas: un tope
+  // mensual por categoria que acumula es exactamente una jarra.
+  const eventos = useMemo(
+    () => budgets.filter(esEvento)
+      .map((b) => ({
+        b,
+        gastado: gastadoEnEvento(b.id, transactions),
+        economia: entities.find((e) => e.id === b.entityId),
+      }))
+      .sort((a, b) => (a.b.closedAt ? 1 : 0) - (b.b.closedAt ? 1 : 0)
+        || b.b.createdAt - a.b.createdAt),
+    [budgets, transactions, entities],
   );
+  const viejos = useMemo(() => budgets.filter((b) => !esEvento(b)), [budgets]);
 
   return (
-    <Hoja abierta={abierta} alCerrar={alCerrar} titulo="Presupuestos">
-      <div className="space-y-5">
-        <p className="text-xs txt-3 -mt-1">{nombreMes(mesActual)}</p>
-
-        <Boton onClick={() => alEditar(null)} className="w-full">
+    <Hoja
+      abierta={abierta}
+      alCerrar={alCerrar}
+      titulo="Presupuestos"
+      pie={(
+        <Boton onClick={() => alEditar(null)} className="w-full min-h-12">
           <Icono nombre="plus" size={17} /> Nuevo presupuesto
         </Boton>
+      )}
+    >
+      <div className="space-y-5">
+        <p className="text-xs txt-3 leading-relaxed">
+          Un presupuesto es un evento con nombre y tope: «Viaje a Cancún,
+          $2.000». Solo mide — no aparta plata ni toca ninguna cuenta. Al
+          cargar un gasto elegís si es de acá.
+        </p>
 
-        {delMes.length === 0 ? (
-          <p className="text-sm txt-3 leading-relaxed">
-            Todavía no hay topes este mes. Poner un tope por categoría ayuda a
-            ver el desvío antes de que sea tarde.
-          </p>
+        {eventos.length === 0 ? (
+          <p className="text-sm txt-3">Todavía no hay ninguno.</p>
         ) : (
           <div className="space-y-4">
-            {delMes.map(({ budget, gastadoMinor, ratio }) => {
-              const cat = categories.find((c) => c.id === budget.categoryId);
-              // El global puede ser de una economia sola; el de categoria la
-              // hereda de ella. En los dos casos se dice de quien es el tope.
-              const economia = entities.find((e) => e.id === (cat ? cat.entityId : budget.entityId));
-              const restante = budget.amountMinor - gastadoMinor;
+            {eventos.map(({ b, gastado, economia }) => {
+              const ratio = b.amountMinor > 0 ? gastado / b.amountMinor : 0;
+              const resto = b.amountMinor - gastado;
               return (
                 <button
-                  key={budget.id}
-                  onClick={() => alEditar(budget)}
-                  className="w-full text-left"
+                  key={b.id}
+                  onClick={() => alEditar(b)}
+                  className={cn('w-full text-left', b.closedAt && 'opacity-55')}
                 >
                   <div className="flex items-baseline justify-between mb-1.5 gap-2">
                     <span className="text-sm font-medium txt truncate">
-                      {cat?.name ?? 'Todo el mes'}
-                      {economia && (
-                        <span className="txt-3 font-normal"> · {economia.name}</span>
-                      )}
+                      {b.name}
+                      {b.closedAt && <span className="txt-3 font-normal"> · cerrado</span>}
+                      {economia && <span className="txt-3 font-normal"> · {economia.name}</span>}
                     </span>
                     <span className={cn(
                       'text-xs tabular shrink-0',
                       ratio > 1 ? 'text-red-500 font-semibold' : ratio > 0.8 ? 'text-amber-500' : 'txt-2',
                     )}>
-                      {formatMonto(gastadoMinor, moneda, { compacto: true })} / {formatMonto(budget.amountMinor, moneda, { compacto: true })}
+                      {formatMonto(gastado, moneda)} / {formatMonto(b.amountMinor, moneda)}
                     </span>
                   </div>
-                  <Barra ratio={ratio} color={cat?.color ?? '#10b981'} alerta />
+                  <Barra ratio={ratio} color="#10b981" alerta />
                   <p className="text-[11px] txt-3 mt-1">
-                    {restante >= 0
-                      ? `Quedan ${formatMonto(restante, moneda)}`
-                      : `Te pasaste ${formatMonto(-restante, moneda)}`}
+                    {resto >= 0
+                      ? `Quedan ${formatMonto(resto, moneda)}`
+                      : `Te pasaste ${formatMonto(-resto, moneda)}`}
                   </p>
                 </button>
               );
             })}
+          </div>
+        )}
+
+        {viejos.length > 0 && (
+          <div>
+            <p className="text-xs font-medium txt-3 mb-2">Topes mensuales de antes</p>
+            <p className="text-[11px] txt-3 leading-relaxed mb-2">
+              Siguen funcionando, pero ya no se crean nuevos: un tope mensual
+              por categoría que se renueva solo es, en el fondo, una jarra.
+            </p>
+            <div className="space-y-1">
+              {viejos.map((b) => (
+                <button
+                  key={b.id}
+                  onClick={() => alEditar(b)}
+                  className="w-full flex items-center justify-between py-1.5 text-left"
+                >
+                  <span className="text-sm txt-2 truncate">
+                    {b.categoryId ? 'Por categoría' : 'Todo el mes'} · {nombreMes(b.period)}
+                  </span>
+                  <span className="text-xs tabular txt-3 shrink-0">
+                    {formatMonto(b.amountMinor, moneda)}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -1153,53 +1190,40 @@ function HojaPresupuesto({ abierta, alCerrar, editando }: {
   abierta: boolean; alCerrar: () => void; editando: Budget | null;
 }) {
   const {
-    categories, entities, entidadActiva, household, budgets,
-    guardarPresupuesto, borrarPresupuesto, avisar,
+    entities, household, transactions, guardarPresupuesto, borrarPresupuesto, avisar,
   } = useStore();
   const confirmar = useConfirmar();
   const moneda = household?.currency ?? 'USD';
-  const mesActual = claveMes(Date.now());
 
-  const [categoryId, setCategoryId] = useState('');
-  // Solo para el tope global. Vacio = todas las economias.
-  const [economiaTope, setEconomiaTope] = useState('');
+  const [nombre, setNombre] = useState('');
   const [monto, setMonto] = useState('');
+  const [economia, setEconomia] = useState('');
   const [cargando, setCargando] = useState(false);
 
   useEffect(() => {
     if (!abierta) return;
-    setCategoryId(editando?.categoryId ?? '');
-    setEconomiaTope(editando?.entityId ?? (editando ? '' : entidadActiva ?? ''));
+    setNombre(editando?.name ?? '');
     setMonto(editando ? montoPlano(editando.amountMinor, moneda) : '');
-  }, [abierta, editando, moneda, entidadActiva]);
+    setEconomia(editando?.entityId ?? '');
+  }, [abierta, editando, moneda]);
 
-  // El presupuesto no lleva entidad propia: la saca de su categoria, igual que
-  // un movimiento. Lo unico que cambia con la economia activa es cuantas
-  // categorias hay para elegir.
-  const gastos = categories.filter((c) => (
-    !c.archived && c.type === 'gasto'
-    && (entidadActiva === null || c.entityId === entidadActiva)
-  ));
   const economias = entities.filter((e) => !e.archived);
-  const suEconomia = entities.find(
-    (e) => e.id === categories.find((c) => c.id === categoryId)?.entityId,
-  );
   const montoMinor = parseMonto(monto, moneda);
-  const existente = budgets.find((b) => (
-    b.period === mesActual
-    && (b.categoryId ?? '') === categoryId
-    && (b.entityId ?? '') === (categoryId ? '' : economiaTope)
-  ));
+  const gastado = editando ? gastadoEnEvento(editando.id, transactions) : 0;
+  const cerrado = Boolean(editando?.closedAt);
 
   async function eliminar() {
     if (!editando) return;
-    const cat = categories.find((c) => c.id === editando.categoryId);
+    const cuantos = transactions.filter((t) => t.budgetId === editando.id).length;
     const ok = await confirmar({
-      titulo: `¿Borrar el presupuesto de ${cat?.name ?? 'todo el mes'}?`,
-      detalle: 'Los movimientos no se tocan, solo deja de haber un tope.',
+      titulo: `¿Borrar "${editando.name ?? 'este presupuesto'}"?`,
+      detalle: cuantos > 0
+        ? `Los ${cuantos} gastos que le cargaron se quedan donde están y no se `
+          + 'pierde un centavo: solo dejan de contar contra un tope.'
+        : 'Nada más se toca.',
       destructivo: true,
     });
-    if (!ok) return;
+    if (ok !== true) return;
     try {
       await borrarPresupuesto(editando.id);
       alCerrar();
@@ -1208,99 +1232,103 @@ function HojaPresupuesto({ abierta, alCerrar, editando }: {
     }
   }
 
+  async function guardar(cerrarlo?: boolean) {
+    if (montoMinor === null || !nombre.trim()) return;
+    setCargando(true);
+    try {
+      await guardarPresupuesto({
+        id: editando?.id,
+        name: nombre.trim(),
+        amountMinor: montoMinor,
+        entityId: economia || null,
+        closedAt: cerrarlo === undefined ? undefined : (cerrarlo ? Date.now() : null),
+      });
+      alCerrar();
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : 'No se pudo guardar');
+    } finally {
+      setCargando(false);
+    }
+  }
+
   return (
     <Hoja
       abierta={abierta}
       alCerrar={alCerrar}
-      titulo={editando ? 'Editar presupuesto' : `Presupuesto de ${nombreMes(mesActual)}`}
-    >
-      <div className="space-y-4">
-        <Selector
-          etiqueta="Categoría"
-          value={categoryId}
-          onChange={(e) => {
-            setCategoryId(e.target.value);
-            const b = budgets.find((x) => x.period === mesActual && (x.categoryId ?? '') === e.target.value);
-            setMonto(b ? montoPlano(b.amountMinor, moneda) : '');
-          }}
-          disabled={Boolean(editando)}
-        >
-          <option value="">Todo el mes (global)</option>
-          <OpcionesPorEconomia items={gastos} />
-        </Selector>
-
-        {economias.length > 1 && (categoryId ? (
-          <p className="text-xs txt-3 -mt-2 px-1 leading-relaxed">
-            Es el tope de {suEconomia?.name ?? 'nadie'}, porque la categoría es
-            de ahí. Si mañana movés la categoría, el tope se va con ella.
-          </p>
-        ) : (
-          <>
-            <Selector
-              etiqueta="Economía"
-              value={economiaTope}
-              onChange={(e) => setEconomiaTope(e.target.value)}
-              disabled={Boolean(editando)}
-            >
-              <option value="">Todas juntas</option>
-              {economias.map((e) => (
-                <option key={e.id} value={e.id}>Solo {e.name}</option>
-              ))}
-            </Selector>
-            <p className="text-xs txt-3 -mt-2 px-1 leading-relaxed">
-              {economiaTope
-                ? `Cuenta todo lo que gaste ${economias.find((e) => e.id === economiaTope)?.name} este mes, en cualquier categoría.`
-                : 'Cuenta los gastos de todas las economías juntas.'}
-            </p>
-          </>
-        ))}
-
-        <Campo
-          etiqueta="Tope mensual"
-          value={monto}
-          onChange={(e) => setMonto(e.target.value)}
-          placeholder="0.00"
-          inputMode="decimal"
-        />
-
-        {!editando && existente && (
-          <p className="text-xs txt-3">
-            Ya había un tope de {formatMonto(existente.amountMinor, moneda)}. Se reemplaza.
-          </p>
-        )}
-
-        <div className="flex gap-2 pt-1">
+      titulo={editando ? 'Editar presupuesto' : 'Nuevo presupuesto'}
+      pie={(
+        <div className="flex gap-2">
           {editando && (
             <Boton variante="peligro" onClick={() => void eliminar()} className="px-4" aria-label="Borrar">
               <Icono nombre="trash-2" size={17} />
             </Boton>
           )}
           <Boton
-            onClick={async () => {
-              if (montoMinor === null) return;
-              setCargando(true);
-              try {
-                await guardarPresupuesto({
-                  categoryId: categoryId || null,
-                  // La entidad solo viaja en el tope global: el de categoria
-                  // la hereda de la categoria y congelarla seria un error.
-                  entityId: categoryId ? null : (economiaTope || null),
-                  amountMinor: montoMinor,
-                  period: mesActual,
-                });
-                alCerrar();
-              } catch (e) {
-                avisar(e instanceof Error ? e.message : 'No se pudo guardar');
-              } finally {
-                setCargando(false);
-              }
-            }}
-            disabled={montoMinor === null || montoMinor < 0 || cargando}
+            onClick={() => void guardar()}
+            disabled={montoMinor === null || montoMinor < 0 || !nombre.trim() || cargando}
             className="flex-1 min-h-12"
           >
             {cargando ? 'Guardando...' : 'Guardar'}
           </Boton>
         </div>
+      )}
+    >
+      <div className="space-y-4">
+        <Campo
+          etiqueta="Nombre"
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          placeholder="Viaje a Cancún, Navidad, Mudanza..."
+        />
+
+        <Campo
+          etiqueta="Tope"
+          value={monto}
+          onChange={(e) => setMonto(e.target.value)}
+          placeholder="0.00"
+          inputMode="decimal"
+        />
+
+        {economias.length > 1 && (
+          <Selector
+            etiqueta="¿De alguna economía?"
+            value={economia}
+            onChange={(e) => setEconomia(e.target.value)}
+          >
+            <option value="">De la casa, sin economía</option>
+            {economias.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+          </Selector>
+        )}
+
+        <p className="text-xs txt-3 leading-relaxed">
+          No aparta plata ni toca ninguna cuenta: lleva la cuenta de cuánto se
+          lleva gastado contra el tope. Al cargar un gasto vas a poder decir si
+          es de acá.
+        </p>
+
+        {editando && (
+          <div className="superficie-2 rounded-2xl p-3 space-y-2">
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs txt-2">Llevan gastado</span>
+              <span className="text-sm font-semibold tabular txt">
+                {formatMonto(gastado, moneda)}
+              </span>
+            </div>
+            <Boton
+              variante="secundario"
+              onClick={() => void guardar(!cerrado)}
+              disabled={cargando}
+              className="w-full"
+            >
+              {cerrado ? 'Reabrir' : 'Cerrar el evento'}
+            </Boton>
+            <p className="text-[11px] txt-3 leading-relaxed">
+              {cerrado
+                ? 'Cerrado: no aparece al cargar gastos. Los que ya tiene se quedan.'
+                : 'Al cerrarlo deja de ofrecerse al cargar gastos, y queda el resumen de cómo les fue.'}
+            </p>
+          </div>
+        )}
       </div>
     </Hoja>
   );

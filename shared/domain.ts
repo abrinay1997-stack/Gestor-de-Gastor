@@ -326,6 +326,24 @@ export function flujoDeJarras(
  * Las cuentas archivadas quedan afuera, igual que en el patrimonio: si no
  * cuentan como plata disponible, tampoco pueden respaldar una jarra.
  */
+/**
+ * Cuanto se lleva gastado contra un presupuesto de evento.
+ *
+ * Suma los gastos que APUNTAN a el, no los que caen en sus fechas ni los de
+ * ciertas categorias: en un viaje se sigue pagando el alquiler de casa, y ese
+ * no es del viaje. Que un gasto sea del evento lo dicen ustedes al cargarlo.
+ *
+ * Las transferencias y los ajustes no cuentan: no son gasto.
+ */
+export function gastadoEnEvento(budgetId: string, transactions: Transaction[]): number {
+  let total = 0;
+  for (const t of transactions) {
+    if (t.budgetId !== budgetId || t.type !== TxType.GASTO) continue;
+    total += t.amountMinor;
+  }
+  return total;
+}
+
 export function sinAsignar(accounts: Account[], saldosJarras: Map<string, number>): number {
   const enCuentas = accounts.reduce((t, a) => (a.archived ? t : t + a.balanceMinor), 0);
   let enJarras = 0;

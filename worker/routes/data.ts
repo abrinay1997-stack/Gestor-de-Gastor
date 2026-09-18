@@ -338,11 +338,75 @@ export async function guardarJarras(req: Request, env: Env, sesion: Sesion): Pro
 
 // --- presupuestos --------------------------------------------------------
 
+/**
+ * Guardar un presupuesto.
+ *
+ * Hay dos formas, y la de evento es la que vale:
+ *
+ *   EVENTO   «Viaje a Cancún, $2.000». Un nombre y un tope, sin mes ni
+ *            categoria. Nace, se le cargan gastos a mano y se cierra.
+ *   MENSUAL  el de antes, por mes y categoria. Se conserva para no romper lo
+ *            que ya existe, pero no se crea mas desde la app: un tope mensual
+ *            por categoria que acumula es exactamente una jarra.
+ *
+ * Un evento no aparta plata ni toca ninguna cuenta: solo lleva la cuenta de
+ * cuanto se lleva gastado contra el tope. La plata sale de las jarras como
+ * cualquier gasto.
+ */
 export async function guardarPresupuesto(req: Request, env: Env, sesion: Sesion): Promise<Response> {
   const body = await cuerpo(req);
 
-  const categoryId = idOpcional(body.categoryId, 'categoryId');
+  const nombre = body.name === undefined || body.name === null || body.name === ''
+    ? null
+    : texto(body.name, 'name', { max: 80, min: 1 });
   const amountMinor = entero(body.amountMinor, 'amountMinor', { min: 0, max: 999_999_999_999 });
+  const t = ahora();
+  const id = idOpcional(body.id, 'id') ?? nuevoId();
+
+  // --- Evento: nombre y tope, y nada mas. -----------------------------------
+  if (nombre !== null) {
+    const entityId = idOpcional(body.entityId, 'entityId');
+    const cerrado = body.closedAt === undefined ? undefined
+      : body.closedAt === null ? null
+        : entero(body.closedAt, 'closedAt', { min: 0 });
+
+    // El periodo se guarda porque la columna es NOT NULL y el indice unico lo
+    // usa. En un evento es solo el mes en que nacio y no significa nada mas.
+    const mes = new Date(t);
+    const period = `${mes.getUTCFullYear()}-${String(mes.getUTCMonth() + 1).padStart(2, '0')}`;
+
+    const existe = await env.DB.prepare(
+      'SELECT id FROM budget WHERE id = ?1 AND household_id = ?2',
+    ).bind(id, sesion.householdId).first();
+
+    if (existe) {
+      await env.DB.prepare(
+        `UPDATE budget SET name = ?1, amount_minor = ?2, entity_id = ?3, updated_at = ?4
+           ${cerrado === undefined ? '' : ', closed_at = ?6'}
+         WHERE id = ?5 AND household_id = ?7`,
+      ).bind(
+        nombre, amountMinor, entityId, t, id,
+        ...(cerrado === undefined ? [] : [cerrado]),
+        sesion.householdId,
+      ).run();
+    } else {
+      await env.DB.prepare(
+        `INSERT INTO budget (id, household_id, name, category_id, amount_minor, period,
+                             closed_at, created_at, updated_at, entity_id)
+         VALUES (?1,?2,?3,NULL,?4,?5,?6,?7,?7,?8)`,
+      ).bind(id, sesion.householdId, nombre, amountMinor, period, cerrado ?? null, t, entityId).run();
+    }
+
+    const filaEvento = await env.DB.prepare('SELECT * FROM budget WHERE id = ?1')
+      .bind(id).first<Record<string, unknown>>();
+    if (!filaEvento) return error('No se pudo guardar el presupuesto', 500);
+    const budget = aBudget(filaEvento);
+    await difundir(env, sesion.householdId, { kind: 'budget:upsert', budget, by: sesion.memberId });
+    return json({ budget });
+  }
+
+  // --- Mensual por categoria: el de antes, intacto. -------------------------
+  const categoryId = idOpcional(body.categoryId, 'categoryId');
   const period = periodo(body.period, 'period');
 
   // Un tope de categoria ya sabe de quien es —la categoria lo sabe—, asi que
@@ -356,9 +420,6 @@ export async function guardarPresupuesto(req: Request, env: Env, sesion: Sesion)
       .bind(categoryId, sesion.householdId).first();
     if (!cat) return error('La categoría no existe', 404);
   }
-
-  const t = ahora();
-  const id = idOpcional(body.id, 'id') ?? nuevoId();
 
   // El indice unico (hogar, periodo, categoria) hace que volver a guardar el
   // mismo presupuesto lo actualice en lugar de duplicarlo.
