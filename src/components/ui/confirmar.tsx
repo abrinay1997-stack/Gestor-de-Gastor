@@ -84,9 +84,9 @@ export function ProveedorConfirmacion({ children }: { children: ReactNode }) {
                 <Icono nombre={pedido.destructivo ? 'trash-2' : 'circle-help'} size={20} />
               </div>
               <div className="min-w-0 pt-0.5">
-                <h2 className="font-semibold txt leading-snug">{pedido.titulo}</h2>
+                <h2 className="t-seccion font-semibold txt leading-snug">{pedido.titulo}</h2>
                 {pedido.detalle && (
-                  <p className="text-sm txt-2 mt-1.5 leading-relaxed">{pedido.detalle}</p>
+                  <p className="t-fila txt-2 mt-1.5 leading-relaxed">{pedido.detalle}</p>
                 )}
               </div>
             </div>

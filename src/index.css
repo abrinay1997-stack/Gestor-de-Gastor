@@ -173,34 +173,91 @@
   .borde-luz {
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55);
   }
-  /* Pildora flotante movil.
-     Estaba al 36% de superficie con un borde blanco al 58% y dos brillos
-     interiores fuertes: eso no es vidrio, es plastico esmerilado. El vidrio se
-     nota por lo que deja pasar, no por lo que se le pinta encima. Ahora el
-     fondo casi no existe, el blur hace el trabajo, y el borde es un pelo. */
+  /*
+   * Pildora flotante movil. Vidrio de verdad, no un rectangulo translucido.
+   *
+   * Un panel esmerilado se hace con fondo y desenfoque, y con eso ya estaba.
+   * Pero lo que hace que algo parezca VIDRIO no es la transparencia: es el
+   * canto. Un cristal tiene grosor, y en el grosor la luz se dobla: el borde
+   * de arriba recoge la luz del ambiente y brilla, el de abajo devuelve un
+   * reflejo mas debil, y la cara se aclara arriba y se apaga hacia el medio.
+   * Eso es lo que el ojo lee como «esto es una pieza de vidrio apoyada
+   * encima» y no como «esto es un cuadrado semitransparente».
+   *
+   * Asi que son tres capas, cada una con su trabajo:
+   *
+   *   el fondo    desenfoque, saturacion y un punto de brillo. La saturacion
+   *               es la que le roba el color a lo que pasa por debajo en vez
+   *               de lavarlo en gris; el brillo hace de refraccion.
+   *   ::before    el reflejo de la cara: claro arriba, nada en el medio, y un
+   *               rebote tenue abajo.
+   *   ::after     el canto. Un aro de un pelo hecho con degradado y recortado
+   *               con mascara, para que la luz RECORRA la pastilla —fuerte
+   *               arriba a la izquierda, apagado abajo, encendido otra vez en
+   *               la punta— en vez de dibujarle un marco de color plano.
+   *
+   * El fondo propio baja de 11% a 7%: con el canto haciendo el trabajo de
+   * separar la pastilla de lo que tiene detras, la pintura encima sobra.
+   */
   .barra-flotante {
     isolation: isolate;
+    position: relative;
     /* El respaldo, para navegadores sin color-mix: opaco antes que roto. */
     background: var(--superficie);
-    /*
-     * Casi nada de pintura encima: 11% de superficie (era 62%, paso a 37% y de
-     * ahi otro 70% menos). El vidrio se nota por lo que deja pasar, no por lo
-     * que se le dibuja.
-     *
-     * Con tan poco fondo propio, TODO el trabajo de separar los iconos de lo
-     * que pasa por debajo lo hace el desenfoque: 44px y saturacion alta, que es
-     * lo que le da el color al vidrio en vez de lavarlo.
-     */
-    background: color-mix(in srgb, var(--superficie) 11%, transparent);
-    -webkit-backdrop-filter: blur(44px) saturate(2.2);
-    backdrop-filter: blur(44px) saturate(2.2);
-    border: 0.5px solid rgb(0 0 0 / 0.06);
+    background: color-mix(in srgb, var(--superficie) 7%, transparent);
+    -webkit-backdrop-filter: blur(36px) saturate(2.6) brightness(1.06);
+    backdrop-filter: blur(36px) saturate(2.6) brightness(1.06);
+    /* Casi invisible: el canto de verdad lo dibuja ::after. Este queda solo
+       para que la geometria no cambie y para el navegador sin mascaras. */
+    border: 0.5px solid rgb(0 0 0 / 0.04);
     box-shadow:
-      inset 0 0.5px 0 rgb(255 255 255 / 0.55),
-      0 6px 24px -8px rgb(0 0 0 / 0.16);
+      /* Pegada al piso y despues difusa: dos sombras, no una. Una sola
+         sombra grande flota; estas dos apoyan. */
+      0 1px 2px rgb(0 0 0 / 0.05),
+      0 10px 30px -12px rgb(0 0 0 / 0.22);
     transition:
       padding 0.28s cubic-bezier(0.32, 0.72, 0, 1),
       transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  /* La cara: la luz que entra por arriba y muere hacia el medio. */
+  .barra-flotante::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: linear-gradient(
+      to bottom,
+      rgb(255 255 255 / 0.32) 0%,
+      rgb(255 255 255 / 0.10) 32%,
+      rgb(255 255 255 / 0) 60%,
+      rgb(255 255 255 / 0.09) 100%
+    );
+  }
+
+  /* El canto. La mascara deja solo el aro de 0.75px y vacia el centro. */
+  .barra-flotante::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    padding: 0.75px;
+    background: linear-gradient(
+      145deg,
+      rgb(255 255 255 / 0.80) 0%,
+      rgb(255 255 255 / 0.22) 26%,
+      rgb(255 255 255 / 0.05) 50%,
+      rgb(255 255 255 / 0.30) 76%,
+      rgb(255 255 255 / 0.65) 100%
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
   }
   /* Luz del tab activo: un solo indicador que se desliza entre destinos. */
   .luz-deslizante {
@@ -315,13 +372,34 @@
       box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
     }
     :root:not([data-tema='claro']) .barra-flotante {
-      background: color-mix(in srgb, var(--superficie) 10%, transparent);
-      -webkit-backdrop-filter: blur(44px) saturate(2);
-      backdrop-filter: blur(44px) saturate(2);
-      border: 0.5px solid rgb(255 255 255 / 0.10);
+      background: color-mix(in srgb, var(--superficie) 9%, transparent);
+      -webkit-backdrop-filter: blur(36px) saturate(2.2) brightness(1.12);
+      backdrop-filter: blur(36px) saturate(2.2) brightness(1.12);
+      border: 0.5px solid rgb(255 255 255 / 0.06);
       box-shadow:
-        inset 0 0.5px 0 rgb(255 255 255 / 0.10),
-        0 6px 24px -8px rgb(0 0 0 / 0.5);
+        0 1px 2px rgb(0 0 0 / 0.3),
+        0 10px 30px -12px rgb(0 0 0 / 0.6);
+    }
+    /* En oscuro el reflejo es un susurro: con el mismo blanco que en claro,
+       la pastilla se veia gris lechosa sobre el fondo negro. */
+    :root:not([data-tema='claro']) .barra-flotante::before {
+      background: linear-gradient(
+        to bottom,
+        rgb(255 255 255 / 0.10) 0%,
+        rgb(255 255 255 / 0.03) 34%,
+        rgb(255 255 255 / 0) 62%,
+        rgb(255 255 255 / 0.03) 100%
+      );
+    }
+    :root:not([data-tema='claro']) .barra-flotante::after {
+      background: linear-gradient(
+        145deg,
+        rgb(255 255 255 / 0.38) 0%,
+        rgb(255 255 255 / 0.10) 26%,
+        rgb(255 255 255 / 0.03) 50%,
+        rgb(255 255 255 / 0.12) 76%,
+        rgb(255 255 255 / 0.30) 100%
+      );
     }
   }
 }
@@ -330,15 +408,36 @@
   :root[data-tema='oscuro'] .borde-luz {
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
   }
-  :root[data-tema='oscuro'] .barra-flotante {
-    background: color-mix(in srgb, var(--superficie) 10%, transparent);
-    -webkit-backdrop-filter: blur(44px) saturate(2);
-    backdrop-filter: blur(44px) saturate(2);
-    border: 0.5px solid rgb(255 255 255 / 0.10);
-    box-shadow:
-      inset 0 0.5px 0 rgb(255 255 255 / 0.10),
-      0 6px 24px -8px rgb(0 0 0 / 0.5);
-  }
+    :root[data-tema='oscuro'] .barra-flotante {
+      background: color-mix(in srgb, var(--superficie) 9%, transparent);
+      -webkit-backdrop-filter: blur(36px) saturate(2.2) brightness(1.12);
+      backdrop-filter: blur(36px) saturate(2.2) brightness(1.12);
+      border: 0.5px solid rgb(255 255 255 / 0.06);
+      box-shadow:
+        0 1px 2px rgb(0 0 0 / 0.3),
+        0 10px 30px -12px rgb(0 0 0 / 0.6);
+    }
+    /* En oscuro el reflejo es un susurro: con el mismo blanco que en claro,
+       la pastilla se veia gris lechosa sobre el fondo negro. */
+    :root[data-tema='oscuro'] .barra-flotante::before {
+      background: linear-gradient(
+        to bottom,
+        rgb(255 255 255 / 0.10) 0%,
+        rgb(255 255 255 / 0.03) 34%,
+        rgb(255 255 255 / 0) 62%,
+        rgb(255 255 255 / 0.03) 100%
+      );
+    }
+    :root[data-tema='oscuro'] .barra-flotante::after {
+      background: linear-gradient(
+        145deg,
+        rgb(255 255 255 / 0.38) 0%,
+        rgb(255 255 255 / 0.10) 26%,
+        rgb(255 255 255 / 0.03) 50%,
+        rgb(255 255 255 / 0.12) 76%,
+        rgb(255 255 255 / 0.30) 100%
+      );
+    }
 }
 
 @media (prefers-reduced-transparency: reduce) {
@@ -346,6 +445,14 @@
     background: var(--superficie);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+  /* Sin vidrio no hay canto ni reflejo que simular: una pastilla opaca con
+     su borde de siempre. */
+  .barra-flotante::before {
+    background: none;
+  }
+  .barra-flotante::after {
+    background: var(--borde);
   }
   .luz-deslizante::before {
     box-shadow: none;
@@ -409,5 +516,134 @@
   .deslizador:focus-visible::-webkit-slider-thumb {
     outline: 2px solid var(--color-marca-500);
     outline-offset: 2px;
+  }
+}
+
+/*
+ * ESCALA TIPOGRAFICA. Una sola para toda la app.
+ *
+ * Antes cada pantalla elegia su tamaño a mano y habia doce: 9, 10, 11, 12,
+ * 13, 14, 16, 18, 20, 24, 30 y 44 px. El mismo renglon —el nombre de una
+ * fila— se veia de un tamaño en Jarras, de otro en Ajustes y de otro en la
+ * papelera, y las descripciones igual. No era una decision de diseño, era
+ * lo que habia quedado.
+ *
+ * Ahora hay cinco tamaños y cada uno tiene un trabajo. La regla para elegir
+ * es qué ES el texto, no cuánto se quiere que ocupe:
+ *
+ *   .t-titulo    el titulo de una pantalla o de una hoja. Uno por pantalla.
+ *   .t-seccion   el encabezado de una tarjeta ("Quien gasto", "Presupuestos").
+ *   .t-fila      el texto principal de una fila, un boton o una opcion.
+ *   .t-nota      todo lo secundario: descripciones, metadatos, etiquetas.
+ *   .t-campo     lo que se escribe. 16px es el minimo que evita el zoom
+ *                automatico de iOS al enfocar un input, asi que este no baja.
+ *
+ * Y dos para los numeros grandes, que no son texto sino el dato en si:
+ *
+ *   .t-monto     el numero que corona una tarjeta.
+ *   .t-cifra     el numero de la pantalla: el patrimonio, el saldo de una
+ *                jarra, el monto que se esta tecleando. 36px y no 44 como
+ *                tenia el patrimonio: a 44 un patrimonio de siete cifras se
+ *                salia de la tarjeta, y ademas es el mismo tamaño que ahora
+ *                usa el campo del monto, que a 30 se veia mas chico que el
+ *                dato que estaba escribiendo.
+ *
+ * Solo tamaño e interlineado a proposito. El grosor (font-medium,
+ * font-semibold) y el interletrado (tracking-tight) siguen siendo utilidades
+ * sueltas: si viviesen aca, la clase le ganaria por orden a la utilidad y no
+ * se podria poner un titulo en negrita sin pelearse con el CSS.
+ */
+@layer utilities {
+  .t-titulo  { font-size: 1.25rem;   line-height: 1.6rem; }
+  .t-seccion { font-size: 0.9375rem; line-height: 1.25rem; }
+  .t-fila    { font-size: 0.875rem;  line-height: 1.25rem; }
+  .t-nota    { font-size: 0.75rem;   line-height: 1rem; }
+  .t-campo   { font-size: 1rem;      line-height: 1.5rem; }
+  .t-monto   { font-size: 1.5rem;    line-height: 1.75rem; }
+  .t-cifra   { font-size: 2.25rem;   line-height: 2.5rem; }
+}
+
+/*
+ * EL CAMPO DE FECHA, DENTRO DE SU CAJA.
+ *
+ * El `input[type=date]` nativo no mide lo que le dices: mide lo que necesita
+ * su contenido. WebKit le da un ancho INTRINSECO —el del texto de la fecha mas
+ * el icono del calendario mas los rellenos de cada tramo— y ese ancho es un
+ * minimo, no una sugerencia. Con `w-full` y `px-3.5` encima, la caja pedia mas
+ * de lo que tenia y se desbordaba: la barra de la fecha se ensanchaba al
+ * tocarla, se salia de la proporcion del formulario y arrastraba de lado a la
+ * hoja entera. Quieta —sin tocar, o ya cambiada— se veia bien, porque el que
+ * se pasa de ancho es el editor, no el valor.
+ *
+ * Se arregla soltandole ese minimo (`min-width: 0`), quitandole el aspecto
+ * nativo y ordenando sus tres piezas a mano: el valor pegado a la izquierda
+ * sin margenes propios, y el icono del calendario empujado al otro extremo.
+ * Asi ocupa exactamente el ancho de su caja, ni uno mas, y se ve igual que el
+ * boton que reemplaza.
+ */
+@layer base {
+  input[type='date'],
+  input[type='month'],
+  input[type='week'],
+  input[type='time'],
+  input[type='datetime-local'] {
+    -webkit-appearance: none;
+    appearance: none;
+    /* El ancho intrinseco de WebKit, desactivado: sin esto lo de abajo no
+       alcanza, porque el minimo le gana igual al `width`. */
+    min-width: 0;
+    max-width: 100%;
+    /* Safari no lo trata como bloque y lo deja alinearse solo. */
+    display: block;
+  }
+
+  input[type='date']::-webkit-date-and-time-value,
+  input[type='month']::-webkit-date-and-time-value,
+  input[type='time']::-webkit-date-and-time-value,
+  input[type='datetime-local']::-webkit-date-and-time-value {
+    text-align: left;
+    margin: 0;
+    min-width: 0;
+  }
+
+  input[type='date']::-webkit-datetime-edit,
+  input[type='month']::-webkit-datetime-edit,
+  input[type='time']::-webkit-datetime-edit,
+  input[type='datetime-local']::-webkit-datetime-edit {
+    padding: 0;
+  }
+
+  /* Cada tramo (dia, mes, año) trae su propio relleno; sumados son los que
+     empujaban el icono fuera de la caja. */
+  input[type='date']::-webkit-datetime-edit-fields-wrapper,
+  input[type='month']::-webkit-datetime-edit-fields-wrapper,
+  input[type='time']::-webkit-datetime-edit-fields-wrapper,
+  input[type='datetime-local']::-webkit-datetime-edit-fields-wrapper {
+    padding: 0;
+  }
+
+  /* El calendario, contra el borde derecho y del gris del resto de los
+     iconos, en vez de negro sobre la tarjeta oscura. */
+  input[type='date']::-webkit-calendar-picker-indicator,
+  input[type='month']::-webkit-calendar-picker-indicator,
+  input[type='week']::-webkit-calendar-picker-indicator,
+  input[type='time']::-webkit-calendar-picker-indicator,
+  input[type='datetime-local']::-webkit-calendar-picker-indicator {
+    margin: 0;
+    margin-inline-start: auto;
+    padding: 0;
+    opacity: 0.45;
+    cursor: pointer;
+  }
+
+  /* Dos bloques, como el resto del tema: uno para quien tiene el sistema en
+     oscuro y no eligio nada, y otro para quien eligio oscuro a mano. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-tema='claro']) input::-webkit-calendar-picker-indicator {
+      filter: invert(1);
+    }
+  }
+  :root[data-tema='oscuro'] input::-webkit-calendar-picker-indicator {
+    filter: invert(1);
   }
 }

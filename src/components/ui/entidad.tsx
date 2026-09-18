@@ -57,7 +57,7 @@ export function PastillaEntidad({ className }: { className?: string }) {
         onClick={() => setAbierto(!abierto)}
         aria-haspopup="listbox"
         aria-expanded={abierto}
-        className="min-h-9 pl-2.5 pr-2 rounded-full flex items-center gap-1.5 text-[13px] font-semibold
+        className="min-h-9 pl-2.5 pr-2 rounded-full flex items-center gap-1.5 t-fila font-semibold
           superficie-2 borde border transition-transform active:scale-[0.96]"
         style={actual
           ? {
@@ -88,7 +88,7 @@ export function PastillaEntidad({ className }: { className?: string }) {
                 aria-selected={activa}
                 onClick={() => { verEntidad(o.id); setAbierto(false); }}
                 className={cn(
-                  'w-full min-h-10 px-2.5 rounded-xl flex items-center gap-2.5 text-sm font-medium',
+                  'w-full min-h-10 px-2.5 rounded-xl flex items-center gap-2.5 t-fila font-medium',
                   'text-left transition-colors active:superficie-2',
                   activa ? 'txt' : 'txt-2',
                 )}
@@ -114,7 +114,7 @@ export function EtiquetaEntidad({ entidad }: { entidad: Entity | undefined }) {
   if (!entidad) return null;
   return (
     <span
-      className="text-[10px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap"
+      className="t-nota font-medium px-1.5 py-0.5 rounded whitespace-nowrap"
       style={{ background: `${entidad.color}1f`, color: entidad.color }}
     >
       {entidad.name}

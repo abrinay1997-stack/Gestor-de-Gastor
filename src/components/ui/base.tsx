@@ -43,7 +43,7 @@ export function Boton({
     <button
       {...props}
       className={cn(
-        'min-h-11 px-4 rounded-2xl font-semibold text-sm transition-all duration-100',
+        'min-h-11 px-4 rounded-2xl font-semibold t-fila transition-all duration-100',
         'active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none',
         'flex items-center justify-center gap-2 select-none touch-manipulation',
         estilos[variante],
@@ -62,20 +62,20 @@ export function Campo({
 }: ComponentPropsWithRef<'input'> & { etiqueta?: string; error?: string }) {
   return (
     <label className="block">
-      {etiqueta && <span className="block text-xs font-medium txt-2 mb-1.5">{etiqueta}</span>}
+      {etiqueta && <span className="block t-nota font-medium txt-2 mb-1.5">{etiqueta}</span>}
       <input
         {...props}
         className={cn(
           'w-full min-w-0 max-w-full min-h-11 px-3.5 rounded-2xl superficie-2 borde border txt shadow-[inset_0_1px_2px_rgb(0_0_0/0.05)]',
           // 16px es el minimo que evita que iOS haga zoom al enfocar.
-          'text-base outline-none transition-all duration-100',
+          't-campo outline-none transition-all duration-100',
           'focus:border-marca-500 focus:ring-4 focus:ring-marca-500/15',
           'placeholder:txt-3',
           error && 'border-red-500 focus:border-red-500 focus:ring-red-500/20',
           className,
         )}
       />
-      {error && <span className="block text-xs text-red-500 mt-1">{error}</span>}
+      {error && <span className="block t-nota text-red-500 mt-1">{error}</span>}
     </label>
   );
 }
@@ -85,11 +85,11 @@ export function Selector({
 }: ComponentPropsWithRef<'select'> & { etiqueta?: string }) {
   return (
     <label className="block">
-      {etiqueta && <span className="block text-xs font-medium txt-2 mb-1.5">{etiqueta}</span>}
+      {etiqueta && <span className="block t-nota font-medium txt-2 mb-1.5">{etiqueta}</span>}
       <select
         {...props}
         className={cn(
-          'w-full min-h-11 px-3.5 rounded-2xl superficie-2 borde border txt text-base shadow-[inset_0_1px_2px_rgb(0_0_0/0.05)]',
+          'w-full min-h-11 px-3.5 rounded-2xl superficie-2 borde border txt t-campo shadow-[inset_0_1px_2px_rgb(0_0_0/0.05)]',
           'outline-none transition-all duration-100 focus:border-marca-500 focus:ring-4 focus:ring-marca-500/15',
           className,
         )}
@@ -120,8 +120,8 @@ export function Vacio({ icono, titulo, texto, accion }: {
       <div className="w-16 h-16 rounded-3xl superficie-2 flex items-center justify-center mb-4 shadow-sm ring-1 ring-black/5 dark:ring-white/10">
         <Icono nombre={icono} size={28} className="txt-3" />
       </div>
-      <h3 className="font-semibold txt tracking-tight text-balance mb-1.5">{titulo}</h3>
-      <p className="text-sm txt-2 max-w-xs leading-relaxed text-balance mb-5">{texto}</p>
+      <h3 className="t-seccion font-semibold txt tracking-tight text-balance mb-1.5">{titulo}</h3>
+      <p className="t-fila txt-2 max-w-xs leading-relaxed text-balance mb-5">{texto}</p>
       {accion}
     </div>
   );
@@ -265,7 +265,7 @@ export function SelectorIcono({ valor, alElegir, color }: {
     <div className="max-h-56 overflow-y-auto sin-barra space-y-2.5">
       {GRUPOS_ICONO.map(({ grupo, iconos }) => (
         <div key={grupo}>
-          <p className="text-[11px] font-medium txt-3 mb-1 px-0.5">{grupo}</p>
+          <p className="t-nota font-medium txt-3 mb-1 px-0.5">{grupo}</p>
           <div className="grid grid-cols-8 gap-1.5">
             {iconos.map((n) => (
               <button
@@ -440,7 +440,7 @@ export function Deslizable({ acciones, children, className }: {
             tabIndex={dx === 0 ? -1 : 0}
             aria-label={a.etiqueta}
             className={cn(
-              'flex flex-col items-center justify-center gap-0.5 text-[10px] font-medium',
+              'flex flex-col items-center justify-center gap-0.5 t-nota font-medium',
               a.peligro ? 'bg-red-500 text-white' : 'superficie-2 txt-2',
             )}
             style={{ width: ANCHO }}
@@ -518,7 +518,7 @@ export function Hoja({ abierta, alCerrar, titulo, children, pie, accion }: {
       >
         <div className="shrink-0 barra-vidrio safe-top pt-3 pb-3 px-5 borde border-b sm:rounded-t-3xl">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="font-semibold text-xl txt tracking-tight truncate">{titulo}</h2>
+            <h2 className="font-semibold t-titulo txt tracking-tight truncate">{titulo}</h2>
             <div className="flex items-center gap-2 shrink-0">
               {accion}
               <button

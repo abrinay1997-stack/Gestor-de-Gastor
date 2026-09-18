@@ -54,7 +54,7 @@ export function Ajustes({ alVerConsejero }: {
     <div className="space-y-4">
       {/* Perfil y hogar */}
       <Tarjeta>
-        <h2 className="font-semibold txt mb-3.5">{household?.name ?? 'Nuestra casa'}</h2>
+        <h2 className="t-seccion font-semibold txt mb-3.5">{household?.name ?? 'Nuestra casa'}</h2>
         <div className="space-y-2.5">
           {members.map((m) => (
             <button
@@ -65,11 +65,11 @@ export function Ajustes({ alVerConsejero }: {
             >
               <Avatar nombre={m.displayName} color={m.color} emoji={m.emoji} foto={m.photo} size={38} />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium txt truncate">
+                <p className="t-fila font-medium txt truncate">
                   {m.displayName}
                   {m.id === me?.id && <span className="txt-3 font-normal"> (tú)</span>}
                 </p>
-                <p className="text-xs txt-3 truncate">{m.email}</p>
+                <p className="t-nota txt-3 truncate">{m.email}</p>
               </div>
               {m.id === me?.id && <Icono nombre="pencil" size={15} className="txt-3 shrink-0" />}
             </button>
@@ -198,10 +198,10 @@ function Opcion({ icono, titulo, detalle, color, alTocar }: {
         className={cn('shrink-0', !color && 'txt-2')}
         style={color ? { color } : undefined}
       />
-      <span className="text-sm font-medium txt shrink-0">{titulo}</span>
+      <span className="t-fila font-medium txt shrink-0">{titulo}</span>
       {/* El detalle cede primero: con tres economias listadas el nombre de la
           fila quedaba aplastado contra el icono. */}
-      <span className="flex-1 min-w-0 text-xs txt-3 text-right truncate">{detalle}</span>
+      <span className="flex-1 min-w-0 t-nota txt-3 text-right truncate">{detalle}</span>
       <Icono nombre="chevron-right" size={17} className="txt-3 shrink-0" />
     </button>
   );
@@ -288,14 +288,14 @@ function HojaPerfil({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => v
           <div className="flex gap-2 mt-3">
             <button
               onClick={() => archivo.current?.click()}
-              className="min-h-9 px-3 rounded-xl superficie-2 borde border text-xs font-medium txt-2 flex items-center gap-1.5"
+              className="min-h-9 px-3 rounded-xl superficie-2 borde border t-nota font-medium txt-2 flex items-center gap-1.5"
             >
               <Icono nombre="camera" size={14} /> {foto ? 'Cambiar foto' : 'Subir foto'}
             </button>
             {foto && (
               <button
                 onClick={() => setFoto('')}
-                className="min-h-9 px-3 rounded-xl superficie-2 borde border text-xs font-medium txt-3"
+                className="min-h-9 px-3 rounded-xl superficie-2 borde border t-nota font-medium txt-3"
               >
                 Quitar
               </button>
@@ -312,7 +312,7 @@ function HojaPerfil({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => v
               e.target.value = '';
             }}
           />
-          <p className="text-xs txt-3 mt-2">
+          <p className="t-nota txt-3 mt-2">
             {foto ? 'La foto manda sobre el emoji' : 'Así te ven en la app'}
           </p>
         </div>
@@ -320,7 +320,7 @@ function HojaPerfil({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => v
         <Campo etiqueta="Tu nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} />
 
         <div>
-          <span className="block text-xs font-medium txt-2 mb-2">Tema</span>
+          <span className="block t-nota font-medium txt-2 mb-2">Tema</span>
           {/* Guardado en tu perfil, no en el teléfono: tú y tu pareja pueden
               tener temas distintos, y el tuyo te sigue a donde entres. */}
           <div className="grid grid-cols-3 gap-2">
@@ -329,7 +329,7 @@ function HojaPerfil({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => v
                 key={t}
                 onClick={() => setTema(t)}
                 className={cn(
-                  'min-h-11 rounded-xl text-sm font-medium border transition-all',
+                  'min-h-11 rounded-xl t-fila font-medium border transition-all',
                   tema === t ? 'bg-marca-600 text-white border-transparent' : 'superficie-2 borde txt-2',
                 )}
               >
@@ -340,12 +340,12 @@ function HojaPerfil({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => v
         </div>
 
         <div>
-          <span className="block text-xs font-medium txt-2 mb-2">Color</span>
+          <span className="block t-nota font-medium txt-2 mb-2">Color</span>
           <SelectorColor valor={color} alElegir={setColor} />
         </div>
 
         <div className={cn(foto && 'opacity-50 pointer-events-none')}>
-          <span className="block text-xs font-medium txt-2 mb-2">
+          <span className="block t-nota font-medium txt-2 mb-2">
             Emoji {foto && '· lo tapa la foto'}
           </span>
           <SelectorEmoji valor={emoji} alElegir={setEmoji} color={color} />
@@ -435,7 +435,7 @@ function HojaOrden<T extends string>({
         <div className="space-y-2">
           {orden.map((s, i) => (
             <div key={s} className="flex items-center gap-2 superficie-2 rounded-xl p-2">
-              <span className="flex-1 text-sm font-medium txt px-1.5 truncate">{etiquetas[s]}</span>
+              <span className="flex-1 t-fila font-medium txt px-1.5 truncate">{etiquetas[s]}</span>
               <button
                 onClick={() => mover(i, -1)}
                 disabled={i === 0}
@@ -465,13 +465,13 @@ function HojaOrden<T extends string>({
 
         {ocultas.length > 0 && (
           <div>
-            <p className="text-xs font-medium txt-3 mb-2">Ocultas</p>
+            <p className="t-nota font-medium txt-3 mb-2">Ocultas</p>
             <div className="flex gap-2 flex-wrap">
               {ocultas.map((s) => (
                 <button
                   key={s}
                   onClick={() => setOrden([...orden, s])}
-                  className="min-h-9 px-3 rounded-full superficie-2 borde border text-xs font-medium txt-2 flex items-center gap-1.5"
+                  className="min-h-9 px-3 rounded-full superficie-2 borde border t-nota font-medium txt-2 flex items-center gap-1.5"
                 >
                   <Icono nombre="plus" size={13} /> {etiquetas[s]}
                 </button>
@@ -669,8 +669,8 @@ function HojaPapelera({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =>
       <Ficha color={t.color} icono={t.icon} size={34} />
 
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium txt truncate">{t.nombre}</p>
-        <p className="text-[11px] txt-3 truncate">
+        <p className="t-fila font-medium txt truncate">{t.nombre}</p>
+        <p className="t-nota txt-3 truncate">
           {[
             ETIQUETA_DESCARTE[t.tipo],
             t.trashedBy ? `la tiró ${quien(t.trashedBy)}` : null,
@@ -680,9 +680,9 @@ function HojaPapelera({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =>
         {/* Sin `truncate`: el motivo es la razon entera por la que algo no se
             borra, y cortado en «5 movimientos la u...» no explica nada. */}
         {t.motivo ? (
-          <p className="text-[11px] txt-3 leading-snug">Se queda: {t.motivo}</p>
+          <p className="t-nota txt-3 leading-snug">Se queda: {t.motivo}</p>
         ) : t.dias !== null && (
-          <p className="text-[11px] text-amber-600 dark:text-amber-500">
+          <p className="t-nota text-amber-600 dark:text-amber-500">
             {t.dias === 0 ? 'Se borra hoy' : t.dias === 1 ? 'Se borra mañana' : `Se borra en ${t.dias} días`}
           </p>
         )}
@@ -692,7 +692,7 @@ function HojaPapelera({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =>
         onClick={() => void traerDeVuelta(t.tipo, t.id)}
         disabled={trabajando}
         aria-label={`Restaurar ${t.nombre}`}
-        className="min-h-9 px-3 rounded-xl superficie-2 borde border text-xs font-medium txt-2 shrink-0 disabled:opacity-40"
+        className="min-h-9 px-3 rounded-xl superficie-2 borde border t-nota font-medium txt-2 shrink-0 disabled:opacity-40"
       >
         Restaurar
       </button>
@@ -726,8 +726,8 @@ function HojaPapelera({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =>
               <span className="w-6 shrink-0" aria-hidden />
               <Ficha color={t.color} icono={t.icon} size={34} />
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium txt truncate">{t.nombre}</p>
-                <p className="text-[11px] txt-3">{ETIQUETA_DESCARTE[t.tipo]}</p>
+                <p className="t-fila font-medium txt truncate">{t.nombre}</p>
+                <p className="t-nota txt-3">{ETIQUETA_DESCARTE[t.tipo]}</p>
               </div>
             </div>
           ))}
@@ -742,7 +742,7 @@ function HojaPapelera({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =>
         <div className="space-y-6">
           {seVan.length > 0 && (
             <div>
-              <p className="text-xs font-medium txt-3 mb-2 px-1">
+              <p className="t-nota font-medium txt-3 mb-2 px-1">
                 Se borran solas · {seVan.length}
               </p>
               <div className="divide-y divide-[var(--borde)]">
@@ -753,7 +753,7 @@ function HojaPapelera({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =>
 
           {seQuedan.length > 0 && (
             <div>
-              <p className="text-xs font-medium txt-3 mb-2 px-1">
+              <p className="t-nota font-medium txt-3 mb-2 px-1">
                 Se quedan · {seQuedan.length}
               </p>
               <div className="divide-y divide-[var(--borde)]">
@@ -835,8 +835,8 @@ function HojaEntidades({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =
               <div key={e.id} className="flex items-center gap-3 py-2">
                 <Ficha color={e.color} icono={e.icon} size={38} />
                 <button onClick={() => setEditando(e)} className="flex-1 min-w-0 text-left">
-                  <p className="text-sm font-medium txt truncate">{e.name}</p>
-                  <p className="text-xs txt-3">
+                  <p className="t-fila font-medium txt truncate">{e.name}</p>
+                  <p className="t-nota txt-3">
                     {e.kind === 'negocio' ? 'Negocio' : 'Personal'}
                     {' · '}
                     {categories.filter((c) => c.entityId === e.id && !c.archived).length} categorías
@@ -889,7 +889,7 @@ function EditorEntidad({ entidad, alCerrar }: { entidad: Entity | null; alCerrar
       <div className="space-y-5">
         <div className="flex flex-col items-center pt-1">
           <Ficha color={color} icono={icon} size={64} />
-          <p className="text-sm font-medium txt mt-2">{name || 'Sin nombre'}</p>
+          <p className="t-fila font-medium txt mt-2">{name || 'Sin nombre'}</p>
         </div>
 
         <Campo
@@ -905,7 +905,7 @@ function EditorEntidad({ entidad, alCerrar }: { entidad: Entity | null; alCerrar
               key={k}
               onClick={() => setKind(k)}
               className={cn(
-                'min-h-11 rounded-xl text-sm font-medium border transition-all',
+                'min-h-11 rounded-xl t-fila font-medium border transition-all',
                 kind === k ? 'bg-marca-600 text-white border-transparent' : 'superficie-2 borde txt-2',
               )}
             >
@@ -915,12 +915,12 @@ function EditorEntidad({ entidad, alCerrar }: { entidad: Entity | null; alCerrar
         </div>
 
         <div>
-          <span className="block text-xs font-medium txt-2 mb-2">Color</span>
+          <span className="block t-nota font-medium txt-2 mb-2">Color</span>
           <SelectorColor valor={color} alElegir={setColor} />
         </div>
 
         <div>
-          <span className="block text-xs font-medium txt-2 mb-2">Ícono</span>
+          <span className="block t-nota font-medium txt-2 mb-2">Ícono</span>
           <SelectorIcono valor={icon} alElegir={setIcon} color={color} />
         </div>
 
@@ -1006,11 +1006,11 @@ function HojaCategorias({ abierta, alCerrar }: { abierta: boolean; alCerrar: () 
             { titulo: 'Ingresos', lista: ingresos },
           ].map(({ titulo, lista }) => lista.length > 0 && (
             <div key={titulo}>
-              <p className="text-xs font-medium txt-3 mb-2">{titulo}</p>
+              <p className="t-nota font-medium txt-3 mb-2">{titulo}</p>
               {agrupar(lista).map(({ economia, lista: suyas }) => (
               <div key={economia?.id ?? 'sueltas'} className="mb-3 last:mb-0">
                 {economias.length > 1 && (
-                  <p className="text-[11px] font-semibold uppercase tracking-wide mb-1.5"
+                  <p className="t-nota font-semibold uppercase tracking-wide mb-1.5"
                     style={{ color: economia?.color ?? '#ef4444' }}>
                     {economia?.name ?? 'Sin economía'}
                   </p>
@@ -1020,7 +1020,7 @@ function HojaCategorias({ abierta, alCerrar }: { abierta: boolean; alCerrar: () 
                   <div key={c.id} className="flex items-center gap-3 py-1">
                     <Ficha color={c.color} icono={c.icon} size={34} />
                     <button onClick={() => setEditando(c)} className="flex-1 min-w-0 text-left">
-                      <span className="text-sm txt truncate block">{c.name}</span>
+                      <span className="t-fila txt truncate block">{c.name}</span>
                     </button>
                     <button
                       onClick={() => setEditando(c)}
@@ -1087,7 +1087,7 @@ function EditorCategoria({ categoria, alCerrar }: {
       <div className="space-y-5">
         <div className="flex flex-col items-center pt-1">
           <Ficha color={color} icono={icon} size={64} />
-          <p className="text-sm font-medium txt mt-2">{name || 'Sin nombre'}</p>
+          <p className="t-fila font-medium txt mt-2">{name || 'Sin nombre'}</p>
         </div>
 
         <Campo etiqueta="Nombre" value={name} onChange={(e) => setName(e.target.value)} placeholder="Comida, Transporte..." />
@@ -1101,7 +1101,7 @@ function EditorCategoria({ categoria, alCerrar }: {
                 key={t}
                 onClick={() => setTipo(t)}
                 className={cn(
-                  'min-h-11 rounded-xl text-sm font-medium border transition-all capitalize',
+                  'min-h-11 rounded-xl t-fila font-medium border transition-all capitalize',
                   tipo === t ? 'bg-marca-600 text-white border-transparent' : 'superficie-2 borde txt-2',
                 )}
               >
@@ -1122,7 +1122,7 @@ function EditorCategoria({ categoria, alCerrar }: {
               {visibles.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
             </Selector>
             {cambiaDeEntidad && cuantos > 0 && (
-              <p className="text-xs txt-3 px-1 -mt-2 leading-relaxed">
+              <p className="t-nota txt-3 px-1 -mt-2 leading-relaxed">
                 {cuantos === 1
                   ? 'El movimiento que usa esta categoría pasa también.'
                   : `Los ${cuantos} movimientos que usan esta categoría pasan también.`}
@@ -1133,12 +1133,12 @@ function EditorCategoria({ categoria, alCerrar }: {
         )}
 
         <div>
-          <span className="block text-xs font-medium txt-2 mb-2">Color</span>
+          <span className="block t-nota font-medium txt-2 mb-2">Color</span>
           <SelectorColor valor={color} alElegir={setColor} />
         </div>
 
         <div>
-          <span className="block text-xs font-medium txt-2 mb-2">Ícono</span>
+          <span className="block t-nota font-medium txt-2 mb-2">Ícono</span>
           <SelectorIcono valor={icon} alElegir={setIcon} color={color} />
         </div>
 
@@ -1177,7 +1177,7 @@ function EditorCategoria({ categoria, alCerrar }: {
 function HojaPresupuestos({ abierta, alCerrar, alEditar }: {
   abierta: boolean; alCerrar: () => void; alEditar: (b: Budget | null) => void;
 }) {
-  const { budgets, transactions, entities, categories, household } = useStore();
+  const { budgets, transactions, entities, categories, papelera, household } = useStore();
   const moneda = household?.currency ?? 'USD';
   const variasEconomias = entities.length > 1;
 
@@ -1198,16 +1198,32 @@ function HojaPresupuestos({ abierta, alCerrar, alEditar }: {
 
   const viejos = useMemo(() => budgets
     .filter((b) => !esEvento(b))
-    .map((b) => ({
-      b,
-      cat: categories.find((c) => c.id === b.categoryId),
-      // Cada uno contra SU mes, no contra el actual: un tope de agosto se mide
-      // con lo que se gastó en agosto.
-      gastado: estadoPresupuestos([b], transactions, b.period, categories)[0]?.gastadoMinor ?? 0,
-    }))
+    .map((b) => {
+      const cat = categories.find((c) => c.id === b.categoryId);
+      /*
+       * También se busca en la papelera, y esto no es un detalle.
+       *
+       * Un tope mensual impide borrar de verdad su categoría: es el motivo que
+       * la papelera muestra como «1 tope mensual». Pero acá el tope se dibuja
+       * con el nombre de SU categoría, y lo que está en la papelera no existe
+       * para el resto de la app, así que el tope de una categoría tirada
+       * aparecía como «Todo el mes» —idéntico a un tope global de verdad— y no
+       * había forma de saber que ESE era el que trababa a la otra. Quedaban las
+       * dos atascadas, cada una escondiendo a la otra.
+       */
+      const tirada = cat ? undefined : papelera.categories.find((c) => c.id === b.categoryId);
+      return {
+        b,
+        cat: cat ?? tirada,
+        enLaPapelera: tirada !== undefined,
+        // Cada uno contra SU mes, no contra el actual: un tope de agosto se mide
+        // con lo que se gastó en agosto.
+        gastado: estadoPresupuestos([b], transactions, b.period, categories)[0]?.gastadoMinor ?? 0,
+      };
+    })
     .sort((a, x) => x.b.period.localeCompare(a.b.period)
       || (a.cat?.name ?? '').localeCompare(x.cat?.name ?? '')),
-  [budgets, categories, transactions]);
+  [budgets, categories, papelera, transactions]);
 
   const fila = (
     clave: string,
@@ -1231,12 +1247,12 @@ function HojaPresupuestos({ abierta, alCerrar, alEditar }: {
         <Ficha color={color} icono={icono} size={38} />
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline justify-between gap-2">
-            <span className="text-sm font-medium txt truncate">
+            <span className="t-fila font-medium txt truncate">
               {nombre}
               {aclaracion && <span className="txt-3 font-normal"> · {aclaracion}</span>}
             </span>
             <span className={cn(
-              'text-xs tabular shrink-0',
+              't-nota tabular shrink-0',
               ratio > 1 ? 'text-red-500 font-semibold' : ratio > 0.8 ? 'text-amber-500' : 'txt-2',
             )}>
               {formatMonto(gastado, moneda)} / {formatMonto(tope, moneda)}
@@ -1245,7 +1261,7 @@ function HojaPresupuestos({ abierta, alCerrar, alEditar }: {
           <div className="mt-1.5">
             <Barra ratio={ratio} color={color} alerta />
           </div>
-          <p className="text-[11px] txt-3 mt-1">
+          <p className="t-nota txt-3 mt-1">
             {resto >= 0
               ? `Quedan ${formatMonto(resto, moneda)}`
               : `Te pasaste ${formatMonto(-resto, moneda)}`}
@@ -1288,7 +1304,7 @@ function HojaPresupuestos({ abierta, alCerrar, alEditar }: {
               .filter(Boolean).join(' · ') || undefined,
           ))}
 
-          {viejos.map(({ b, cat, gastado }) => fila(
+          {viejos.map(({ b, cat, enLaPapelera, gastado }) => fila(
             b.id,
             cat?.name ?? 'Todo el mes',
             b.icon ?? cat?.icon ?? 'calendar-days',
@@ -1296,7 +1312,13 @@ function HojaPresupuestos({ abierta, alCerrar, alEditar }: {
             gastado,
             b.amountMinor,
             () => alEditar(b),
-            false,
+            enLaPapelera,
+            [
+              b.period,
+              // Lo dice acá porque es la única pantalla donde se puede
+              // resolver: borrando este tope, la categoría se deja borrar.
+              enLaPapelera ? 'su categoría está en la papelera' : null,
+            ].filter(Boolean).join(' · '),
           ))}
         </div>
       )}
@@ -1414,7 +1436,7 @@ function HojaPresupuesto({ abierta, alCerrar, editando }: {
               icono={catDelTope?.icon ?? 'calendar-days'}
               size={40}
             />
-            <p className="text-sm font-medium txt">{catDelTope?.name ?? 'Todo el mes'}</p>
+            <p className="t-fila font-medium txt">{catDelTope?.name ?? 'Todo el mes'}</p>
           </div>
         ) : (
           <>
@@ -1426,7 +1448,7 @@ function HojaPresupuesto({ abierta, alCerrar, editando }: {
             />
 
             <div>
-              <span className="block text-xs font-medium txt-2 mb-2">Ícono</span>
+              <span className="block t-nota font-medium txt-2 mb-2">Ícono</span>
               <SelectorIcono
                 valor={icono}
                 alElegir={setIcono}
@@ -1460,8 +1482,8 @@ function HojaPresupuesto({ abierta, alCerrar, editando }: {
         {editando && !esTopeViejo && (
           <div className="superficie-2 rounded-2xl p-3 space-y-2">
             <div className="flex items-baseline justify-between">
-              <span className="text-xs txt-2">Lleva gastado</span>
-              <span className="text-sm font-semibold tabular txt">
+              <span className="t-nota txt-2">Lleva gastado</span>
+              <span className="t-fila font-semibold tabular txt">
                 {formatMonto(gastado, moneda)}
               </span>
             </div>
@@ -1493,14 +1515,14 @@ function HojaInvitar({ abierta, alCerrar }: { abierta: boolean; alCerrar: () => 
   return (
     <Hoja abierta={abierta} alCerrar={alCerrar} titulo="Sumar a tu pareja">
       <div className="space-y-4">
-        <p className="text-sm txt-2 leading-relaxed">
+        <p className="t-fila txt-2 leading-relaxed">
           Le creas la cuenta tú y le pasas los datos. Va a ver exactamente lo
           mismo que tú, en tiempo real. Que cambie la contraseña apenas entre.
         </p>
         <Campo etiqueta="Nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Cómo se llama" />
         <Campo etiqueta="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="su@email.com" autoComplete="off" />
         <Campo etiqueta="Contraseña" type="password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="Mínimo 8 caracteres" autoComplete="new-password" />
-        {error && <p className="text-sm text-red-500">{error}</p>}
+        {error && <p className="t-fila text-red-500">{error}</p>}
         <Boton
           onClick={async () => {
             setCargando(true); setError(null);
@@ -1537,8 +1559,8 @@ function HojaPassword({ abierta, alCerrar }: { abierta: boolean; alCerrar: () =>
       <div className="space-y-4">
         <Campo etiqueta="Contraseña actual" type="password" value={actual} onChange={(e) => setActual(e.target.value)} autoComplete="current-password" />
         <Campo etiqueta="Nueva contraseña" type="password" value={nueva} onChange={(e) => setNueva(e.target.value)} placeholder="Mínimo 8 caracteres" autoComplete="new-password" />
-        <p className="text-xs txt-3">Al cambiarla se cierran las sesiones abiertas en otros dispositivos.</p>
-        {error && <p className="text-sm text-red-500">{error}</p>}
+        <p className="t-nota txt-3">Al cambiarla se cierran las sesiones abiertas en otros dispositivos.</p>
+        {error && <p className="t-fila text-red-500">{error}</p>}
         <Boton
           onClick={async () => {
             setCargando(true); setError(null);

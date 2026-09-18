@@ -94,7 +94,7 @@ export function SelectorEmoji({ valor, alElegir, color }: {
       </div>
 
       {busqueda.trim() && visibles.length === 0 && (
-        <p className="text-xs txt-3 px-1">Nada con esa palabra. Prueba con otra.</p>
+        <p className="t-nota txt-3 px-1">Nada con esa palabra. Prueba con otra.</p>
       )}
 
       <div className="grid grid-cols-8 gap-1.5">
@@ -104,7 +104,7 @@ export function SelectorEmoji({ valor, alElegir, color }: {
             onClick={() => alElegir('')}
             aria-label="Sin emoji, usar iniciales"
             className={cn(
-              'aspect-square rounded-xl flex items-center justify-center text-[11px] font-semibold transition-transform active:scale-90',
+              'aspect-square rounded-xl flex items-center justify-center t-nota font-semibold transition-transform active:scale-90',
               valor === '' ? 'text-white' : 'superficie-2 txt-3',
             )}
             style={valor === '' ? { background: color } : undefined}
@@ -118,7 +118,7 @@ export function SelectorEmoji({ valor, alElegir, color }: {
             onClick={() => alElegir(e)}
             aria-label={`Emoji ${e}`}
             className={cn(
-              'aspect-square rounded-xl flex items-center justify-center text-xl transition-transform active:scale-90',
+              'aspect-square rounded-xl flex items-center justify-center t-titulo transition-transform active:scale-90',
               valor === e ? 'ring-2' : 'superficie-2',
             )}
             style={valor === e

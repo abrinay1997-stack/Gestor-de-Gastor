@@ -11,27 +11,21 @@
  */
 
 import type { Env } from './env.ts';
-import { DIAS_HASTA_BORRAR } from './routes/papelera.ts';
+import { consultasDeAtadura, DIAS_HASTA_BORRAR, TIPO_POR_TABLA } from './routes/papelera.ts';
 
-/** Tabla -> las consultas que dicen «esto no se puede borrar». */
-const ATADO: Record<string, string[]> = {
-  category: [
-    'SELECT 1 FROM tx WHERE category_id = ?1 LIMIT 1',
-    'SELECT 1 FROM budget WHERE category_id = ?1 LIMIT 1',
-    'SELECT 1 FROM recurring WHERE category_id = ?1 LIMIT 1',
-    'SELECT 1 FROM category WHERE parent_id = ?1 LIMIT 1',
-  ],
-  account: [
-    'SELECT 1 FROM tx WHERE account_id = ?1 OR dest_account_id = ?1 LIMIT 1',
-    'SELECT 1 FROM recurring WHERE account_id = ?1 LIMIT 1',
-    'SELECT 1 FROM account_adjustment WHERE account_id = ?1 LIMIT 1',
-  ],
-  entity: [
-    'SELECT 1 FROM category WHERE entity_id = ?1 LIMIT 1',
-    'SELECT 1 FROM jar WHERE entity_id = ?1 LIMIT 1',
-    'SELECT 1 FROM tx WHERE entity_id = ?1 LIMIT 1',
-  ],
-};
+/**
+ * Tabla -> las consultas que dicen «esto no se puede borrar».
+ *
+ * Salen de la MISMA declaracion que usa la papelera para explicar en pantalla
+ * por que algo se queda (ver `ATADURAS` en routes/papelera.ts). Antes eran dos
+ * listas escritas a mano, una aca y otra alla, y se habian separado: los
+ * ajustes de saldo frenaban al barrido pero la pantalla no los contaba, asi que
+ * una cuenta con ajustes decia «se borra en 12 dias» y a los 12 dias seguia
+ * ahi, sin explicacion. Con una sola declaracion eso no puede volver a pasar.
+ */
+const ATADO: Record<string, string[]> = Object.fromEntries(
+  Object.entries(TIPO_POR_TABLA).map(([tabla, tipo]) => [tabla, consultasDeAtadura(tipo)]),
+);
 
 export async function barrerPapelera(env: Env): Promise<{ borrados: number }> {
   const corte = Date.now() - DIAS_HASTA_BORRAR * 86_400_000;

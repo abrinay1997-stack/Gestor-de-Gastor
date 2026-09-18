@@ -33,8 +33,8 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
   alAgregar: () => void;
 }) {
   const {
-    accounts, categories, transactions: todos, budgets, members, me, household,
-    recurring: todosLosHabituales, entities, entidadActiva,
+    accounts, categories, categoriasTodas, transactions: todos, budgets, members, me,
+    household, recurring: todosLosHabituales, entities, entidadActiva,
   } = useStore();
   const moneda = household?.currency ?? 'USD';
 
@@ -50,9 +50,12 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
   // TODO lo de esta pantalla sale de aca, asi que el selector de arriba manda
   // sobre el balance, el gasto por categoria, quien gasto y los presupuestos.
   // En "Todo" no filtra nada y se ve la vida entera.
+  // Con TODAS las categorías: saber de qué economía es un movimiento ya
+  // guardado no es ofrecer nada, y con la lista recortada los movimientos de
+  // una categoría tirada se caían de la pantalla al elegir una economía.
   const transactions = useMemo(
-    () => filtrarPorEntidad(todos, categories, entidadActiva),
-    [todos, categories, entidadActiva],
+    () => filtrarPorEntidad(todos, categoriasTodas, entidadActiva),
+    [todos, categoriasTodas, entidadActiva],
   );
 
   const delMes = useMemo(
@@ -95,12 +98,12 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
     'resumen': (
       <Tarjeta>
         <div className="flex items-baseline justify-between mb-3">
-          <p className="text-xs txt-2">
+          <p className="t-nota txt-2">
             {periodo.tipo === 'mes' ? 'Balance del mes' : 'Balance del período'}
             {nombreActiva && ` · ${nombreActiva}`}
           </p>
           <p className={cn(
-            'text-xl font-semibold tabular tracking-tight',
+            't-monto font-semibold tabular tracking-tight',
             resumen.flujoMinor < 0 ? 'text-red-500' : 'txt',
           )}>
             {formatMonto(resumen.flujoMinor, moneda)}
@@ -108,16 +111,16 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="superficie-2 rounded-2xl p-3">
-            <div className="flex items-center gap-1.5 text-xs txt-3 mb-0.5">
+            <div className="flex items-center gap-1.5 t-nota txt-3 mb-0.5">
               <Icono nombre="arrow-up-right" size={13} /> Entró
             </div>
-            <p className="font-semibold tabular txt">{formatMonto(resumen.ingresoMinor, moneda)}</p>
+            <p className="t-seccion font-semibold tabular txt">{formatMonto(resumen.ingresoMinor, moneda)}</p>
           </div>
           <div className="superficie-2 rounded-2xl p-3">
-            <div className="flex items-center gap-1.5 text-xs txt-3 mb-0.5">
+            <div className="flex items-center gap-1.5 t-nota txt-3 mb-0.5">
               <Icono nombre="arrow-down-left" size={13} /> Salió
             </div>
-            <p className="font-semibold tabular txt">{formatMonto(resumen.gastoMinor, moneda)}</p>
+            <p className="t-seccion font-semibold tabular txt">{formatMonto(resumen.gastoMinor, moneda)}</p>
           </div>
         </div>
       </Tarjeta>
@@ -136,18 +139,18 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
 
     'quien-gasto': members.length > 1 && resumen.gastoMinor > 0 ? (
       <Tarjeta>
-        <h2 className="font-semibold txt mb-3.5">Quién gastó</h2>
+        <h2 className="t-seccion font-semibold txt mb-3.5">Quién gastó</h2>
         <div className="space-y-3">
           {porPers.map(({ member, resumen: r }) => (
             <div key={member.id} className="flex items-center gap-3">
               <Avatar nombre={member.displayName} color={member.color} emoji={member.emoji} foto={member.photo} size={36} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline justify-between mb-1.5">
-                  <span className="text-sm font-medium txt truncate">
+                  <span className="t-fila font-medium txt truncate">
                     {member.displayName}
                     {member.id === me?.id && <span className="txt-3 font-normal"> (tú)</span>}
                   </span>
-                  <span className="text-sm font-semibold tabular txt shrink-0 ml-2">
+                  <span className="t-fila font-semibold tabular txt shrink-0 ml-2">
                     {formatMonto(r.gastoMinor, moneda)}
                   </span>
                 </div>
@@ -165,16 +168,16 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
 
     'presupuestos': presupuestos.length > 0 ? (
       <Tarjeta>
-        <h2 className="font-semibold txt mb-3.5">Presupuestos</h2>
+        <h2 className="t-seccion font-semibold txt mb-3.5">Presupuestos</h2>
         <div className="space-y-3.5">
           {presupuestos.map(({ budget, gastadoMinor, ratio }) => {
             const cat = categories.find((c) => c.id === budget.categoryId);
             return (
               <div key={budget.id}>
                 <div className="flex items-baseline justify-between mb-1.5">
-                  <span className="text-sm font-medium txt">{cat?.name ?? 'Todo el mes'}</span>
+                  <span className="t-fila font-medium txt">{cat?.name ?? 'Todo el mes'}</span>
                   <span className={cn(
-                    'text-xs tabular',
+                    't-nota tabular',
                     ratio > 1 ? 'text-red-500 font-semibold' : ratio > 0.8 ? 'text-amber-500' : 'txt-2',
                   )}>
                     {formatMonto(gastadoMinor, moneda, { compacto: true })} / {formatMonto(budget.amountMinor, moneda, { compacto: true })}
@@ -190,15 +193,15 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
 
     'por-categoria': gastoPorCat.length > 0 ? (
       <Tarjeta>
-        <h2 className="font-semibold txt mb-3.5">En qué se fue</h2>
+        <h2 className="t-seccion font-semibold txt mb-3.5">En qué se fue</h2>
         <div className="space-y-3">
           {gastoPorCat.map(({ category, totalMinor }) => (
             <div key={category?.id ?? 'sin'} className="flex items-center gap-3">
               <Ficha color={category?.color ?? '#64748b'} icono={category?.icon ?? 'circle-help'} size={36} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline justify-between mb-1.5">
-                  <span className="text-sm font-medium txt truncate">{category?.name ?? 'Sin categoría'}</span>
-                  <span className="text-sm tabular txt shrink-0 ml-2">{formatMonto(totalMinor, moneda)}</span>
+                  <span className="t-fila font-medium txt truncate">{category?.name ?? 'Sin categoría'}</span>
+                  <span className="t-fila tabular txt shrink-0 ml-2">{formatMonto(totalMinor, moneda)}</span>
                 </div>
                 <Barra
                   ratio={resumen.gastoMinor > 0 ? totalMinor / resumen.gastoMinor : 0}
@@ -214,7 +217,7 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
 
     'pagos-habituales': proximos.length > 0 ? (
       <Tarjeta className="py-3">
-        <p className="text-xs font-medium txt-3 px-1 mb-1">Pagos habituales</p>
+        <p className="t-nota font-medium txt-3 px-1 mb-1">Pagos habituales</p>
         <div className="divide-y divide-[var(--borde)] -mx-1">
           {proximos.map((r) => (
             <FilaHabitual key={r.id} recurrente={r} />
@@ -225,7 +228,7 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
 
     'ultimos': (
       <Tarjeta>
-        <h2 className="font-semibold txt mb-3.5">Últimos movimientos</h2>
+        <h2 className="t-seccion font-semibold txt mb-3.5">Últimos movimientos</h2>
         {ultimos.length === 0 ? (
           transactions.length === 0 ? (
             <Vacio
@@ -277,7 +280,7 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
  * mismo bloque terminan divergiendo en el primer retoque, y entonces la misma
  * plata se ve distinta en dos pantallas.
  */
-export function HeroPatrimonio({ montoMinor, moneda, pie, extra, accion }: {
+export function HeroPatrimonio({ montoMinor, moneda, pie, extra, accion, alineacion = 'centrado' }: {
   montoMinor: number;
   moneda: string;
   /** Solo si hay algo que aclarar. Contar las cuentas no lo era. */
@@ -292,19 +295,42 @@ export function HeroPatrimonio({ montoMinor, moneda, pie, extra, accion }: {
    * icono encendido de la barra de abajo.
    */
   accion?: React.ReactNode;
+  /**
+   * Como se planta el numero.
+   *
+   * `centrado` es el del Inicio: el patrimonio solo, en el medio, sin nada al
+   * lado que lo desequilibre.
+   *
+   * `izquierda` es el de Cuentas, donde la tarjeta ademas lleva el boton de
+   * «Cuenta». Ahi centrar era una ilusion: el numero se veia corrido porque
+   * el boton flotaba encima de su mitad derecha. Alineados —el numero a la
+   * izquierda, el boton a la derecha— cada uno tiene su lado y ninguno pisa
+   * al otro.
+   */
+  alineacion?: 'centrado' | 'izquierda';
 }) {
+  const izquierda = alineacion === 'izquierda';
+
   return (
     <Tarjeta className="bg-linear-to-br from-marca-600 to-marca-700 border-transparent text-white">
-      {/* El botón flota arriba a la derecha para que el número quede centrado
-          de verdad: en una fila de dos columnas el texto se corría a la
-          izquierda por el ancho del botón. */}
-      <div className="relative text-center">
-        {accion && <div className="absolute right-0 -top-1">{accion}</div>}
-        <p className="text-sm opacity-80 mb-1">Patrimonio</p>
-        <p className="text-[2.75rem] leading-[1.05] font-bold tabular tracking-tight">
-          {formatMonto(montoMinor, moneda)}
-        </p>
-        {pie && <p className="text-xs opacity-70 mt-1.5">{pie}</p>}
+      <div className={cn(
+        izquierda ? 'flex items-start justify-between gap-3' : 'relative text-center',
+      )}>
+        {/* Centrado, el botón flota arriba a la derecha para que el número
+            quede centrado de verdad: en una fila de dos columnas el texto se
+            corría a la izquierda por el ancho del botón. Alineado, en cambio,
+            el botón ES la segunda columna. */}
+        {accion && !izquierda && <div className="absolute right-0 -top-1">{accion}</div>}
+
+        <div className={cn('min-w-0', izquierda && 'text-left')}>
+          <p className="t-fila opacity-80 mb-1">Patrimonio</p>
+          <p className="t-cifra font-bold tabular tracking-tight">
+            {formatMonto(montoMinor, moneda)}
+          </p>
+          {pie && <p className="t-nota opacity-70 mt-1.5">{pie}</p>}
+        </div>
+
+        {accion && izquierda && <div className="shrink-0 -mt-1">{accion}</div>}
       </div>
       {extra}
     </Tarjeta>
@@ -336,12 +362,16 @@ export function FilaMovimiento({ tx, alTocar, alEditar, sinFecha, deltaMinor }: 
   deltaMinor?: number;
 }) {
   const {
-    categories, accounts, members, household, enVuelo, recienLlegados, entities,
+    categoriaPorId, accounts, members, household, enVuelo, recienLlegados, entities,
     entidadActiva, borrarTx, avisar,
   } = useStore();
   const moneda = household?.currency ?? 'USD';
 
-  const cat = categories.find((c) => c.id === tx.categoryId);
+  // Por id y no filtrando `categories`: un movimiento guardado con una
+  // categoría que después tiraron a la papelera se seguía dibujando como «Sin
+  // categoría», sin su color ni su icono, y entonces no había forma de ver
+  // cuáles eran los movimientos que la papelera decía que la estaban usando.
+  const cat = categoriaPorId(tx.categoryId);
   // En el consolidado cada movimiento dice de quien es. Dentro de una entidad
   // la etiqueta seria ruido: ya lo dice el selector de arriba.
   const entidad = entidadActiva === null && entities.length > 1
@@ -387,7 +417,7 @@ export function FilaMovimiento({ tx, alTocar, alEditar, sinFecha, deltaMinor }: 
       <Ficha color={color} icono={icono} size={40} />
 
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium txt truncate">
+        <p className="t-fila font-medium txt truncate">
           {tx.description}
           {tx.recurringId && (
             <Icono nombre="repeat" size={11} className="inline-block ml-1.5 txt-3 align-middle" />
@@ -398,7 +428,7 @@ export function FilaMovimiento({ tx, alTocar, alEditar, sinFecha, deltaMinor }: 
         )}
         {/* La fecha se calla cuando el grupo ya la dice: repetirla en cada
             fila de un mismo dia es la misma palabra catorce veces. */}
-        <p className="text-xs txt-3 truncate">
+        <p className="t-nota txt-3 truncate">
           {[
             sinFecha ? null : fechaCorta(tx.date),
             deltaMinor !== undefined && Math.abs(deltaMinor) !== tx.amountMinor
@@ -411,7 +441,7 @@ export function FilaMovimiento({ tx, alTocar, alEditar, sinFecha, deltaMinor }: 
 
       <div className="text-right shrink-0 flex items-center gap-2">
         <p className={cn(
-          'text-sm font-semibold tabular',
+          't-fila font-semibold tabular',
           deltaMinor !== undefined
             ? (deltaMinor > 0 ? 'text-marca-600 dark:text-marca-500' : 'txt')
             : esIngreso ? 'text-marca-600 dark:text-marca-500' : esTransferencia ? 'txt-2' : 'txt',
@@ -454,11 +484,13 @@ export function FilaMovimiento({ tx, alTocar, alEditar, sinFecha, deltaMinor }: 
  * escondia la que si—, y encima se repartia en las jarras.
  */
 function FilaHabitual({ recurrente: r }: { recurrente: Recurring }) {
-  const { categories, transactions, household, cobrarRecurrente, deshacerCobro, avisar } = useStore();
+  const {
+    categoriaPorId, transactions, household, cobrarRecurrente, deshacerCobro, avisar,
+  } = useStore();
   const moneda = household?.currency ?? 'USD';
   const [ocupado, setOcupado] = useState(false);
 
-  const cat = categories.find((c) => c.id === r.categoryId);
+  const cat = categoriaPorId(r.categoryId);
   const dias = Math.ceil((r.nextRun - Date.now()) / 86_400_000);
 
   // El ultimo movimiento que nacio de este pago habitual. Es lo que se
@@ -491,8 +523,8 @@ function FilaHabitual({ recurrente: r }: { recurrente: Recurring }) {
     <div className="flex items-center gap-3 py-3 px-1">
       <Ficha color={cat?.color ?? '#8b5cf6'} icono={cat?.icon ?? 'repeat'} size={38} />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium txt truncate">{r.name}</p>
-        <p className="text-xs txt-3 truncate">
+        <p className="t-fila font-medium txt truncate">{r.name}</p>
+        <p className="t-nota txt-3 truncate">
           {esperando ? (
             <span className="text-amber-600 dark:text-amber-500">
               Se esperaba el {fechaCorta(r.esperandoDesde ?? 0)} · sin {esIngreso ? 'cobrar' : 'pagar'}
@@ -515,7 +547,7 @@ function FilaHabitual({ recurrente: r }: { recurrente: Recurring }) {
         </p>
       </div>
 
-      <p className="text-sm font-semibold tabular txt shrink-0">
+      <p className="t-fila font-semibold tabular txt shrink-0">
         {formatMonto(r.amountMinor, moneda)}
       </p>
 

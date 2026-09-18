@@ -75,13 +75,18 @@ export function Cuentas() {
           <HeroPatrimonio
             montoMinor={patrimonio}
             moneda={moneda}
+            /* A la izquierda, no centrado: esta tarjeta lleva además el botón
+               de «Cuenta». Centrar el número con un botón encima de su mitad
+               derecha lo hacía VER corrido; con el número a la izquierda y el
+               botón a la derecha cada uno ocupa su lado. */
+            alineacion="izquierda"
             accion={(
               /* Con la palabra, no solo el «+»: el botón flotante de abajo
                  también es un «+» y significa otra cosa (un movimiento). Dos
                  cruces iguales en la misma pantalla se prestan a confusión. */
               <button
                 onClick={abrirNueva}
-                className="min-h-9 pl-2.5 pr-3 rounded-full bg-white/20 border border-white/25 flex items-center gap-1 text-sm font-medium active:scale-[0.94] transition-transform duration-100"
+                className="min-h-9 pl-2.5 pr-3 rounded-full bg-white/20 border border-white/25 flex items-center gap-1 t-fila font-medium active:scale-[0.94] transition-transform duration-100"
               >
                 <Icono nombre="plus" size={16} /> Cuenta
               </button>
@@ -89,12 +94,12 @@ export function Cuentas() {
             extra={pasivos.length > 0 ? (
               <div className="grid grid-cols-2 gap-3 mt-4 pt-3.5 border-t border-white/15">
                 <div>
-                  <p className="text-[11px] opacity-70 mb-0.5">Tienes</p>
-                  <p className="font-semibold tabular">{formatMonto(totalActivos, moneda)}</p>
+                  <p className="t-nota opacity-70 mb-0.5">Tienes</p>
+                  <p className="t-seccion font-semibold tabular">{formatMonto(totalActivos, moneda)}</p>
                 </div>
                 <div>
-                  <p className="text-[11px] opacity-70 mb-0.5">Debes</p>
-                  <p className="font-semibold tabular">{formatMonto(totalPasivos, moneda)}</p>
+                  <p className="t-nota opacity-70 mb-0.5">Debes</p>
+                  <p className="t-seccion font-semibold tabular">{formatMonto(totalPasivos, moneda)}</p>
                 </div>
               </div>
             ) : undefined}
@@ -128,7 +133,7 @@ function Grupo({ titulo, cuentas, alTocar, members }: {
 }) {
   return (
     <Tarjeta className="py-3">
-      {titulo && <h2 className="font-semibold txt px-1 mb-2">{titulo}</h2>}
+      {titulo && <h2 className="t-seccion font-semibold txt px-1 mb-2">{titulo}</h2>}
       <div className="divide-y divide-[var(--borde)] -mx-1">
         {cuentas.map((c) => {
           const dueno = c.owner === 'compartida'
@@ -143,15 +148,15 @@ function Grupo({ titulo, cuentas, alTocar, members }: {
               <Ficha color={c.color} icono={c.icon} size={40} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline justify-between gap-2">
-                  <p className="text-sm font-medium txt truncate">{c.name}</p>
+                  <p className="t-fila font-medium txt truncate">{c.name}</p>
                   <p className={cn(
-                    'text-sm font-semibold tabular shrink-0',
+                    't-fila font-semibold tabular shrink-0',
                     c.balanceMinor < 0 ? 'text-red-500' : 'txt',
                   )}>
                     {formatMonto(c.balanceMinor, c.currency)}
                   </p>
                 </div>
-                <p className="text-xs txt-3 truncate mt-0.5">
+                <p className="t-nota txt-3 truncate mt-0.5">
                   {ACCOUNT_CATEGORY_LABEL[c.category]} · {dueno}
                 </p>
               </div>
@@ -278,7 +283,7 @@ function FormularioCuenta({ abierta, alCerrar, editando }: {
         </Selector>
 
         {!esActivo(category) && (
-          <p className="text-xs txt-3 px-1 -mt-2">
+          <p className="t-nota txt-3 px-1 -mt-2">
             Es una cuenta de deuda: lo que gastes con ella deja el saldo en
             negativo y resta del patrimonio.
           </p>
@@ -292,7 +297,7 @@ function FormularioCuenta({ abierta, alCerrar, editando }: {
           inputMode="decimal"
         />
         {editando && !cambioElSaldo && (
-          <p className="text-xs txt-3 px-1 -mt-2 leading-relaxed">
+          <p className="t-nota txt-3 px-1 -mt-2 leading-relaxed">
             Se calcula solo con cada movimiento. Escribe otro número si la
             cuenta real dice algo distinto y no aparece por qué.
           </p>
@@ -300,7 +305,7 @@ function FormularioCuenta({ abierta, alCerrar, editando }: {
         {cambioElSaldo && (
           <div className="-mt-2 space-y-3">
             <div className="rounded-2xl p-3 superficie-2 borde border">
-              <p className="text-xs txt-2 leading-relaxed">
+              <p className="t-nota txt-2 leading-relaxed">
                 Queda en{' '}
                 <span className="font-semibold txt tabular">{formatMonto(saldoMinor, moneda)}</span>
                 {' '}·{' '}
@@ -321,14 +326,14 @@ function FormularioCuenta({ abierta, alCerrar, editando }: {
 
         {historial.length > 0 && (
           <details className="rounded-2xl superficie-2 borde border overflow-hidden">
-            <summary className="text-xs font-medium txt-2 px-3 py-2.5 cursor-pointer select-none">
+            <summary className="t-nota font-medium txt-2 px-3 py-2.5 cursor-pointer select-none">
               Ajustes anteriores ({historial.length})
             </summary>
             <div className="px-3 pb-3 space-y-2">
               {historial.map((a) => {
                 const quien = members.find((m) => m.id === a.memberId)?.displayName;
                 return (
-                  <div key={a.id} className="flex items-start gap-2 text-xs">
+                  <div key={a.id} className="flex items-start gap-2 t-nota">
                     <span className={cn(
                       'font-semibold tabular shrink-0',
                       a.deltaMinor < 0 ? 'text-red-500' : 'text-marca-600 dark:text-marca-500',
@@ -357,7 +362,7 @@ function FormularioCuenta({ abierta, alCerrar, editando }: {
         )}
 
         <div>
-          <span className="block text-xs font-medium txt-2 mb-2">Color</span>
+          <span className="block t-nota font-medium txt-2 mb-2">Color</span>
           <SelectorColor valor={color} alElegir={setColor} />
         </div>
 

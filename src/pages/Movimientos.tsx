@@ -28,14 +28,14 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
   alAgregar: () => void;
 }) {
   const {
-    transactions: todos, categories, accounts, members, me, household, entities,
-    entidadActiva, verEntidad,
+    transactions: todos, categories, categoriasTodas, papelera, accounts, members, me,
+    household, entities, entidadActiva, verEntidad,
   } = useStore();
 
   // La lista respeta la economia elegida. En "Todo" no filtra nada.
   const transactions = useMemo(
-    () => filtrarPorEntidad(todos, categories, entidadActiva),
-    [todos, categories, entidadActiva],
+    () => filtrarPorEntidad(todos, categoriasTodas, entidadActiva),
+    [todos, categoriasTodas, entidadActiva],
   );
   const moneda = household?.currency ?? 'USD';
 
@@ -46,6 +46,25 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
   const [categoria, setCategoria] = useState('');
   const [cuenta, setCuenta] = useState('');
   const [verFiltros, setVerFiltros] = useState(false);
+
+  /**
+   * Las fichas del filtro por categoría.
+   *
+   * Las vivas de siempre, y detrás las que están en la papelera y todavía
+   * aparecen en algún movimiento del período. Esas últimas llevan el nombre
+   * con «(papelera)» para que no parezcan una categoría normal que se puede
+   * volver a usar: son un camino de ida a los movimientos que la sujetan.
+   */
+  const filtrosDeCategoria = useMemo(() => {
+    const vivas = categories.filter((c) => (
+      !c.archived && (entidadActiva === null || c.entityId === entidadActiva)
+    ));
+    const usadas = new Set(transactions.map((t) => t.categoryId).filter(Boolean));
+    const tiradas = papelera.categories
+      .filter((c) => usadas.has(c.id))
+      .map((c) => ({ ...c, name: `${c.name} (papelera)` }));
+    return [...vivas, ...tiradas];
+  }, [categories, papelera, transactions, entidadActiva]);
 
   const filtrados = useMemo(() => {
     let lista = transactions.filter((t) => dentroDe(t.date, periodo));
@@ -134,7 +153,7 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
         >
           <Icono nombre="filter" size={activos > 0 ? 16 : 18} />
           {activos > 0 && (
-            <span className="text-[10px] font-semibold leading-none mt-0.5">{activos}</span>
+            <span className="t-nota font-semibold leading-none mt-0.5">{activos}</span>
           )}
         </button>
       </div>
@@ -183,15 +202,17 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
             ]}
           />
 
+          {/* Las vivas, y además las tiradas que todavía tienen movimientos.
+              Sin esas últimas no había manera de ver qué movimientos usaban
+              una categoría de la papelera: la app decía «no se puede borrar,
+              la usan 3» y no daba ningún camino para llegar a esos 3. */}
           <div className="flex gap-2 overflow-x-auto sin-barra pb-1">
-            {categories.filter((c) => (
-              !c.archived && (entidadActiva === null || c.entityId === entidadActiva)
-            )).map((c) => (
+            {filtrosDeCategoria.map((c) => (
               <button
                 key={c.id}
                 onClick={() => setCategoria(categoria === c.id ? '' : c.id)}
                 className={cn(
-                  'shrink-0 min-h-9 px-3 rounded-full border text-xs font-medium flex items-center gap-1.5 transition-all',
+                  'shrink-0 min-h-9 px-3 rounded-full border t-nota font-medium flex items-center gap-1.5 transition-all',
                   categoria === c.id ? 'border-transparent text-white' : 'superficie borde txt-2',
                 )}
                 style={categoria === c.id ? { background: c.color } : undefined}
@@ -201,7 +222,7 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
                   {c.name}
                   {entidadActiva === null && entities.length > 1 && (
                     <span
-                      className="text-[9px] font-normal"
+                      className="t-nota font-normal"
                       style={{
                         color: categoria === c.id
                           ? 'rgb(255 255 255 / 0.75)'
@@ -222,7 +243,7 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
                 key={a.id}
                 onClick={() => setCuenta(cuenta === a.id ? '' : a.id)}
                 className={cn(
-                  'shrink-0 min-h-9 px-3 rounded-full border text-xs font-medium flex items-center gap-1.5 transition-all',
+                  'shrink-0 min-h-9 px-3 rounded-full border t-nota font-medium flex items-center gap-1.5 transition-all',
                   cuenta === a.id ? 'border-transparent text-white' : 'superficie borde txt-2',
                 )}
                 style={cuenta === a.id ? { background: a.color } : undefined}
@@ -234,7 +255,7 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
           </div>
 
           {activos > 0 && (
-            <button onClick={limpiar} className="w-full min-h-10 text-sm txt-2 rounded-xl superficie">
+            <button onClick={limpiar} className="w-full min-h-10 t-fila txt-2 rounded-xl superficie">
               Limpiar filtros
             </button>
           )}
@@ -264,7 +285,7 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
         <div className="space-y-3">
           {porDia.map(([dia, txs]) => (
             <Tarjeta key={dia} className="py-3">
-              <p className="text-xs font-medium txt-3 px-1 mb-1">{fechaCorta(txs[0].date)}</p>
+              <p className="t-nota font-medium txt-3 px-1 mb-1">{fechaCorta(txs[0].date)}</p>
               <div className="divide-y divide-[var(--borde)] -mx-1">
                 {txs.map((tx) => (
                   <FilaMovimiento
@@ -294,7 +315,7 @@ function Segmentado<T extends string>({ valor, alCambiar, opciones }: {
           key={o.id}
           onClick={() => alCambiar(o.id)}
           className={cn(
-            'flex-1 min-h-9 rounded-lg text-xs font-medium transition-all truncate px-2',
+            'flex-1 min-h-9 rounded-lg t-nota font-medium transition-all truncate px-2',
             valor === o.id ? 'superficie-2 txt shadow-sm' : 'txt-2',
           )}
         >
@@ -308,8 +329,8 @@ function Segmentado<T extends string>({ valor, alCambiar, opciones }: {
 function Mini({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   return (
     <div className="superficie borde border rounded-2xl p-3 text-center">
-      <p className="text-[10px] txt-3 mb-0.5">{etiqueta}</p>
-      <p className="text-sm font-semibold tabular txt truncate">{valor}</p>
+      <p className="t-nota txt-3 mb-0.5">{etiqueta}</p>
+      <p className="t-fila font-semibold tabular txt truncate">{valor}</p>
     </div>
   );
 }

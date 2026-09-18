@@ -54,62 +54,195 @@ const NOMBRE: Record<Tipo, string> = {
 /**
  * Que impide borrar cada cosa de verdad, y con que frase se explica.
  *
- * Es una lista de consultas de conteo, no un `try/catch` sobre el DELETE:
- * asi se puede decir exactamente cuantos movimientos la usan en vez de
- * «no se pudo borrar».
+ * Es una lista de consultas, no un `try/catch` sobre el DELETE: asi se puede
+ * decir exactamente QUE la sujeta en vez de «no se pudo borrar».
+ *
+ * Y cada consulta trae los NOMBRES, no solo el numero. La version anterior
+ * decia «1 pago habitual» y ahi se acababa la pista: para encontrarlo habia
+ * que abrir Ajustes, entrar a pagos habituales y revisarlos de a uno,
+ * adivinando cual era. Peor con los topes mensuales, que la pantalla de
+ * presupuestos dibuja con el nombre de su categoria: como la categoria esta en
+ * la papelera, y lo que esta en la papelera no existe para el resto de la app,
+ * el tope aparecia como «Todo el mes» y no habia forma de relacionarlo con la
+ * categoria que no se dejaba borrar.
+ *
+ * Y las consultas que miran otra tabla con papelera propia —las
+ * subcategorias, las categorias de una economia— llevan `trashed_at IS NULL`.
+ * Sin eso, una categoria y su subcategoria tiradas juntas se trababan entre
+ * ellas —la madre «la usa» la hija, que tambien esta tirada, y que se va a ir
+ * en este mismo barrido— y no habia forma de sacar a la madre: la lista decia
+ * «se queda» por algo que ya no iba a existir.
  */
-const ATADURAS: Record<Tipo, { sql: string; describir: (n: number) => string }[]> = {
+interface Atadura {
+  /** Donde se busca. */
+  tabla: string;
+  /** La columna con la que se nombra cada fila encontrada. */
+  nombre: string;
+  /** La condicion. `?1` es el id de lo que esta en la papelera. */
+  donde: string;
+  /** Con que orden se eligen los tres que se citan. */
+  orden: string;
+  describir: (total: number, nombres: string[]) => string;
+}
+
+/** «3 movimientos: «Super», «Nafta» y 1 mas». */
+function conNombres(frase: string, total: number, nombres: string[]): string {
+  const limpios = nombres.map((n) => n.trim()).filter(Boolean);
+  if (limpios.length === 0) return frase;
+  const restantes = total - limpios.length;
+  const citados = limpios.map((n) => `«${n}»`).join(', ');
+  return restantes > 0
+    ? `${frase}: ${citados} y ${restantes} mas`
+    : `${frase}: ${citados}`;
+}
+
+const ATADURAS: Record<Tipo, Atadura[]> = {
   categoria: [
     {
-      sql: 'SELECT COUNT(*) AS n FROM tx WHERE category_id = ?1',
-      describir: (n) => `${n} movimiento${n === 1 ? ' la usa' : 's la usan'}`,
+      tabla: 'tx',
+      nombre: 'description',
+      donde: 'category_id = ?1',
+      orden: 'date DESC',
+      describir: (n, nombres) => conNombres(
+        `${n} movimiento${n === 1 ? ' la usa' : 's la usan'}`, n, nombres,
+      ),
     },
     {
-      sql: 'SELECT COUNT(*) AS n FROM budget WHERE category_id = ?1',
-      describir: (n) => `${n} presupuesto${n === 1 ? '' : 's'}`,
+      // Los presupuestos de evento no tienen categoria (name NOT NULL,
+      // category_id NULL), asi que esto solo alcanza a los topes mensuales.
+      // Se los nombra por su mes, que es lo unico que los distingue.
+      tabla: 'budget',
+      nombre: 'period',
+      donde: 'category_id = ?1',
+      orden: 'period DESC',
+      describir: (n, nombres) => conNombres(
+        `${n} tope mensual${n === 1 ? '' : 'es'}`, n, nombres,
+      ),
     },
     {
-      sql: 'SELECT COUNT(*) AS n FROM recurring WHERE category_id = ?1',
-      describir: (n) => `${n} pago${n === 1 ? ' habitual' : 's habituales'}`,
+      tabla: 'recurring',
+      nombre: 'name',
+      donde: 'category_id = ?1',
+      orden: 'name',
+      describir: (n, nombres) => conNombres(
+        `${n} pago${n === 1 ? ' habitual' : 's habituales'}`, n, nombres,
+      ),
     },
     {
-      sql: 'SELECT COUNT(*) AS n FROM category WHERE parent_id = ?1',
-      describir: (n) => `${n} subcategoría${n === 1 ? '' : 's'}`,
+      tabla: 'category',
+      nombre: 'name',
+      donde: 'parent_id = ?1 AND trashed_at IS NULL',
+      orden: 'name',
+      describir: (n, nombres) => conNombres(
+        `${n} subcategoría${n === 1 ? '' : 's'}`, n, nombres,
+      ),
     },
   ],
   cuenta: [
     {
-      sql: 'SELECT COUNT(*) AS n FROM tx WHERE account_id = ?1 OR dest_account_id = ?1',
-      describir: (n) => `${n} movimiento${n === 1 ? ' la usa' : 's la usan'}`,
+      tabla: 'tx',
+      nombre: 'description',
+      donde: 'account_id = ?1 OR dest_account_id = ?1',
+      orden: 'date DESC',
+      describir: (n, nombres) => conNombres(
+        `${n} movimiento${n === 1 ? ' la usa' : 's la usan'}`, n, nombres,
+      ),
     },
     {
-      sql: 'SELECT COUNT(*) AS n FROM recurring WHERE account_id = ?1',
-      describir: (n) => `${n} pago${n === 1 ? ' habitual' : 's habituales'}`,
+      tabla: 'recurring',
+      nombre: 'name',
+      donde: 'account_id = ?1',
+      orden: 'name',
+      describir: (n, nombres) => conNombres(
+        `${n} pago${n === 1 ? ' habitual' : 's habituales'}`, n, nombres,
+      ),
+    },
+    {
+      /*
+       * Los ajustes de saldo. Estaban SOLO en el barrido nocturno y no aca, y
+       * esa asimetria era una mentira en pantalla: la papelera le ponia «se
+       * borra en 12 dias» a una cuenta con ajustes, y a los 12 dias el barrido
+       * la miraba, veia los ajustes y la dejaba donde estaba, para siempre y
+       * sin decir por que. Y por el otro lado, «Borrar ahora» SI la borraba, y
+       * como account_adjustment cuelga de la cuenta con ON DELETE CASCADE, se
+       * llevaba el historial de correcciones por delante. Los dos caminos
+       * decidian distinto sobre la misma cuenta.
+       *
+       * Ahora los dos leen esta misma lista. Un ajuste es historia —dice que
+       * un dia la cuenta real no coincidia y por que—, asi que la cuenta se
+       * queda, y la pantalla lo explica.
+       */
+      tabla: 'account_adjustment',
+      nombre: 'note',
+      donde: 'account_id = ?1',
+      orden: 'created_at DESC',
+      describir: (n, nombres) => conNombres(
+        `${n} ajuste${n === 1 ? '' : 's'} de saldo`, n, nombres,
+      ),
     },
   ],
   economia: [
     {
-      sql: 'SELECT COUNT(*) AS n FROM category WHERE entity_id = ?1',
-      describir: (n) => `${n} categoría${n === 1 ? '' : 's'}`,
+      tabla: 'category',
+      nombre: 'name',
+      donde: 'entity_id = ?1 AND trashed_at IS NULL',
+      orden: 'name',
+      describir: (n, nombres) => conNombres(
+        `${n} categoría${n === 1 ? '' : 's'}`, n, nombres,
+      ),
     },
     {
-      sql: 'SELECT COUNT(*) AS n FROM jar WHERE entity_id = ?1',
-      describir: (n) => `${n} jarra${n === 1 ? '' : 's'}`,
+      tabla: 'jar',
+      nombre: 'name',
+      donde: 'entity_id = ?1',
+      orden: 'display_order',
+      describir: (n, nombres) => conNombres(
+        `${n} jarra${n === 1 ? '' : 's'}`, n, nombres,
+      ),
     },
     {
-      sql: 'SELECT COUNT(*) AS n FROM tx WHERE entity_id = ?1',
-      describir: (n) => `${n} movimiento${n === 1 ? '' : 's'}`,
+      tabla: 'tx',
+      nombre: 'description',
+      donde: 'entity_id = ?1',
+      orden: 'date DESC',
+      describir: (n, nombres) => conNombres(
+        `${n} movimiento${n === 1 ? '' : 's'}`, n, nombres,
+      ),
     },
   ],
+};
+
+/**
+ * Las mismas ataduras, reducidas a «¿hay alguna?».
+ *
+ * La usa el barrido nocturno, que no necesita contar ni nombrar: solo
+ * decidir. Sale de la MISMA lista de arriba a proposito —antes eran dos
+ * listas escritas a mano, y se habian ido separando— asi que agregar una
+ * atadura la aplica en los dos caminos o en ninguno.
+ */
+export function consultasDeAtadura(tipo: Tipo): string[] {
+  return ATADURAS[tipo].map((a) => `SELECT 1 FROM ${a.tabla} WHERE ${a.donde} LIMIT 1`);
+}
+
+/** El tipo de papelera al que pertenece cada tabla. */
+export const TIPO_POR_TABLA: Record<string, Tipo> = {
+  category: 'categoria',
+  account: 'cuenta',
+  entity: 'economia',
 };
 
 /** Que ata a esta fila, en palabras. Vacio = se puede borrar. */
 async function ataduras(env: Env, tipo: Tipo, id: string): Promise<string[]> {
   const razones: string[] = [];
-  for (const { sql, describir } of ATADURAS[tipo]) {
-    const fila = await env.DB.prepare(sql).bind(id).first<{ n: number }>();
-    const n = fila?.n ?? 0;
-    if (n > 0) razones.push(describir(n));
+  for (const a of ATADURAS[tipo]) {
+    const { results } = await env.DB.prepare(
+      `SELECT ${a.nombre} AS nombre, COUNT(*) OVER () AS total
+         FROM ${a.tabla} WHERE ${a.donde} ORDER BY ${a.orden} LIMIT 3`,
+    ).bind(id).all<{ nombre: string | null; total: number }>();
+    if (results.length === 0) continue;
+    const total = results[0].total;
+    if (total <= 0) continue;
+    razones.push(a.describir(total, results.map((r) => r.nombre ?? '')));
   }
   return razones;
 }
@@ -209,31 +342,61 @@ export async function vaciar(req: Request, env: Env, sesion: Sesion): Promise<Re
   if (marcados && marcados.size === 0) return error('No marcaste nada');
 
   const borrados: { tipo: Tipo; id: string }[] = [];
-  const retenidos: { tipo: Tipo; id: string; nombre: string; motivo: string }[] = [];
+  let retenidos: { tipo: Tipo; id: string; nombre: string; motivo: string }[] = [];
 
-  for (const tipo of TIPOS) {
-    if (soloTipo && tipo !== soloTipo) continue;
+  /**
+   * Una pasada por todo lo tirado. Devuelve cuantas cosas borro.
+   *
+   * Existe como funcion porque hay que repetirla: ver el bucle de abajo.
+   */
+  async function pasada(): Promise<number> {
+    let cuantas = 0;
+    retenidos = [];
 
-    const { results } = await env.DB.prepare(
-      `SELECT id, name FROM ${TABLA[tipo]}
-        WHERE household_id = ?1 AND trashed_at IS NOT NULL
-          AND (?2 IS NULL OR id = ?2)`,
-    ).bind(sesion.householdId, soloId).all<{ id: string; name: string }>();
+    for (const tipo of TIPOS) {
+      if (soloTipo && tipo !== soloTipo) continue;
 
-    for (const fila of results) {
-      if (marcados && !marcados.has(`${tipo}:${fila.id}`)) continue;
-      const razones = await ataduras(env, tipo, fila.id);
-      if (razones.length > 0) {
-        retenidos.push({
-          tipo, id: fila.id, nombre: fila.name, motivo: razones.join(', '),
-        });
-        continue;
+      const { results } = await env.DB.prepare(
+        `SELECT id, name FROM ${TABLA[tipo]}
+          WHERE household_id = ?1 AND trashed_at IS NOT NULL
+            AND (?2 IS NULL OR id = ?2)`,
+      ).bind(sesion.householdId, soloId).all<{ id: string; name: string }>();
+
+      for (const fila of results) {
+        if (marcados && !marcados.has(`${tipo}:${fila.id}`)) continue;
+        const razones = await ataduras(env, tipo, fila.id);
+        if (razones.length > 0) {
+          retenidos.push({
+            tipo, id: fila.id, nombre: fila.name, motivo: razones.join(', '),
+          });
+          continue;
+        }
+        await env.DB.prepare(`DELETE FROM ${TABLA[tipo]} WHERE id = ?1 AND household_id = ?2`)
+          .bind(fila.id, sesion.householdId).run();
+        borrados.push({ tipo, id: fila.id });
+        cuantas += 1;
       }
-      await env.DB.prepare(`DELETE FROM ${TABLA[tipo]} WHERE id = ?1 AND household_id = ?2`)
-        .bind(fila.id, sesion.householdId).run();
-      borrados.push({ tipo, id: fila.id });
     }
+
+    return cuantas;
   }
+
+  /**
+   * Se repite mientras algo se haya podido borrar.
+   *
+   * Una sola pasada dependia del orden en que la base devolviera las filas, y
+   * eso es el orden de creacion. Una economia con dos categorias tiradas
+   * adentro se miraba ANTES que sus categorias si se habia creado primero —que
+   * es siempre, porque la categoria nace dentro de la economia—, asi que la
+   * economia se retenia por unas categorias que el mismo barrido iba a borrar
+   * tres lineas mas abajo. Al terminar, la papelera quedaba con una sola cosa
+   * adentro y ningun motivo visible para que siguiera ahi, y solo volviendo a
+   * tocar «Borrar» se iba. Lo mismo con una categoria y sus subcategorias.
+   *
+   * Cada vuelta borra al menos una fila o corta, asi que como mucho da tantas
+   * vueltas como cosas haya en la papelera.
+   */
+  while (await pasada() > 0) { /* seguir mientras haya progreso */ }
 
   for (const { tipo, id } of borrados) {
     const kind = tipo === 'categoria' ? 'category:delete'
