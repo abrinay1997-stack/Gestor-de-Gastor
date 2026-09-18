@@ -11,12 +11,25 @@
  * cambio de horario de verano no puede correr el pago al dia anterior.
  */
 
-export type Frecuencia = 'semanal' | 'quincenal' | 'mensual' | 'anual';
+export type Frecuencia =
+  | 'semanal' | 'quincenal' | 'mensual' | 'trimestral' | 'semestral' | 'anual';
+
+/**
+ * Las frecuencias en orden, de la mas seguida a la mas espaciada.
+ *
+ * El orden importa: es el de la lista que se elige en pantalla, y una lista de
+ * periodos que no va de menor a mayor obliga a leerla entera cada vez.
+ */
+export const FRECUENCIAS: readonly Frecuencia[] = [
+  'semanal', 'quincenal', 'mensual', 'trimestral', 'semestral', 'anual',
+] as const;
 
 export const FRECUENCIA_LABEL: Record<Frecuencia, string> = {
   semanal: 'Cada semana',
   quincenal: 'Cada quincena',
   mensual: 'Cada mes',
+  trimestral: 'Cada trimestre',
+  semestral: 'Cada semestre',
   anual: 'Cada año',
 };
 
@@ -51,8 +64,41 @@ export interface ReglaRecurrencia {
   diaDelMes2?: number;
   /** 0 = domingo, para semanal. */
   diaDeSemana?: number;
-  /** 1-12, para anual. */
+  /**
+   * 1-12. El mes de referencia del ciclo, para trimestral, semestral y anual.
+   *
+   * En la anual es literalmente el mes en que se cobra. En las otras dos es el
+   * ANCLA: marca en que punto del año arranca el ciclo, y a partir de ahi se
+   * repite cada 3 o cada 6 meses. Con enero de ancla, la trimestral cae en
+   * enero, abril, julio y octubre; con febrero, en febrero, mayo, agosto y
+   * noviembre. Sin ancla no habria forma de distinguir esas dos.
+   */
   mesDelAnio?: number;
+}
+
+/**
+ * Cada cuantos meses se repite, para las frecuencias que se cuentan en meses.
+ *
+ * Son cuatro variantes de la MISMA regla —un dia del mes, cada N meses,
+ * anclado a un mes del año— y por eso comparten el calculo entero en vez de
+ * tener cada una su rama. La semanal y la quincenal no entran: la primera no
+ * cuenta meses y la segunda cae dos veces dentro del mismo mes.
+ */
+const PASO_EN_MESES: Partial<Record<Frecuencia, number>> = {
+  mensual: 1,
+  trimestral: 3,
+  semestral: 6,
+  anual: 12,
+};
+
+/** Los meses (0-11) en los que cae un ciclo, a partir de su ancla. */
+export function mesesDelCiclo(regla: ReglaRecurrencia): number[] {
+  const paso = PASO_EN_MESES[regla.frecuencia];
+  if (!paso || paso === 1) return [];
+  const ancla = ((regla.mesDelAnio ?? 1) - 1 + 12) % 12;
+  const out: number[] = [];
+  for (let m = 0; m < 12; m += paso) out.push((ancla + m) % 12);
+  return out.sort((a, b) => a - b);
 }
 
 /** Valores por defecto de la quincena: el 15 y el ultimo dia del mes. */
@@ -127,23 +173,34 @@ export function primeraFecha(regla: ReglaRecurrencia, desde = Date.now()): numbe
       return candidatas.find((f) => f >= hoy) ?? candidatas[2];
     }
 
-    case 'mensual': {
-      const dia = regla.diaDelMes ?? 1;
-      const esteMes = fechaSegura(anio, mes0, dia).getTime();
-      if (esteMes >= hoy) return esteMes;
-      return fechaSegura(anio, mes0 + 1, dia).getTime();
-    }
+    // Mensual, trimestral, semestral y anual: la misma cuenta con otro paso.
+    default: {
+      const paso = PASO_EN_MESES[regla.frecuencia];
+      if (!paso) return hoy;
 
-    case 'anual': {
       const dia = regla.diaDelMes ?? 1;
-      const mes = (regla.mesDelAnio ?? 1) - 1;
-      const esteAnio = fechaSegura(anio, mes, dia).getTime();
-      if (esteAnio >= hoy) return esteAnio;
-      return fechaSegura(anio + 1, mes, dia).getTime();
-    }
+      // La mensual cae todos los meses, asi que su ancla es este mismo mes y
+      // el ciclo nunca la saltea. Las otras se anclan al mes elegido.
+      const ancla = paso === 1 ? mes0 : (regla.mesDelAnio ?? 1) - 1;
 
-    default:
-      return hoy;
+      // En meses absolutos, para no pelearse con el cambio de año: el mes
+      // 2026-03 es 24315, y sumarle 3 da 2026-06 sin ningun caso especial.
+      const absHoy = anio * 12 + mes0;
+      const absAncla = anio * 12 + ancla;
+      // El primer mes del ciclo que no quedo atras. Ceil sobre la diferencia,
+      // que puede ser negativa si el ancla es un mes que todavia no llego.
+      const vueltas = Math.ceil((absHoy - absAncla) / paso);
+      let abs = absAncla + vueltas * paso;
+
+      let f = fechaSegura(Math.floor(abs / 12), abs % 12, dia).getTime();
+      // Puede caer en el mes correcto pero en un dia ya pasado: se salta al
+      // siguiente ciclo entero, no al mes siguiente.
+      if (f < hoy) {
+        abs += paso;
+        f = fechaSegura(Math.floor(abs / 12), abs % 12, dia).getTime();
+      }
+      return f;
+    }
   }
 }
 
@@ -180,18 +237,21 @@ export function siguienteFecha(regla: ReglaRecurrencia, ultima: number): number 
       return candidatas.find((f) => f > ultima) ?? fechaSegura(anio, mes0 + 2, a).getTime();
     }
 
-    case 'mensual':
-      return fechaSegura(d.getFullYear(), d.getMonth() + 1, regla.diaDelMes ?? d.getDate()).getTime();
-
-    case 'anual':
+    // Mensual, trimestral, semestral y anual: sumarle el paso al mes.
+    //
+    // Se avanza desde el MES de la ultima, no desde el ancla, y el dia se
+    // vuelve a tomar de la regla. Asi un cobro del 31 que en febrero cayo el
+    // 28 sigue siendo "el 31" el mes que viene, y un ciclo que se atraso
+    // varias vueltas las recupera de a una en vez de saltar al presente.
+    default: {
+      const paso = PASO_EN_MESES[regla.frecuencia];
+      if (!paso) return ultima;
       return fechaSegura(
-        d.getFullYear() + 1,
-        (regla.mesDelAnio ?? d.getMonth() + 1) - 1,
+        d.getFullYear(),
+        d.getMonth() + paso,
         regla.diaDelMes ?? d.getDate(),
       ).getTime();
-
-    default:
-      return ultima;
+    }
   }
 }
 
@@ -236,6 +296,17 @@ export function describirRegla(regla: ReglaRecurrencia): string {
       return `${regla.diaDelMes ?? 1} del mes`;
     case 'anual':
       return `${regla.diaDelMes ?? 1} de ${MESES[(regla.mesDelAnio ?? 1) - 1]}`;
+    // Se nombran los cuatro (o los dos) meses en vez de decir "cada 3 meses".
+    // "Cada 3 meses" no dice CUALES, y para un impuesto trimestral eso es lo
+    // unico que hace falta saber para anticiparlo.
+    case 'trimestral':
+    case 'semestral': {
+      const meses = mesesDelCiclo(regla).map((m) => MESES[m]);
+      const listados = meses.length > 1
+        ? `${meses.slice(0, -1).join(', ')} y ${meses[meses.length - 1]}`
+        : meses[0];
+      return `${regla.diaDelMes ?? 1} de ${listados}`;
+    }
     default:
       return '';
   }

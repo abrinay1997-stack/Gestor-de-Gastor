@@ -10,6 +10,8 @@
  * que se acumula en silencio hasta que los saldos dejan de cuadrar.
  */
 
+import type { Frecuencia } from './recurrencia.ts';
+
 // ---------------------------------------------------------------------------
 // Transacciones
 // ---------------------------------------------------------------------------
@@ -422,11 +424,13 @@ export interface Recurring {
    */
   distributeToJars: boolean;
   paidBy: string | null;
-  frequency: 'semanal' | 'quincenal' | 'mensual' | 'anual';
+  /** La lista vive en shared/recurrencia.ts, que es quien calcula con ella. */
+  frequency: Frecuencia;
   dayOfMonth: number | null;
   /** Segundo cobro del mes. Solo quincenal; 31 significa el ultimo dia. */
   dayOfMonth2: number | null;
   dayOfWeek: number | null;
+  /** Mes del ciclo: literal en la anual, ancla en trimestral y semestral. */
   monthOfYear: number | null;
   active: boolean;
   entityId: string | null;
