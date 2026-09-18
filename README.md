@@ -1,4 +1,4 @@
-# Nuestros gastos
+# Nuestros gastos.
 
 Gestor de gastos para dos personas. Libro compartido, en tiempo real, sobre
 Cloudflare. Sin Google, sin Firebase, sin servicios de terceros.
