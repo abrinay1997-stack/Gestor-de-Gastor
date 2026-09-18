@@ -404,7 +404,7 @@ export function FilaMovimiento({ tx, alTocar, alEditar, sinFecha, deltaMinor }: 
         <p className={cn(
           'text-sm font-semibold tabular',
           deltaMinor !== undefined
-            ? (deltaMinor > 0 ? 'text-marca-600 dark:text-marca-500' : 'text-red-500')
+            ? (deltaMinor > 0 ? 'text-marca-600 dark:text-marca-500' : 'txt')
             : esIngreso ? 'text-marca-600 dark:text-marca-500' : esTransferencia ? 'txt-2' : 'txt',
         )}>
           {deltaMinor !== undefined

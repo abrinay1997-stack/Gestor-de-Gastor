@@ -187,7 +187,9 @@ export function Analisis() {
             </Tarjeta>
             <Tarjeta className="p-4">
               <p className="text-xs txt-2 mb-1">Salió</p>
-              <p className="text-lg font-semibold tabular text-red-500">
+              {/* Neutro, no rojo. Gastar no es un problema: es para lo que esta
+                  la plata. El rojo se guarda para lo que si lo es. */}
+              <p className="text-lg font-semibold tabular txt">
                 {formatMonto(resumen.gastoMinor, moneda, { compacto: true })}
               </p>
             </Tarjeta>
@@ -306,7 +308,12 @@ export function Analisis() {
                 </div>
                 <div className="superficie-2 rounded-2xl p-3">
                   <p className="text-[10px] txt-3 mb-0.5">Peor mes</p>
-                  <p className="text-sm font-semibold tabular text-red-500 capitalize">
+                  {/* El peor mes puede haber cerrado en positivo. Se pinta de
+                      rojo solo si de verdad se gasto mas de lo que entro. */}
+                  <p className={cn(
+                    'text-sm font-semibold tabular capitalize',
+                    (peor?.Balance ?? 0) < 0 ? 'text-red-500' : 'txt',
+                  )}>
                     {peor?.mes} · {formatMonto(Math.round((peor?.Balance ?? 0) * 10 ** decimales), moneda, { compacto: true })}
                   </p>
                 </div>
@@ -364,7 +371,7 @@ export function Analisis() {
                       <span className="text-marca-600 dark:text-marca-500">
                         +{formatMonto(r.ingresoMinor, moneda, { compacto: true })}
                       </span>
-                      <span className="text-red-500">
+                      <span className="txt-2">
                         -{formatMonto(r.gastoMinor, moneda, { compacto: true })}
                       </span>
                     </div>

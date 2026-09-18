@@ -257,6 +257,26 @@
   }
 }
 
+/*
+ * QUE SIGNIFICA CADA COLOR. Una sola regla para toda la app.
+ *
+ * Existe porque el rojo se habia vuelto decorativo: pintaba el gasto del mes,
+ * el "salio" de una jarra, el peor mes aunque hubiera cerrado en positivo. Un
+ * rojo que aparece cuando no pasa nada no avisa de nada, y ademas ensucia
+ * pantallas donde todo esta bien.
+ *
+ *   rojo (--color-red-500)    SOLO un problema de verdad: un saldo en negativo,
+ *                             una jarra de la que salio mas de lo que entro, un
+ *                             tope pasado, un error, o el boton de borrar.
+ *                             Que salga plata NO es un problema.
+ *   verde (--color-marca-*)   plata que entra, y lo que queda disponible.
+ *   ambar                     algo que conviene mirar y todavia no rompio nada.
+ *   neutro (txt / txt-2)      todo lo demas, incluido el gasto. Es lo normal.
+ *   color propio              identidad, no estado: el color de una categoria,
+ *                             de una jarra, de una economia o de una persona.
+ *                             Nunca dice si algo esta bien o mal.
+ */
+
 /* El vidrio de la barra, en oscuro.
    Va dos veces a proposito: el media query cubre a quien tiene el sistema en
    oscuro y no eligio nada (por eso el `:not([data-tema='claro'])`), y el

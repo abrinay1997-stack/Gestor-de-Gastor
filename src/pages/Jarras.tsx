@@ -777,11 +777,12 @@ function MovimientosDeJarra({ jarra, alCerrar, alVerMovimiento, alMover, alPoner
           </div>
           <div className="superficie-2 rounded-2xl p-3 text-center">
             <p className="text-[10px] txt-3 mb-0.5">Salió</p>
-            {/* En cero va neutro. Un $0.00 en rojo es una alarma por algo que
-                no pasó, y el rojo tiene que significar una sola cosa. */}
+            {/* Neutro. Que de una jarra haya salido plata es exactamente para
+                lo que existe la jarra: no es una alarma. El rojo aparece si
+                salio MAS de lo que entro, y eso ya lo dice el saldo de arriba. */}
             <p className={cn(
               'text-sm font-semibold tabular',
-              salio > 0 ? 'text-red-500' : 'txt-3',
+              salio > 0 ? 'txt' : 'txt-3',
             )}>
               {formatMonto(salio, moneda)}
             </p>
@@ -820,7 +821,7 @@ function MovimientosDeJarra({ jarra, alCerrar, alVerMovimiento, alMover, alPoner
                   </div>
                   <span className={cn(
                     'text-sm tabular font-semibold shrink-0',
-                    h.delta > 0 ? 'text-marca-600 dark:text-marca-500' : 'text-red-500',
+                    h.delta > 0 ? 'text-marca-600 dark:text-marca-500' : 'txt',
                   )}>
                     {h.delta > 0 ? '+' : '−'}{formatMonto(Math.abs(h.delta), moneda)}
                   </span>
