@@ -202,11 +202,11 @@
   .barra-flotante {
     isolation: isolate;
     position: relative;
+    /* Recorta la capa de refracción, que es más grande que la píldora. */
+    overflow: hidden;
     /* El respaldo, para navegadores sin color-mix: opaco antes que roto. */
     background: var(--superficie);
     background: color-mix(in srgb, var(--superficie) 7%, transparent);
-    -webkit-backdrop-filter: blur(36px) saturate(2.6) brightness(1.06);
-    backdrop-filter: blur(36px) saturate(2.6) brightness(1.06);
     /* Casi invisible: el canto de verdad lo dibuja ::after. Este queda solo
        para que la geometria no cambie y para el navegador sin mascaras. */
     border: 0.5px solid rgb(0 0 0 / 0.04);
@@ -218,6 +218,64 @@
     transition:
       padding 0.28s cubic-bezier(0.32, 0.72, 0, 1),
       transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  /*
+   * El vidrio, en dos capas.
+   *
+   * Un vidrio grueso no deforma parejo: por el centro se ve casi derecho y es
+   * en el canto donde las líneas se curvan, porque ahí el grosor que atraviesa
+   * la luz cambia de golpe. Una sola capa deformando todo por igual se lee
+   * como vidrio ondulado de baño, no como una pieza de vidrio.
+   *
+   * Por eso hay dos: el CUERPO desenfoca y no deforma, y el CANTO deforma con
+   * una máscara radial que lo apaga en el medio y lo enciende hacia los
+   * bordes.
+   *
+   * Las dos van más grandes que la píldora (`inset` negativo) y el padre las
+   * recorta. Eso no es un detalle: el desplazamiento trae píxeles de hasta 26px
+   * de distancia, y si la capa terminara justo en el canto traería
+   * transparencia y dejaría mordidas en el filo.
+   *
+   * Un aviso para quien toque esto: la máscara TIENE que ser radial y en
+   * porcentajes de la capa. Con la máscara rectangular de `::after`
+   * —`padding` + `mask-composite: exclude`, que dibuja un aro— el aro cae a
+   * 28px de la píldora, o sea entero fuera del recorte del padre, y la capa no
+   * dibuja nada. Se ve idéntica a no tener canto, que es justo lo que la hace
+   * difícil de detectar.
+   *
+   * El desenfoque del cuerpo bajó de 36px a 18px. `backdrop-filter` se
+   * acumula, y doblar una mancha no se ve: la refracción necesita que atrás
+   * queden líneas reconocibles para poder curvarlas.
+   *
+   * `z-index: -1` las deja por debajo de los dos gradientes de brillo
+   * (`::before` y `::after`), que son los que le dan forma y color. El
+   * `isolation: isolate` del padre impide que ese -1 se escape hacia atrás.
+   *
+   * Si el navegador no aplica el filtro SVG, el canto sigue siendo un
+   * `backdrop-filter` normal: se pierde el doblado y queda el vidrio
+   * esmerilado de siempre. Degradar así, sin detección ni ramas, es a
+   * propósito.
+   */
+  .vidrio-cuerpo,
+  .vidrio-canto {
+    position: absolute;
+    inset: -28px;
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  .vidrio-cuerpo {
+    -webkit-backdrop-filter: blur(18px) saturate(2.6) brightness(1.06);
+    backdrop-filter: blur(18px) saturate(2.6) brightness(1.06);
+  }
+
+  .vidrio-canto {
+    -webkit-backdrop-filter: blur(6px) saturate(2.4);
+    backdrop-filter: blur(6px) saturate(2.4);
+    filter: url(#vidrio-liquido);
+    -webkit-mask: radial-gradient(ellipse 58% 52% at 50% 50%, transparent 35%, #000 92%);
+    mask: radial-gradient(ellipse 58% 52% at 50% 50%, transparent 35%, #000 92%);
   }
 
   /* La cara: la luz que entra por arriba y muere hacia el medio. */
@@ -371,10 +429,12 @@
     :root:not([data-tema='claro']) .borde-luz {
       box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
     }
+    :root:not([data-tema='claro']) .vidrio-cuerpo {
+      -webkit-backdrop-filter: blur(18px) saturate(2.2) brightness(1.12);
+      backdrop-filter: blur(18px) saturate(2.2) brightness(1.12);
+    }
     :root:not([data-tema='claro']) .barra-flotante {
       background: color-mix(in srgb, var(--superficie) 9%, transparent);
-      -webkit-backdrop-filter: blur(36px) saturate(2.2) brightness(1.12);
-      backdrop-filter: blur(36px) saturate(2.2) brightness(1.12);
       border: 0.5px solid rgb(255 255 255 / 0.06);
       box-shadow:
         0 1px 2px rgb(0 0 0 / 0.3),
@@ -408,10 +468,12 @@
   :root[data-tema='oscuro'] .borde-luz {
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
   }
+    :root[data-tema='oscuro'] .vidrio-cuerpo {
+      -webkit-backdrop-filter: blur(18px) saturate(2.2) brightness(1.12);
+      backdrop-filter: blur(18px) saturate(2.2) brightness(1.12);
+    }
     :root[data-tema='oscuro'] .barra-flotante {
       background: color-mix(in srgb, var(--superficie) 9%, transparent);
-      -webkit-backdrop-filter: blur(36px) saturate(2.2) brightness(1.12);
-      backdrop-filter: blur(36px) saturate(2.2) brightness(1.12);
       border: 0.5px solid rgb(255 255 255 / 0.06);
       box-shadow:
         0 1px 2px rgb(0 0 0 / 0.3),
@@ -445,6 +507,12 @@
     background: var(--superficie);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+  /* Quien pide menos transparencia no quiere vidrio, y menos uno que además
+     deforma lo que hay detrás. Las dos capas se van. */
+  .vidrio-cuerpo,
+  .vidrio-canto {
+    display: none;
   }
   /* Sin vidrio no hay canto ni reflejo que simular: una pastilla opaca con
      su borde de siempre. */

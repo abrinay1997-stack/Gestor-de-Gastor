@@ -17,6 +17,7 @@ import { useStore } from '../../store/store.tsx';
 import { cn } from '../../lib/utils.ts';
 import { Avatar, Icono } from '../ui/base.tsx';
 import { PastillaEntidad } from '../ui/entidad.tsx';
+import { FiltroVidrio } from '../ui/vidrio.tsx';
 
 export type Solapa =
   | 'inicio' | 'cuentas' | 'jarras' | 'movimientos' | 'analisis' | 'consejero' | 'ajustes';
@@ -122,6 +123,9 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
 
   return (
     <div className="min-h-dvh flex flex-col md:flex-row">
+      {/* El filtro que dobla el fondo bajo la barra. Va una vez en todo el
+          documento: la regla `.refraccion` de index.css lo busca por su id. */}
+      <FiltroVidrio />
       {/* Barra lateral, solo en pantalla grande */}
       <aside className="hidden md:flex flex-col w-60 barra-vidrio borde border-r p-5 sticky top-0 h-dvh shrink-0 z-30">
         <div className="flex items-center gap-2.5 mb-8">
@@ -253,6 +257,13 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
           'barra-flotante pointer-events-auto relative w-full max-w-[430px] rounded-[26px] px-2',
           compacto ? 'py-0.5' : 'py-1.5',
         )}>
+          {/* El vidrio: el cuerpo desenfoca, el canto dobla. Son elementos y
+              no pseudos porque `filter` y `backdrop-filter` juntos necesitan
+              una caja propia, y porque `::before` y `::after` ya están
+              tomados por los dos gradientes del brillo. Ver index.css. */}
+          <span aria-hidden="true" className="vidrio-cuerpo" />
+          <span aria-hidden="true" className="vidrio-canto" />
+
           <div className="relative flex w-full">
             {enLaBarra && (
               <span
