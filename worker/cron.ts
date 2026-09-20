@@ -13,6 +13,7 @@
 
 import { aRecurring, listarCuentas, listarImputaciones, listarJarras } from './db.ts';
 import { ambitoDeReparto, sentenciasImputacion } from './jarras.ts';
+import { nuevosCodigos } from './codigo.ts';
 import type { Env } from './env.ts';
 import { fechasVencidas, reglaDe, siguienteFecha } from '../shared/recurrencia.ts';
 
@@ -66,28 +67,36 @@ export async function correrPagosHabituales(env: Env): Promise<{ creados: number
         .jarrasPara({ entityId: r.entityId, categoryId: r.categoryId })
       : [];
 
+    // Si la economia de este pago no tiene jarras, el interruptor no puede
+    // cumplirse: se guarda apagado, que es la verdad, y el ingreso queda
+    // visible en la puesta al dia. Ver repartoPosible en jarras.ts.
+    const reparte = r.distributeToJars && jars.length > 0;
+
+    // Un codigo por movimiento a crear, pedidos todos juntos.
+    const codigos = await nuevosCodigos(env, fechas.length);
+
     // Todo junto: los movimientos, sus imputaciones y el avance de la fecha. Si
     // algo falla, no queda ni un movimiento creado con la fecha sin avanzar
     // (que al proximo barrido lo duplicaria).
     const sentencias = [
-      ...fechas.flatMap((fecha) => {
+      ...fechas.flatMap((fecha, i) => {
         const txId = crypto.randomUUID();
         return [
           env.DB.prepare(
-            `INSERT INTO tx (id, household_id, type, amount_minor, account_id, dest_account_id,
+            `INSERT INTO tx (id, code, household_id, type, amount_minor, account_id, dest_account_id,
                              dest_amount_minor, category_id, jar_id, distribute_to_jars,
                              description, notes, date, created_by, paid_by, recurring_id,
                              created_at, updated_at)
-             VALUES (?1,?2,?3,?4,?5,NULL,NULL,?6,?7,?8,?9,NULL,?10,?11,?12,?13,?14,?14)`,
+             VALUES (?1,?15,?2,?3,?4,?5,NULL,NULL,?6,?7,?8,?9,NULL,?10,?11,?12,?13,?14,?14)`,
           ).bind(
             txId, r.householdId, r.type, r.amountMinor, r.accountId,
-            r.categoryId, r.jarId, r.distributeToJars ? 1 : 0, r.name, fecha,
-            autor, r.paidBy, r.id, ahora,
+            r.categoryId, r.jarId, reparte ? 1 : 0, r.name, fecha,
+            autor, r.paidBy, r.id, ahora, codigos[i],
           ),
           ...sentenciasImputacion(env, r.householdId, txId, {
             type: r.type,
             amountMinor: r.amountMinor,
-            distributeToJars: r.distributeToJars,
+            distributeToJars: reparte,
             jarId: r.jarId,
           }, jars, ahora),
         ];

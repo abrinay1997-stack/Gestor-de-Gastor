@@ -175,14 +175,19 @@ export async function ponerAlDia(_r: Request, env: Env, sesion: Sesion): Promise
 
   const ambito = await ambitoDeReparto(env, sesion.householdId);
 
-  // Ingresos sin jarra, sin reparto y sin ninguna imputacion escrita.
+  // Ingresos sin jarra y sin ninguna imputacion escrita.
+  //
+  // Lo que manda es NOT EXISTS: un ingreso sin una sola imputacion nunca llego
+  // a ninguna jarra, diga lo que diga su interruptor. Antes aca habia ademas un
+  // `distribute_to_jars = 0` que dejaba afuera justamente los peores casos —los
+  // que se guardaron con el reparto encendido en una economia sin jarras—, y
+  // esos quedaban invisibles para siempre: ni huerfanos, ni repartibles.
   const { results } = await env.DB.prepare(
     `SELECT t.id, t.amount_minor, t.category_id, t.entity_id
        FROM tx t
       WHERE t.household_id = ?1
         AND t.type = ?2
         AND t.jar_id IS NULL
-        AND t.distribute_to_jars = 0
         AND NOT EXISTS (SELECT 1 FROM jar_imputacion i WHERE i.tx_id = t.id)`,
   ).bind(sesion.householdId, TxType.INGRESO).all<{
     id: string; amount_minor: number; category_id: string | null; entity_id: string | null;

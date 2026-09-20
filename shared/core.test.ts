@@ -6,6 +6,7 @@ import {
   indexarCategorias, jarrasDe, porPersona, repartirEnJarras, resultadoPorEntidad,
   resumir, sinAsignar, validarJarras,
 } from './domain.ts';
+import { generarCodigo } from './codigo.ts';
 import { periodoMes } from './periodo.ts';
 import { leer } from './parser.ts';
 import {
@@ -16,7 +17,7 @@ import {
 // --- helpers -------------------------------------------------------------
 
 const tx = (p: Partial<Transaction>): Transaction => ({
-  id: crypto.randomUUID(), householdId: 'h', type: TxType.GASTO, amountMinor: 0,
+  id: crypto.randomUUID(), code: generarCodigo(), householdId: 'h', type: TxType.GASTO, amountMinor: 0,
   accountId: 'a1', destAccountId: null, destAmountMinor: null, categoryId: null,
   jarId: null, distributeToJars: false, description: '', notes: null,
   date: Date.now(), createdBy: 'u1', paidBy: null, recurringId: null, budgetId: null,

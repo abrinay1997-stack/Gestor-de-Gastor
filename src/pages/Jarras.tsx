@@ -126,7 +126,12 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
     // perteneciendo a su economía, y sin esto se colaba como «huérfano».
     const indice = indexarCategorias(categoriasTodas);
     return transactions.filter((t) => {
-      if (t.type !== 2 || t.jarId || t.distributeToJars || conImputacion.has(t.id)) return false;
+      // Lo que manda es no tener NINGUNA imputacion: un ingreso que no llego a
+      // ninguna jarra es huerfano diga lo que diga su interruptor. Antes aca
+      // habia ademas un `t.distributeToJars` que escondia justo los peores
+      // —los guardados con el reparto encendido en una economia sin jarras—,
+      // que asi no aparecian ni en esta lista ni en la puesta al dia.
+      if (t.type !== 2 || t.jarId || conImputacion.has(t.id)) return false;
       // Sin jarras propias no hay donde repartirlo: ofrecerlo seria un boton
       // que no hace nada. El servidor lo saltea igual.
       const suyas = jarrasDe(jars, entidadDe(t, indice), porDefecto);

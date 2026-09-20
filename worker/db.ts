@@ -137,6 +137,7 @@ export const aJarAporte = (f: Fila): JarAporte => ({
 
 export const aTransaction = (f: Fila): Transaction => ({
   id: str(f.id),
+  code: str(f.code ?? ''),
   householdId: str(f.household_id),
   type: int(f.type) as TxType,
   amountMinor: int(f.amount_minor),

@@ -40,6 +40,15 @@ export const TX_TYPE_LABEL: Record<TxType, string> = {
 
 export interface Transaction {
   id: string;
+  /**
+   * Codigo corto para nombrar este movimiento: cinco caracteres que se pueden
+   * leer en voz alta o pegar en un chat. Lo pone el servidor al crearlo, no
+   * cambia nunca mas y se va con el movimiento cuando se borra.
+   *
+   * Ver shared/codigo.ts y la migracion 0014. Vacio solo en un movimiento
+   * anterior a esa migracion que no se haya rellenado.
+   */
+  code: string;
   householdId: string;
   type: TxType;
   /** Entero en centavos, siempre positivo. El tipo define el signo. */
@@ -95,7 +104,7 @@ export interface Transaction {
 /** Lo que el cliente manda para crear o editar. El servidor pone el resto. */
 export type TransactionInput = Omit<
   Transaction,
-  'id' | 'householdId' | 'createdBy' | 'createdAt' | 'updatedAt'
+  'id' | 'code' | 'householdId' | 'createdBy' | 'createdAt' | 'updatedAt'
 > & { id?: string };
 
 // ---------------------------------------------------------------------------

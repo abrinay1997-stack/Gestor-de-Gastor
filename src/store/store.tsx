@@ -600,6 +600,11 @@ export function Store({ children }: { children: ReactNode }) {
       const optimista: Transaction = {
         ...entrada,
         id,
+        // El codigo lo pone el servidor al crear. Editando ya existe y se
+        // conserva; en uno nuevo viaja vacio hasta que llega la respuesta, que
+        // es literalmente lo que pasa: el movimiento existe antes que su
+        // nombre. La pantalla de detalle no dibuja la fila mientras este vacio.
+        code: previo?.code ?? '',
         householdId: estado.household?.id ?? '',
         createdBy: previo?.createdBy ?? estado.me?.id ?? '',
         createdAt: previo?.createdAt ?? Date.now(),

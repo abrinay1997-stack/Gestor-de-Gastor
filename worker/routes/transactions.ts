@@ -8,8 +8,9 @@
 import type { Sesion } from '../auth.ts';
 import { aTransaction, cuentaPorId, listarCuentas, listarJarras, listarMovimientos, movimientoPorId } from '../db.ts';
 import {
-  ambitoDeReparto, imputacionesDe, mismoReparto, sentenciasImputacion,
+  ambitoDeReparto, imputacionesDe, mismoReparto, repartoPosible, sentenciasImputacion,
 } from '../jarras.ts';
+import { nuevoCodigo, nuevosCodigos } from '../codigo.ts';
 import type { Env } from '../env.ts';
 import {
   ahora, booleano, cuerpo, difundir, entero, error, idOpcional, json,
@@ -156,23 +157,30 @@ export async function crear(req: Request, env: Env, sesion: Sesion): Promise<Res
   // Un cobro de un negocio se reparte entre las jarras de ese negocio, no
   // entre los frascos de la casa. El ambito resuelve de quien es.
   const ambito = await ambitoDeReparto(env, sesion.householdId);
+  const jarras = ambito.jarrasPara(v);
+  // «Repartir» sin jarras donde repartir no es repartir. Ver repartoPosible.
+  const d = repartoPosible(v, jarras);
+
+  // El nombre corto con el que se va a poder mencionar este movimiento. Se
+  // pide antes del batch porque necesita su propia consulta.
+  const code = await nuevoCodigo(env);
 
   // El movimiento y su reparto van juntos: si algo falla no queda un ingreso
   // que las jarras no vieron.
   await env.DB.batch([
     env.DB.prepare(
-      `INSERT INTO tx (id, household_id, type, amount_minor, account_id, dest_account_id,
+      `INSERT INTO tx (id, code, household_id, type, amount_minor, account_id, dest_account_id,
                        dest_amount_minor, category_id, jar_id, distribute_to_jars,
                        description, notes, date, created_by, paid_by, entity_id,
                        budget_id, created_at, updated_at)
-       VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?18,?17,?17)`,
+       VALUES (?1,?19,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?18,?17,?17)`,
     ).bind(
-      id, sesion.householdId, v.type, v.amountMinor, v.accountId, v.destAccountId,
-      v.destAmountMinor, v.categoryId, v.jarId, v.distributeToJars ? 1 : 0,
-      v.description, v.notes, v.date, sesion.memberId, v.paidBy, v.entityId, t,
-      v.budgetId,
+      id, sesion.householdId, d.type, d.amountMinor, d.accountId, d.destAccountId,
+      d.destAmountMinor, d.categoryId, d.jarId, d.distributeToJars ? 1 : 0,
+      d.description, d.notes, d.date, sesion.memberId, d.paidBy, d.entityId, t,
+      d.budgetId, code,
     ),
-    ...sentenciasImputacion(env, sesion.householdId, id, v, ambito.jarrasPara(v), t),
+    ...sentenciasImputacion(env, sesion.householdId, id, d, jarras, t),
   ]);
 
   const tx = await movimientoPorId(env, sesion.householdId, id);
@@ -202,6 +210,17 @@ export async function editar(
   if (v instanceof Response) return v;
 
   const t = ahora();
+
+  // El ambito se lee SIEMPRE, tambien cuando parece que el reparto no cambia:
+  // es lo unico que sabe a que economia pertenece ahora el movimiento, y de eso
+  // depende tanto si «repartir» es posible como entre que jarras se reparte.
+  const ambito = await ambitoDeReparto(env, sesion.householdId);
+  const jarras = ambito.jarrasPara(v);
+  const d = repartoPosible(v, jarras);
+
+  // El codigo NO esta en este UPDATE, y eso es la mitad de su razon de ser:
+  // editar un movimiento no puede cambiarle el nombre con el que ya se lo
+  // menciono en una conversacion.
   const actualizar = env.DB.prepare(
     `UPDATE tx SET type=?1, amount_minor=?2, account_id=?3, dest_account_id=?4,
                    dest_amount_minor=?5, category_id=?6, jar_id=?7, distribute_to_jars=?8,
@@ -209,20 +228,19 @@ export async function editar(
                    budget_id=?17, updated_at=?14
      WHERE id=?15 AND household_id=?16`,
   ).bind(
-    v.type, v.amountMinor, v.accountId, v.destAccountId, v.destAmountMinor,
-    v.categoryId, v.jarId, v.distributeToJars ? 1 : 0, v.description, v.notes,
-    v.date, v.paidBy, v.entityId, t, id, sesion.householdId, v.budgetId,
+    d.type, d.amountMinor, d.accountId, d.destAccountId, d.destAmountMinor,
+    d.categoryId, d.jarId, d.distributeToJars ? 1 : 0, d.description, d.notes,
+    d.date, d.paidBy, d.entityId, t, id, sesion.householdId, d.budgetId,
   );
 
   // Solo se vuelve a congelar si de verdad cambio el reparto. Corregir una
   // descripcion o mover la fecha no puede repartir de nuevo con los
   // porcentajes de hoy: eso reescribiria en silencio un reparto viejo.
-  const cambio = !mismoReparto(existente, v);
+  const cambio = !mismoReparto(existente, d);
   if (cambio) {
-    const ambito = await ambitoDeReparto(env, sesion.householdId);
     await env.DB.batch([
       actualizar,
-      ...sentenciasImputacion(env, sesion.householdId, id, v, ambito.jarrasPara(v), t),
+      ...sentenciasImputacion(env, sesion.householdId, id, d, jarras, t),
     ]);
   } else {
     await actualizar.run();
@@ -280,6 +298,9 @@ export async function crearLote(req: Request, env: Env, sesion: Sesion): Promise
   // Una sola lectura de jarras, categorias y entidades para todo el lote: no
   // cambian en el medio.
   const ambito = await ambitoDeReparto(env, sesion.householdId);
+  // Y un solo viaje por los codigos. Los que sobren (items rechazados, o ya
+  // insertados en un reintento anterior) simplemente no se escriben.
+  const codigos = await nuevosCodigos(env, items.length);
 
   for (const [i, item] of items.entries()) {
     if (typeof item !== 'object' || item === null) {
@@ -299,22 +320,39 @@ export async function crearLote(req: Request, env: Env, sesion: Sesion): Promise
     // INSERT OR IGNORE: si el mismo movimiento ya entro en un reintento
     // anterior, no se duplica. Sus imputaciones se reescriben igual, que es
     // idempotente porque el id de cada una sale de txId y jarId.
+    const jarras = ambito.jarrasPara(v);
+    const d = repartoPosible(v, jarras);
+
+    // `budget_id` faltaba en esta lista y estaba en la del alta normal: un
+    // gasto cargado sin conexion perdia el evento al que pertenecia, y nadie
+    // se enteraba porque el resto del movimiento llegaba bien.
     await env.DB.batch([
       env.DB.prepare(
-        `INSERT OR IGNORE INTO tx (id, household_id, type, amount_minor, account_id, dest_account_id,
+        `INSERT OR IGNORE INTO tx (id, code, household_id, type, amount_minor, account_id, dest_account_id,
                         dest_amount_minor, category_id, jar_id, distribute_to_jars,
                         description, notes, date, created_by, paid_by, entity_id,
-                        created_at, updated_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?17)`,
+                        budget_id, created_at, updated_at)
+         VALUES (?1,?19,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?18,?17,?17)`,
       ).bind(
-        id, sesion.householdId, v.type, v.amountMinor, v.accountId, v.destAccountId,
-        v.destAmountMinor, v.categoryId, v.jarId, v.distributeToJars ? 1 : 0,
-        v.description, v.notes, v.date, sesion.memberId, v.paidBy, v.entityId, t,
+        id, sesion.householdId, d.type, d.amountMinor, d.accountId, d.destAccountId,
+        d.destAmountMinor, d.categoryId, d.jarId, d.distributeToJars ? 1 : 0,
+        d.description, d.notes, d.date, sesion.memberId, d.paidBy, d.entityId, t,
+        d.budgetId, codigos[i],
       ),
-      ...sentenciasImputacion(env, sesion.householdId, id, v, ambito.jarrasPara(v), t),
+      ...sentenciasImputacion(env, sesion.householdId, id, d, jarras, t),
     ]);
 
+    // El INSERT es OR IGNORE, asi que un reintento no duplica. Pero «ignorar»
+    // tambien tapa cualquier otro choque —por ejemplo el del indice unico de
+    // `code`—, y ahi el movimiento no quedaria guardado ni figuraria como
+    // rechazado: la cola del telefono se vacia igual y se perderia sin que
+    // nadie se entere. Por eso se comprueba que la fila exista de verdad y, si
+    // no esta, se dice.
     const fila = await env.DB.prepare('SELECT * FROM tx WHERE id = ?1').bind(id).first<Record<string, unknown>>();
+    if (!fila) {
+      rechazados.push({ indice: i, motivo: 'No se pudo guardar. Volvé a cargarlo.' });
+      continue;
+    }
     if (fila) {
       const tx = aTransaction(fila);
       guardados.push(tx);

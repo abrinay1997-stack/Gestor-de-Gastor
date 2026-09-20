@@ -43,6 +43,22 @@ export function DetalleMovimiento({ tx, alCerrar, alEditar }: {
   const esTransferencia = tx.type === TxType.TRANSFERENCIA;
   const color = esTransferencia ? '#3b82f6' : esIngreso ? '#10b981' : (cat?.color ?? '#64748b');
 
+  /**
+   * El codigo al portapapeles, para poder pegarlo en un chat.
+   *
+   * Si el navegador no deja copiar —pasa fuera de HTTPS— el aviso igual dice
+   * el codigo, que es lo unico que de verdad hacia falta.
+   */
+  async function copiarCodigo() {
+    if (!tx?.code) return;
+    try {
+      await navigator.clipboard.writeText(tx.code);
+      avisar(`Código ${tx.code} copiado`, 'ok');
+    } catch {
+      avisar(`El código es ${tx.code}`);
+    }
+  }
+
   async function eliminar() {
     if (!tx) return;
     const ok = await confirmar({
@@ -122,6 +138,29 @@ export function DetalleMovimiento({ tx, alCerrar, alEditar }: {
 
           {pago && <Dato etiqueta="Pago habitual" valor={pago.name} color="#8b5cf6" icono="repeat" />}
           {tx.notes && <Dato etiqueta="Notas" valor={tx.notes} />}
+
+          {/* El nombre con el que se puede hablar de este movimiento.
+              Va último porque no se mira todos los días: se viene a buscar
+              cuando hay que decirle a alguien —o a un asistente— cuál de los
+              sesenta movimientos del mes es el que salió mal.
+
+              Vacío solo mientras el alta viaja al servidor, que es quien lo
+              asigna, y en ese rato la fila no se dibuja: prometer un código
+              que todavía no existe sería peor que esperar dos segundos. */}
+          {tx.code && (
+            <button
+              onClick={() => void copiarCodigo()}
+              className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left active:opacity-60 transition-opacity"
+            >
+              <span className="t-fila txt-2 shrink-0">Código</span>
+              <span className="flex items-center gap-2 min-w-0">
+                <span className="t-fila font-semibold txt tabular tracking-[0.18em]">
+                  {tx.code}
+                </span>
+                <Icono nombre="copy" size={14} />
+              </span>
+            </button>
+          )}
         </div>
 
         <div className="flex gap-2">
