@@ -18,14 +18,51 @@ import {
 } from '../shared/domain.ts';
 import type { JarImputacion, Jar, Transaction } from '../shared/types.ts';
 
-/** Lo que define el reparto. Si nada de esto cambia, no se vuelve a congelar. */
+/** Cuanto se reparte y a donde va: lo que decide los MONTOS de cada parte. */
 type Reparto = Pick<Transaction, 'type' | 'amountMinor' | 'distributeToJars' | 'jarId'>;
 
-export const mismoReparto = (a: Reparto, b: Reparto): boolean =>
+/**
+ * Lo anterior mas de quien es el movimiento, que es lo que decide entre QUE
+ * jarras se reparte. Las dos mitades hacen falta para saber si un reparto
+ * congelado sigue siendo el correcto.
+ */
+type RepartoConDestino = Reparto & Pick<Transaction, 'categoryId' | 'entityId'>;
+
+/**
+ * Si dos versiones de un movimiento reparten igual.
+ *
+ * La categoria y la entidad estan aca porque de ellas sale la economia, y de
+ * la economia salen las jarras: un ingreso repartido entre los seis frascos de
+ * la casa al que despues se le cambia la categoria a una de PanaClaw tiene que
+ * volver a repartirse entre las jarras de PanaClaw. Sin estos dos campos, esa
+ * edicion parecia «no cambio nada» y el movimiento se quedaba imputado a las
+ * jarras de la economia equivocada para siempre.
+ */
+export const mismoReparto = (a: RepartoConDestino, b: RepartoConDestino): boolean =>
   a.type === b.type
   && a.amountMinor === b.amountMinor
   && a.distributeToJars === b.distributeToJars
-  && a.jarId === b.jarId;
+  && a.jarId === b.jarId
+  && a.categoryId === b.categoryId
+  && a.entityId === b.entityId;
+
+/**
+ * El mismo reparto, pero que la base pueda cumplir.
+ *
+ * «Repartir entre las jarras» de una economia que no tiene ninguna no reparte
+ * nada: el movimiento quedaba guardado con el interruptor encendido y cero
+ * imputaciones, o sea plata que ninguna jarra vio y que ademas se volvia
+ * invisible, porque tanto la lista de huerfanos como la puesta al dia buscaban
+ * justamente los que tenian el interruptor APAGADO.
+ *
+ * Apagarlo aca lo deja como lo que de verdad es —un ingreso sin repartir— y
+ * con eso vuelve a aparecer en la puesta al dia. El dia que esa economia tenga
+ * jarras, un toque lo reparte.
+ */
+export function repartoPosible<T extends Reparto>(reparto: T, jars: Jar[]): T {
+  if (!reparto.distributeToJars || jars.length > 0) return reparto;
+  return { ...reparto, distributeToJars: false };
+}
 
 /**
  * Sentencias para dejar las imputaciones de un movimiento tal como su reparto

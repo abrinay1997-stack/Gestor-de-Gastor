@@ -10,6 +10,33 @@ Cloudflare. Sin Google, sin Firebase, sin servicios de terceros.
 - **Funciona sin señal.** Lo que cargues offline se guarda y sube solo al
   volver la conexión.
 - **Instalable.** PWA: se agrega a la pantalla de inicio y abre como app nativa.
+- **Cada movimiento tiene nombre.** Un código de cinco caracteres para poder
+  decir «mirá el `7K2MQ`» en vez de describirlo.
+
+## El código de un movimiento
+
+Cada movimiento lleva un código de cinco caracteres —`7K2MQ`, `D4WHN`— que se
+ve al final de su pantalla de detalle y se copia de un toque. Sirve para
+señalar uno concreto: a la otra persona, o a un asistente que va a mirar por
+qué ese cobro no cayó donde debía.
+
+Tres reglas, y las tres las garantiza el hecho de ser una columna de `tx` y no
+una tabla aparte:
+
+| | |
+|---|---|
+| Nace con el movimiento | Se escribe en el `INSERT`, nunca después |
+| Sobrevive a las ediciones | Ningún `UPDATE` lo toca: corregir el monto o la fecha no le cambia el nombre |
+| Muere con el movimiento | El `DELETE` se lo lleva, y el código vuelve a estar libre |
+
+Pegarlo en el buscador de **Movimientos** lo encuentra **saltando todos los
+filtros**, período y economía incluidos: quien pega un código normalmente no
+sabe de qué mes era, y por eso lo pega.
+
+El alfabeto tiene 30 símbolos y deja afuera los seis que se leen mal al dictar
+o copiar a mano — `0` y `O`, `1` e `I` y `L`, y la `U` contra la `V`—, así que
+un código nunca los contiene. Son 24.300.000 combinaciones; el servidor
+comprueba igual que esté libre antes de escribirlo, porque el índice es único.
 
 ## Cómo está armado
 
@@ -27,6 +54,7 @@ shared/     Dominio puro, compartido por cliente y servidor
   money.ts    Aritmética en enteros + reparto por mayor resto
   domain.ts   Saldos, jarras, resúmenes
   parser.ts   Lectura de "super 12500" sin IA externa
+  codigo.ts   El código corto con el que se nombra un movimiento
 worker/     API, auth y Durable Object
 src/        Interfaz React
 migrations/ Esquema de D1

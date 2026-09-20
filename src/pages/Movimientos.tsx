@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react';
 import { useStore } from '../store/store.tsx';
 import { formatMonto } from '@shared/money';
 import { autorDe, filtrarPorEntidad, resumir } from '@shared/domain';
+import { normalizarCodigo, pareceCodigo } from '@shared/codigo';
 import { dentroDe, periodoMes, type Periodo } from '@shared/periodo';
 import {
   SECCIONES_MOVIMIENTOS, TxType, type SeccionMovimientos, type Transaction,
@@ -67,6 +68,16 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
   }, [categories, papelera, transactions, entidadActiva]);
 
   const filtrados = useMemo(() => {
+    // Buscar por código salta TODOS los filtros: el período, la economía y los
+    // demás. Un código nombra un movimiento y uno solo, y quien lo pega en el
+    // buscador normalmente no sabe de qué mes era —por eso lo pega—. Buscándolo
+    // dentro del mes que está en pantalla, la respuesta habitual habría sido
+    // «no hay movimientos», que es una mentira incómoda de descubrir.
+    if (pareceCodigo(busqueda)) {
+      const codigo = normalizarCodigo(busqueda);
+      return todos.filter((t) => t.code === codigo);
+    }
+
     let lista = transactions.filter((t) => dentroDe(t.date, periodo));
 
     if (quien !== 'todos') lista = lista.filter((t) => autorDe(t) === quien);
@@ -86,7 +97,7 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
     }
 
     return lista;
-  }, [transactions, periodo, quien, tipo, categoria, cuenta, busqueda]);
+  }, [todos, transactions, periodo, quien, tipo, categoria, cuenta, busqueda]);
 
   const resumen = useMemo(() => resumir(filtrados), [filtrados]);
 
@@ -132,7 +143,7 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
           <Campo
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar..."
+            placeholder="Buscar o pegar un código..."
             type="search"
             className="w-full"
           />

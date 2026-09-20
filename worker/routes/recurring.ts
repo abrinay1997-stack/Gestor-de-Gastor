@@ -8,6 +8,7 @@
 import type { Sesion } from '../auth.ts';
 import { listarRecurrentes, movimientoPorId, recurrentePorId } from '../db.ts';
 import { ambitoDeReparto, sentenciasImputacion } from '../jarras.ts';
+import { nuevoCodigo } from '../codigo.ts';
 import type { Env } from '../env.ts';
 import {
   ahora, booleano, cuerpo, difundir, entero, error, idOpcional, json,
@@ -278,20 +279,25 @@ export async function cobrar(
     dayOfWeek: r.dayOfWeek, monthOfYear: r.monthOfYear,
   }), r.nextRun);
 
+  // Igual que en el barrido nocturno: repartir sin jarras no reparte nada, y
+  // guardarlo encendido escondia el ingreso de la puesta al dia.
+  const reparte = r.distributeToJars && jars.length > 0;
+  const code = await nuevoCodigo(env);
+
   await env.DB.batch([
     env.DB.prepare(
-      `INSERT INTO tx (id, household_id, type, amount_minor, account_id, dest_account_id,
+      `INSERT INTO tx (id, code, household_id, type, amount_minor, account_id, dest_account_id,
                        dest_amount_minor, category_id, jar_id, distribute_to_jars,
                        description, notes, date, created_by, paid_by, recurring_id,
                        created_at, updated_at)
-       VALUES (?1,?2,?3,?4,?5,NULL,NULL,?6,?7,?8,?9,NULL,?10,?11,?12,?13,?14,?14)`,
+       VALUES (?1,?15,?2,?3,?4,?5,NULL,NULL,?6,?7,?8,?9,NULL,?10,?11,?12,?13,?14,?14)`,
     ).bind(
       txId, sesion.householdId, r.type, amountMinor, r.accountId, r.categoryId,
-      r.jarId, r.distributeToJars ? 1 : 0, r.name, date, sesion.memberId,
-      r.paidBy, r.id, t,
+      r.jarId, reparte ? 1 : 0, r.name, date, sesion.memberId,
+      r.paidBy, r.id, t, code,
     ),
     ...sentenciasImputacion(env, sesion.householdId, txId, {
-      type: r.type, amountMinor, distributeToJars: r.distributeToJars, jarId: r.jarId,
+      type: r.type, amountMinor, distributeToJars: reparte, jarId: r.jarId,
     }, jars, t),
     env.DB.prepare(
       `UPDATE recurring SET next_run = ?1, last_run = ?2, esperando_desde = NULL,

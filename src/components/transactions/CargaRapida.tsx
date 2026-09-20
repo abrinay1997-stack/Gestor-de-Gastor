@@ -18,8 +18,27 @@ import {
 } from '@shared/domain';
 import { esEvento, TxType, type Transaction, type TransactionInput } from '@shared/types';
 import { aInputDate, deInputDate, fechaCorta, vibrar } from '../../lib/utils.ts';
-import { Avatar, Boton, Campo, Ficha, Hoja, Icono, Selector } from '../ui/base.tsx';
+import { Avatar, Boton, Campo, Hoja, Icono, Selector } from '../ui/base.tsx';
 import { cn } from '../../lib/utils.ts';
+
+/**
+ * El valor del selector de jarra que significa «repartir entre todas».
+ *
+ * Repartir y elegir una jarra son la MISMA pregunta —¿a dónde va esta plata?—
+ * y por eso son un solo control con tres respuestas posibles: repartir, una
+ * jarra concreta, o ninguna.
+ *
+ * Antes eran dos controles y se tapaban entre sí: elegir «Ingreso» encendía el
+ * interruptor de repartir, el interruptor escondía el desplegable de jarra, y
+ * el interruptor solo se dibujaba si la economía del movimiento tenía jarras.
+ * De ahí salían dos agujeros: en un ingreso no había forma de elegir una jarra
+ * sola, y en una economía sin jarras no había forma de apagar el reparto —el
+ * ingreso se guardaba «repartido» entre cero jarras y no llegaba a ninguna.
+ *
+ * Con un solo control las tres respuestas están a la vista al mismo tiempo y
+ * ninguna puede esconder a otra.
+ */
+const REPARTIR = '__repartir__';
 
 const TIPOS: { id: TxType; etiqueta: string; icono: string; color: string }[] = [
   { id: TxType.GASTO, etiqueta: 'Gasto', icono: 'arrow-down-left', color: '#ef4444' },
@@ -104,13 +123,20 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
   const [accountId, setAccountId] = useState('');
   const [destAccountId, setDestAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  /** A dónde va la plata: REPARTIR, el id de una jarra, o '' para ninguna. */
   const [jarId, setJarId] = useState('');
+  /**
+   * Si la jarra la eligió una persona o la propuso la app.
+   *
+   * Sin esto, las dos sugerencias de más abajo —repartir un ingreso, y la
+   * jarra de siempre de una categoría— se vuelven a aplicar en cuanto el
+   * destino queda vacío, así que «Sin jarra» se podía elegir pero no guardar:
+   * volvía sola a la sugerencia. Una sugerencia que no se puede rechazar es
+   * una imposición.
+   */
+  const [jarraTocada, setJarraTocada] = useState(false);
   const [budgetId, setBudgetId] = useState('');
   const [paidBy, setPaidBy] = useState('');
-  // Encendido por defecto. Estuvo apagado los primeros 44 movimientos y no lo
-  // prendio nadie: las jarras solo veian gastos y quedaban en rojo. Un ingreso
-  // que no se reparte es la excepcion, no la regla.
-  const [repartir, setRepartir] = useState(false);
   const [fecha, setFecha] = useState(aInputDate(Date.now()));
   const [notas, setNotas] = useState('');
   const [guardando, setGuardando] = useState(false);
@@ -132,10 +158,10 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
       setAccountId(editando.accountId);
       setDestAccountId(editando.destAccountId ?? '');
       setCategoryId(editando.categoryId ?? '');
-      setJarId(editando.jarId ?? '');
+      setJarId(editando.distributeToJars ? REPARTIR : (editando.jarId ?? ''));
+      setJarraTocada(true);
       setBudgetId(editando.budgetId ?? '');
       setPaidBy(editando.paidBy ?? editando.createdBy);
-      setRepartir(editando.distributeToJars);
       setFecha(aInputDate(editando.date));
       setNotas(editando.notes ?? '');
       setFrase('');
@@ -147,11 +173,9 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
       setDestAccountId('');
       setCategoryId('');
       setJarId('');
+      setJarraTocada(false);
       setBudgetId('');
-      // Un movimiento nuevo arranca como gasto, y un gasto no se reparte.
-      // Al pasar a Ingreso se prende solo, abajo.
       setPaidBy(me?.id ?? '');
-      setRepartir(false);
       setFecha(aInputDate(Date.now()));
       setNotas('');
       setFrase('');
@@ -179,6 +203,8 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
 
   const montoMinor = parseMonto(montoTexto, moneda);
   const esTransferencia = tipo === TxType.TRANSFERENCIA;
+  /** Derivado, no un estado aparte: no hay forma de que digan cosas distintas. */
+  const repartir = jarId === REPARTIR;
   const tipoCategoria = tipo === TxType.INGRESO ? 'ingreso' : 'gasto';
 
   // Ordenadas por economia, y primero las de la que se esta mirando: si estan
@@ -308,18 +334,49 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
     return mejor;
   }, [categoryId, transactions, jarrasPropias]);
 
-  // Al elegir categoria se propone su jarra de siempre, si todavia no hay una
-  // puesta a mano. Nunca pisa una eleccion explicita.
+  // Al elegir categoria se propone su jarra de siempre. `jarraTocada` es lo que
+  // hace que sea una propuesta: sin el, elegir «Sin jarra» volvia sola a la
+  // jarra de costumbre, porque dejar el destino vacio es justo la condicion que
+  // dispara la sugerencia.
   useEffect(() => {
-    if (tipo !== TxType.GASTO || jarId || !jarraPorCostumbre) return;
+    if (jarraTocada || tipo !== TxType.GASTO || jarId || !jarraPorCostumbre) return;
     setJarId(jarraPorCostumbre);
-  }, [tipo, jarId, jarraPorCostumbre]);
+  }, [jarraTocada, tipo, jarId, jarraPorCostumbre]);
 
-  // Si la categoria cambio de economia, la jarra elegida puede ya no
-  // pertenecerle. Se suelta en vez de guardar un gasto en la jarra de otro.
+  // Un ingreso se reparte salvo que digan lo contrario, que es lo que quiere el
+  // metodo de los frascos. Se PROPONE: queda elegido en el desplegable y
+  // cambiarlo es un toque, tambien a «Sin jarra».
   useEffect(() => {
-    if (jarId && !jarrasPropias.some((j) => j.id === jarId)) setJarId('');
+    if (jarraTocada || tipo !== TxType.INGRESO || jarId || jarrasPropias.length === 0) return;
+    setJarId(REPARTIR);
+  }, [jarraTocada, tipo, jarId, jarrasPropias]);
+
+  // Repartir entre cero jarras no reparte nada. Si la categoria elegida mando
+  // el movimiento a una economia que todavia no tiene jarras, el destino vuelve
+  // a «sin jarra», que es exactamente lo que iba a pasar de todos modos. El
+  // servidor hace lo mismo por su cuenta (ver repartoPosible), asi que la
+  // pantalla no puede prometer algo que la base no va a cumplir.
+  useEffect(() => {
+    if (jarId === REPARTIR && jarrasPropias.length === 0) setJarId('');
   }, [jarId, jarrasPropias]);
+
+  // Una jarra que ya no existe —la borro el otro telefono mientras esto estaba
+  // abierto— se suelta. Que sea de otra economia NO se suelta: el desplegable
+  // las ofrece a proposito y elegirlas es legitimo; lo que hace la app es
+  // avisar, mas abajo, igual que con el sobregiro.
+  useEffect(() => {
+    if (!jarId || jarId === REPARTIR) return;
+    if (!jars.some((j) => j.id === jarId)) setJarId('');
+  }, [jarId, jars]);
+
+  /** Si la jarra elegida es de una economia distinta a la del movimiento. */
+  const jarraPrestada = useMemo(() => {
+    if (!jarId || jarId === REPARTIR) return null;
+    if (jarrasPropias.some((j) => j.id === jarId)) return null;
+    const jarra = jars.find((j) => j.id === jarId);
+    if (!jarra) return null;
+    return { jarra, economia: entities.find((e) => e.id === jarra.entityId)?.name ?? 'otra economía' };
+  }, [jarId, jars, jarrasPropias, entities]);
 
   /**
    * Los presupuestos de evento abiertos.
@@ -434,10 +491,16 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
               key={t.id}
               onClick={() => {
                 setTipo(t.id);
-                // Un ingreso se reparte salvo que digan lo contrario; un gasto
-                // sale de UNA jarra y una transferencia no toca ninguna.
-                setRepartir(t.id === TxType.INGRESO);
-                if (t.id !== TxType.GASTO) setJarId('');
+                // Cambiar de tipo puede dejar sin sentido el destino elegido:
+                // una transferencia no toca ninguna jarra, y «repartir» solo
+                // existe en un ingreso. Lo demás se respeta: quien ya eligió
+                // una jarra no tiene por qué volver a elegirla.
+                const muere = t.id === TxType.TRANSFERENCIA
+                  || (t.id !== TxType.INGRESO && jarId === REPARTIR);
+                if (muere) {
+                  setJarId('');
+                  setJarraTocada(false);
+                }
               }}
               /* Icono arriba y texto abajo. En una fila, a 390px el tercero
                  quedaba en «Transferen...»: el icono se comia el ancho que
@@ -547,16 +610,24 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
             las veces. Las otras quedan abajo y agrupadas: sacar plata de los
             impuestos de un negocio para pagar la comida se puede, pero tiene
             que costar un scroll y verse escrito de quien es. */}
-        {/* De que jarra sale.
-            `repartir` significa ahora lo que dice —repartir un INGRESO entre
-            varias jarras— y por eso arranca apagado y se enciende solo al
-            elegir Ingreso. Antes arrancaba encendido incluso en un gasto, y
-            como su interruptor solo se dibuja para los ingresos, en un gasto
-            nuevo este campo no aparecia nunca... salvo que tocaras el chip de
-            «Gasto», que ya estaba elegido. Segun si lo tocabas o no, el mismo
-            gasto se guardaba con jarra o sin ella. */}
-        {!esTransferencia && !repartir && jars.length > 0 && (
-          <Selector etiqueta="Jarra" value={jarId} onChange={(e) => setJarId(e.target.value)}>
+        {/* A dónde va la plata. Una sola pregunta, tres respuestas posibles:
+            repartir entre las jarras de su economía, una jarra sola, o
+            ninguna. Ver el comentario de REPARTIR arriba para por qué esto
+            dejó de ser un desplegable más un interruptor. */}
+        {!esTransferencia && jars.length > 0 && (
+          <Selector
+            etiqueta="Jarra"
+            value={jarId}
+            onChange={(e) => { setJarraTocada(true); setJarId(e.target.value); }}
+          >
+            {/* Solo en un ingreso y solo si hay jarras donde repartir. En un
+                gasto no tiene sentido —sale de UNA jarra— y sin jarras sería
+                una opción que no hace nada. */}
+            {tipo === TxType.INGRESO && jarrasPropias.length > 0 && (
+              <option value={REPARTIR}>
+                Repartir entre las {jarrasPropias.length} jarras
+              </option>
+            )}
             <option value="">Sin jarra</option>
             {/* TODOS los grupos dicen de qué economía son, el primero
                 incluido. Antes las de la economía actual iban sueltas y sin
@@ -591,6 +662,22 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           </div>
         )}
 
+        {/* Elegir la jarra de otro negocio se puede —sacar de los impuestos de
+            PanaClaw para pagar la comida es una decisión, no un error— pero
+            tiene que verse escrito antes de guardar. Antes la app la soltaba
+            sola y en silencio: el desplegable ofrecía las jarras de las otras
+            economías y elegir una no hacía nada, volvía a «Sin jarra». */}
+        {jarraPrestada && (
+          <div className="-mt-2 rounded-2xl p-3 border"
+            style={{ borderColor: '#3b82f666', background: '#3b82f614' }}>
+            <p className="t-nota txt-2 leading-relaxed">
+              <span className="font-semibold txt">{jarraPrestada.jarra.name}</span> es de{' '}
+              <span className="font-semibold txt">{jarraPrestada.economia}</span>, y este
+              movimiento no. Se guarda igual: la plata sale de esa jarra.
+            </p>
+          </div>
+        )}
+
         {/* El reparto, calculado en vivo. Hasta ahora habia que guardar para
             enterarse de a donde iba a parar la plata. */}
         {repartir && montoMinor !== null && montoMinor > 0 && vistaPrevia.length > 0 && (
@@ -606,9 +693,6 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           </div>
         )}
 
-        {/* Solo si la economia de este movimiento tiene jarras. Si PanaClaw
-            todavia no reparte, el interruptor seria un boton que no hace
-            nada. */}
         {/* ¿Es de algún evento? Solo aparece si hay uno abierto: sin eventos
             el formulario no se entera de que existen. */}
         {tipo === TxType.GASTO && eventosAbiertos.length > 0 && (
@@ -635,32 +719,6 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
               })}
             </div>
           </div>
-        )}
-
-        {tipo === TxType.INGRESO && jarrasPropias.length > 0 && (
-          <button
-            onClick={() => { setRepartir(!repartir); if (!repartir) setJarId(''); }}
-            className={cn(
-              'w-full flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all',
-              repartir ? 'bg-marca-50 border-marca-500 dark:bg-marca-500/10' : 'superficie-2 borde',
-            )}
-          >
-            <Ficha color="#10b981" icono="split" size={38} />
-            <div className="flex-1 min-w-0">
-              <p className="t-fila font-medium txt">Repartir entre las jarras</p>
-              <p className="t-nota txt-3">
-                {montoMinor
-                  ? `Se reparten ${formatMonto(montoMinor, moneda)} según los porcentajes`
-                  : 'Según los porcentajes de cada jarra'}
-              </p>
-            </div>
-            <div className={cn(
-              'w-11 h-6 rounded-full p-0.5 transition-colors shrink-0',
-              repartir ? 'bg-marca-500' : 'superficie-2 borde border',
-            )}>
-              <div className={cn('w-5 h-5 rounded-full bg-white shadow transition-transform', repartir && 'translate-x-5')} />
-            </div>
-          </button>
         )}
 
         {/* Quién lo hizo. Solo aparece si son dos o mas: con una sola persona
