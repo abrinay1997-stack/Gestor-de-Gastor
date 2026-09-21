@@ -174,48 +174,79 @@
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55);
   }
   /*
-   * Pildora flotante movil.
+   * Pildora flotante movil. Vidrio liquido de verdad: refracta.
    *
-   * UNA sola pieza de vidrio. El intento anterior la partio en dos capas
-   * —un centro con inset 6px y un canto alrededor— buscando que el borde se
-   * viera mas denso que el medio. En la practica esos 6px se leyeron como una
-   * banda vacia entre dos contornos: el borde de la pastilla por fuera y el
-   * del centro por dentro, con un hueco transparente en el medio. Un vidrio
-   * no tiene una zanja alrededor. Se revierte.
+   * La mecanica esta explicada entera en VidrioLiquido.tsx, que es donde
+   * vive. En resumen: el fondo no se filtra con backdrop-filter —Safari no
+   * sabe deformar un backdrop y en iOS todos los navegadores son Safari por
+   * dentro— sino que se CALCA dentro de la pastilla y se deforma esa copia
+   * con un filtro SVG normal.
    *
-   * La referencia es la barra de Instagram, y lo que la hace funcionar no es
-   * ningun truco de capas: es que el vidrio es DENSO. Lo que pasa por detras
-   * queda desenfocado casi hasta lo ilegible y oscurecido, de modo que la
-   * pastilla se lee como un objeto solido y no como un panel transparente. Un
-   * solo contorno, y la luz agarrando el canto de arriba.
-   *
-   * Nota para el futuro: el Liquid Glass de Apple ademas REFRACTA, dobla lo
-   * que tiene detras. En la web eso pide feDisplacementMap dentro de
-   * backdrop-filter, y Safari no lo soporta ni en iOS ni en macOS, asi que en
-   * el telefono no hay forma. No vale la pena volver a intentarlo por ese
-   * lado.
+   * Aca solo va la cascara: el contorno, la sombra y el recorte. El tinte es
+   * bajo a proposito. Subirlo es exactamente lo que convierte el vidrio en
+   * una tarjeta mate, que es el error del intento anterior.
    */
   .barra-flotante {
     position: relative;
-    /* Denso a proposito. Con poco fondo se ve a traves y parece una lamina;
-       a 72% lo de atras se intuye y se mueve al hacer scroll, pero la
-       pastilla se lee como una pieza. */
-    background: color-mix(in srgb, var(--superficie) 72%, transparent);
-    -webkit-backdrop-filter: blur(24px) saturate(1.8);
-    backdrop-filter: blur(24px) saturate(1.8);
-    /* Un solo contorno. Nada por dentro. */
+    /* Respaldo mientras el calco no esta montado, o si el JS no llega a
+       correr: vale mas una pastilla esmerilada que un hueco con iconos
+       flotando. En cuanto el vidrio arranca, se apaga (.vidrio-activo). */
+    background: color-mix(in srgb, var(--superficie) 55%, transparent);
+    -webkit-backdrop-filter: blur(16px) saturate(1.6);
+    backdrop-filter: blur(16px) saturate(1.6);
     border: 0.5px solid rgb(0 0 0 / 0.08);
     box-shadow:
       /* La luz agarra el canto de arriba, que es de donde viene en iOS. */
       inset 0 0.5px 0 rgb(255 255 255 / 0.5),
-      /* Tres sombras: la que la apoya, la que la despega y la que la funde
-         con el fondo. Una sola sombra grande flota sin apoyarse. */
       0 1px 1px rgb(0 0 0 / 0.04),
       0 2px 6px -1px rgb(0 0 0 / 0.08),
       0 16px 38px -16px rgb(0 0 0 / 0.34);
     transition:
       padding 0.28s cubic-bezier(0.32, 0.72, 0, 1),
       transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  /* Con el calco andando la pastilla no necesita fondo propio: lo que se ve
+     a traves es la copia deformada, y un fondo aca solo la ensuciaria. */
+  .barra-flotante.vidrio-activo {
+    background: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  /* El <svg> que solo lleva la definicion del filtro. No dibuja nada. */
+  .vidrio-definiciones {
+    position: absolute;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+  }
+
+  /* Recorta el vidrio a la pastilla, y lleva el tinte. */
+  .vidrio-envoltura {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+    overflow: hidden;
+    pointer-events: none;
+    background: rgb(255 255 255 / 0.05);
+  }
+
+  /* El elemento del tamaño exacto de la pastilla al que se le aplica el
+     filtro: su tamaño define la region, y por eso el mapa de desplazamiento
+     cae justo sobre el canto. El calco de adentro se sale a proposito, para
+     que el desplazamiento tenga pixeles de mas alla del borde de donde
+     traer. */
+  .vidrio-lente {
+    position: absolute;
+    inset: 0;
+    will-change: filter;
+  }
+  .vidrio-calco {
+    position: absolute;
+    top: 0;
+    left: 0;
   }
 
   /* Luz del tab activo: un solo indicador que se desliza entre destinos. */
@@ -332,16 +363,16 @@
       box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
     }
     :root:not([data-tema='claro']) .barra-flotante {
-      /* Mas denso todavia que en claro: sobre negro, lo que se cuela por
-         detras se nota mucho mas y ensucia la pastilla. */
-      background: color-mix(in srgb, var(--superficie) 78%, transparent);
-      /* En oscuro el contorno se invierte: sobre negro lo que define la
-         pastilla es un pelo de luz, no un pelo de sombra. */
-      border: 0.5px solid rgb(255 255 255 / 0.1);
+      /* Solo el respaldo: en cuanto el calco arranca esto se apaga. */
+      background: color-mix(in srgb, var(--superficie) 60%, transparent);
+      /* Sobre negro lo que define la pastilla es un pelo de luz, no uno
+         de sombra. Estos son los valores que se ajustaron en el banco de
+         pruebas, en el telefono. */
+      border: 0.5px solid rgb(255 255 255 / 0.16);
       box-shadow:
-        inset 0 0.5px 0 rgb(255 255 255 / 0.14),
-        0 1px 2px rgb(0 0 0 / 0.4),
-        0 16px 38px -16px rgb(0 0 0 / 0.7);
+        inset 0 1px 0 rgb(255 255 255 / 0.34),
+        inset 0 -1px 0 rgb(255 255 255 / 0.08),
+        0 10px 30px -12px rgb(0 0 0 / 0.75);
     }
   }
 }
@@ -351,25 +382,29 @@
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
   }
     :root[data-tema='oscuro'] .barra-flotante {
-      /* Mas denso todavia que en claro: sobre negro, lo que se cuela por
-         detras se nota mucho mas y ensucia la pastilla. */
-      background: color-mix(in srgb, var(--superficie) 78%, transparent);
-      /* En oscuro el contorno se invierte: sobre negro lo que define la
-         pastilla es un pelo de luz, no un pelo de sombra. */
-      border: 0.5px solid rgb(255 255 255 / 0.1);
+      /* Solo el respaldo: en cuanto el calco arranca esto se apaga. */
+      background: color-mix(in srgb, var(--superficie) 60%, transparent);
+      /* Sobre negro lo que define la pastilla es un pelo de luz, no uno
+         de sombra. Estos son los valores que se ajustaron en el banco de
+         pruebas, en el telefono. */
+      border: 0.5px solid rgb(255 255 255 / 0.16);
       box-shadow:
-        inset 0 0.5px 0 rgb(255 255 255 / 0.14),
-        0 1px 2px rgb(0 0 0 / 0.4),
-        0 16px 38px -16px rgb(0 0 0 / 0.7);
+        inset 0 1px 0 rgb(255 255 255 / 0.34),
+        inset 0 -1px 0 rgb(255 255 255 / 0.08),
+        0 10px 30px -12px rgb(0 0 0 / 0.75);
     }
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  /* Sin vidrio: una pastilla opaca con su borde de siempre. */
+  /* Sin vidrio: una pastilla opaca y nada de calco. El componente tambien se
+     apaga solo con esta preferencia, asi que aca solo queda vestirla. */
   .barra-flotante {
     background: var(--superficie);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+  .vidrio-envoltura {
+    display: none;
   }
   .luz-deslizante::before {
     box-shadow: none;
