@@ -17,7 +17,6 @@ import { useStore } from '../../store/store.tsx';
 import { cn } from '../../lib/utils.ts';
 import { Avatar, Icono } from '../ui/base.tsx';
 import { PastillaEntidad } from '../ui/entidad.tsx';
-import { VidrioLiquido } from './VidrioLiquido.tsx';
 
 export type Solapa =
   | 'inicio' | 'cuentas' | 'jarras' | 'movimientos' | 'analisis' | 'consejero' | 'ajustes';
@@ -62,9 +61,6 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
   // cerca del tope siempre abierta, pide un viaje mínimo, y espera 150ms
   // entre cambios. Sin movimiento reducido: siempre expandida.
   const [compacto, setCompacto] = useState(false);
-  /* Lo que se calca dentro de la barra para poder deformarlo. Ver
-     VidrioLiquido: el fondo no se filtra, se copia. */
-  const lienzo = useRef<HTMLElement>(null);
   const ultimoY = useRef(0);
   const ultimoCambio = useRef(0);
 
@@ -179,7 +175,7 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
       </aside>
 
       {/* Contenido */}
-      <main ref={lienzo} className="flex-1 w-full max-w-3xl mx-auto px-4 pt-4 pb-40 md:pb-8 md:px-8 md:pt-8">
+      <main className="flex-1 w-full max-w-3xl mx-auto px-4 pt-4 pb-40 md:pb-8 md:px-8 md:pt-8">
         {/* Encabezado movil.
             La economia activa es un estado, no una seccion: vive aca y no
             arriba de cada pantalla. El estado de la conexion solo aparece
@@ -257,7 +253,6 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
           'barra-flotante pointer-events-auto relative w-full max-w-[430px] rounded-[26px] px-2',
           compacto ? 'py-0.5' : 'py-1.5',
         )}>
-          <VidrioLiquido contenido={lienzo} />
           <div className="relative flex w-full">
             {enLaBarra && (
               <span

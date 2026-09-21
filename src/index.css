@@ -173,89 +173,41 @@
   .borde-luz {
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55);
   }
-  /*
-   * Pildora flotante movil. Vidrio liquido de verdad: refracta.
-   *
-   * La mecanica esta explicada entera en VidrioLiquido.tsx, que es donde
-   * vive. En resumen: el fondo no se filtra con backdrop-filter —Safari no
-   * sabe deformar un backdrop y en iOS todos los navegadores son Safari por
-   * dentro— sino que se CALCA dentro de la pastilla y se deforma esa copia
-   * con un filtro SVG normal.
-   *
-   * Aca solo va la cascara: el contorno, la sombra y el recorte. El tinte es
-   * bajo a proposito. Subirlo es exactamente lo que convierte el vidrio en
-   * una tarjeta mate, que es el error del intento anterior.
-   */
+  /* Pildora flotante movil.
+     Estaba al 36% de superficie con un borde blanco al 58% y dos brillos
+     interiores fuertes: eso no es vidrio, es plastico esmerilado. El vidrio se
+     nota por lo que deja pasar, no por lo que se le pinta encima. Ahora el
+     fondo casi no existe, el blur hace el trabajo, y el borde es un pelo. */
   .barra-flotante {
-    position: relative;
-    /* Respaldo mientras el calco no esta montado, o si el JS no llega a
-       correr: vale mas una pastilla esmerilada que un hueco con iconos
-       flotando. En cuanto el vidrio arranca, se apaga (.vidrio-activo). */
-    background: color-mix(in srgb, var(--superficie) 55%, transparent);
-    -webkit-backdrop-filter: blur(16px) saturate(1.6);
-    backdrop-filter: blur(16px) saturate(1.6);
-    border: 0.5px solid rgb(0 0 0 / 0.08);
+    isolation: isolate;
+    /* El respaldo, para navegadores sin color-mix: opaco antes que roto. */
+    background: var(--superficie);
+    /*
+     * Casi nada de pintura encima: 11% de superficie (era 62%, paso a 37% y de
+     * ahi otro 70% menos). El vidrio se nota por lo que deja pasar, no por lo
+     * que se le dibuja.
+     *
+     * Con tan poco fondo propio, TODO el trabajo de separar los iconos de lo
+     * que pasa por debajo lo hace el desenfoque: 44px y saturacion alta, que es
+     * lo que le da el color al vidrio en vez de lavarlo.
+     */
+    background: color-mix(in srgb, var(--superficie) 11%, transparent);
+    -webkit-backdrop-filter: blur(44px) saturate(2.2);
+    backdrop-filter: blur(44px) saturate(2.2);
+    border: 0.5px solid rgb(0 0 0 / 0.06);
     box-shadow:
-      /* La luz agarra el canto de arriba, que es de donde viene en iOS. */
-      inset 0 0.5px 0 rgb(255 255 255 / 0.5),
-      0 1px 1px rgb(0 0 0 / 0.04),
-      0 2px 6px -1px rgb(0 0 0 / 0.08),
-      0 16px 38px -16px rgb(0 0 0 / 0.34);
+      inset 0 0.5px 0 rgb(255 255 255 / 0.55),
+      0 6px 24px -8px rgb(0 0 0 / 0.16);
     transition:
       padding 0.28s cubic-bezier(0.32, 0.72, 0, 1),
       transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
   }
-
-  /* Con el calco andando la pastilla no necesita fondo propio: lo que se ve
-     a traves es la copia deformada, y un fondo aca solo la ensuciaria. */
-  .barra-flotante.vidrio-activo {
-    background: none;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-
-  /* El <svg> que solo lleva la definicion del filtro. No dibuja nada. */
-  .vidrio-definiciones {
-    position: absolute;
-    width: 0;
-    height: 0;
-    pointer-events: none;
-  }
-
-  /* Recorta el vidrio a la pastilla, y lleva el tinte. */
-  .vidrio-envoltura {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    border-radius: inherit;
-    overflow: hidden;
-    pointer-events: none;
-    background: rgb(255 255 255 / 0.16);
-  }
-
-  /* El elemento del tamaño exacto de la pastilla al que se le aplica el
-     filtro: su tamaño define la region, y por eso el mapa de desplazamiento
-     cae justo sobre el canto. El calco de adentro se sale a proposito, para
-     que el desplazamiento tenga pixeles de mas alla del borde de donde
-     traer. */
-  .vidrio-lente {
-    position: absolute;
-    inset: 0;
-    will-change: filter;
-  }
-  .vidrio-calco {
-    position: absolute;
-    top: 0;
-    left: 0;
-  }
-
   /* Luz del tab activo: un solo indicador que se desliza entre destinos. */
   .luz-deslizante {
     position: absolute;
     top: 4px;
     left: 0;
     height: 3px;
-    /* Por encima del vidrio y por debajo de los iconos (10). */
     z-index: 1;
     pointer-events: none;
     display: flex;
@@ -363,16 +315,13 @@
       box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
     }
     :root:not([data-tema='claro']) .barra-flotante {
-      /* Solo el respaldo: en cuanto el calco arranca esto se apaga. */
-      background: color-mix(in srgb, var(--superficie) 60%, transparent);
-      /* Sobre negro lo que define la pastilla es un pelo de luz, no uno
-         de sombra. Estos son los valores que se ajustaron en el banco de
-         pruebas, en el telefono. */
-      border: 0.5px solid rgb(255 255 255 / 0.16);
+      background: color-mix(in srgb, var(--superficie) 10%, transparent);
+      -webkit-backdrop-filter: blur(44px) saturate(2);
+      backdrop-filter: blur(44px) saturate(2);
+      border: 0.5px solid rgb(255 255 255 / 0.10);
       box-shadow:
-        inset 0 1px 0 rgb(255 255 255 / 0.34),
-        inset 0 -1px 0 rgb(255 255 255 / 0.08),
-        0 10px 30px -12px rgb(0 0 0 / 0.75);
+        inset 0 0.5px 0 rgb(255 255 255 / 0.10),
+        0 6px 24px -8px rgb(0 0 0 / 0.5);
     }
   }
 }
@@ -381,30 +330,22 @@
   :root[data-tema='oscuro'] .borde-luz {
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
   }
-    :root[data-tema='oscuro'] .barra-flotante {
-      /* Solo el respaldo: en cuanto el calco arranca esto se apaga. */
-      background: color-mix(in srgb, var(--superficie) 60%, transparent);
-      /* Sobre negro lo que define la pastilla es un pelo de luz, no uno
-         de sombra. Estos son los valores que se ajustaron en el banco de
-         pruebas, en el telefono. */
-      border: 0.5px solid rgb(255 255 255 / 0.16);
-      box-shadow:
-        inset 0 1px 0 rgb(255 255 255 / 0.34),
-        inset 0 -1px 0 rgb(255 255 255 / 0.08),
-        0 10px 30px -12px rgb(0 0 0 / 0.75);
-    }
+  :root[data-tema='oscuro'] .barra-flotante {
+    background: color-mix(in srgb, var(--superficie) 10%, transparent);
+    -webkit-backdrop-filter: blur(44px) saturate(2);
+    backdrop-filter: blur(44px) saturate(2);
+    border: 0.5px solid rgb(255 255 255 / 0.10);
+    box-shadow:
+      inset 0 0.5px 0 rgb(255 255 255 / 0.10),
+      0 6px 24px -8px rgb(0 0 0 / 0.5);
+  }
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  /* Sin vidrio: una pastilla opaca y nada de calco. El componente tambien se
-     apaga solo con esta preferencia, asi que aca solo queda vestirla. */
   .barra-flotante {
     background: var(--superficie);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
-  }
-  .vidrio-envoltura {
-    display: none;
   }
   .luz-deslizante::before {
     box-shadow: none;
