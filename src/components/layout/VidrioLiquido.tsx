@@ -47,16 +47,17 @@ import { useEffect, useRef, type RefObject } from 'react';
  */
 const RECETA = {
   /** Cuántos píxeles se corre el fondo en el canto. */
-  escala: 59,
+  escala: 40,
   /** Qué tan pegada al borde queda la deformación. Alto: centro limpio. */
-  poder: 5,
-  /** Apenas un velo. Mucho desenfoque mata la refracción, porque deja de
-   *  haber líneas reconocibles que doblar. */
-  borron: 2,
+  poder: 7.4,
+  /** Un velo. Subirlo mucho mata la refracción, porque deja de haber
+   *  líneas reconocibles que doblar; este es el punto donde todavía se
+   *  distingue el doblez pero el fondo no compite con los iconos. */
+  borron: 5.5,
   /** Separación entre las escalas de rojo y azul, en tanto por uno. */
-  prisma: 0.11,
+  prisma: 0.18,
   /** Saturación de salida. */
-  sat: 1.05,
+  sat: 1.6,
 };
 
 /** Freno de mano para rehacer el calco. El contenido cambia solo cuando
