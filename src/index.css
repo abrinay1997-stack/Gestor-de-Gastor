@@ -174,98 +174,152 @@
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.55);
   }
   /*
-   * Pildora flotante movil. Vidrio de verdad, no un rectangulo translucido.
+   * Pildora flotante movil. Vidrio con GROSOR, no un panel esmerilado.
    *
-   * Un panel esmerilado se hace con fondo y desenfoque, y con eso ya estaba.
-   * Pero lo que hace que algo parezca VIDRIO no es la transparencia: es el
-   * canto. Un cristal tiene grosor, y en el grosor la luz se dobla: el borde
-   * de arriba recoge la luz del ambiente y brilla, el de abajo devuelve un
-   * reflejo mas debil, y la cara se aclara arriba y se apaga hacia el medio.
-   * Eso es lo que el ojo lee como «esto es una pieza de vidrio apoyada
-   * encima» y no como «esto es un cuadrado semitransparente».
+   * Ocho intentos anteriores movieron siempre las mismas perillas —blur,
+   * saturate, brightness, cuanto fondo, que tan blanco el filete— y ninguno
+   * dejo de parecer glassmorphism. No era cuestion de afinar: faltaba la
+   * propiedad que define al vidrio.
    *
-   * Asi que son tres capas, cada una con su trabajo:
+   * QUE HACE QUE ALGO PAREZCA VIDRIO
    *
-   *   el fondo    desenfoque, saturacion y un punto de brillo. La saturacion
-   *               es la que le roba el color a lo que pasa por debajo en vez
-   *               de lavarlo en gris; el brillo hace de refraccion.
-   *   ::before    el reflejo de la cara: claro arriba, nada en el medio, y un
-   *               rebote tenue abajo.
-   *   ::after     el canto. Un aro de un pelo hecho con degradado y recortado
-   *               con mascara, para que la luz RECORRA la pastilla —fuerte
-   *               arriba a la izquierda, apagado abajo, encendido otra vez en
-   *               la punta— en vez de dibujarle un marco de color plano.
+   * No es la transparencia: es que el borde y el centro NO SE VEN IGUAL. Un
+   * cristal tiene espesor, y en el canto la luz atraviesa mas material y con
+   * otro angulo, asi que por el borde se ve mas denso y mas definido que por
+   * el medio. Un panel esmerilado, en cambio, difumina igual en toda su
+   * superficie. Esa es exactamente la diferencia entre las dos cosas, y es la
+   * que ningun filete blanco pintado encima puede fingir: un borde pintado se
+   * lee como marco, no como espesor.
    *
-   * El fondo propio baja de 11% a 7%: con el canto haciendo el trabajo de
-   * separar la pastilla de lo que tiene detras, la pintura encima sobra.
+   * COMO SE CONSIGUE ACA
+   *
+   * Dos capas de vidrio HERMANAS, cada una con su propio backdrop-filter y
+   * ocupando zonas distintas:
+   *
+   *   .vidrio-centro   del inset 6px para adentro. Muy desenfocado.
+   *   ::before         los 6px del canto. Casi sin desenfoque, algo mas denso.
+   *
+   * Tienen que ser hermanas y no una dentro de otra: un backdrop-filter
+   * anidado filtra el RESULTADO del de su padre, asi que un canto dentro del
+   * centro heredaria su desenfoque y las dos zonas volverian a verse igual.
+   * Por eso el centro es un elemento propio en el marcado y no el fondo de la
+   * pastilla (ver AppLayout).
+   *
+   * Y por eso mismo esta barra NO puede llevar backdrop-filter, opacity,
+   * filter, mask ni isolation: cualquiera de esas la convertiria en raiz de
+   * backdrop y sus hijas dejarian de ver la pagina.
+   *
+   *   ::after          el especular. Un aro de un pelo con la luz puesta
+   *                    ARRIBA, que es de donde viene en iOS, con un rebote
+   *                    debil abajo y los costados apagados. Un conico y no un
+   *                    lineal: el lineal cruza la pastilla en diagonal y se
+   *                    lee como un degradado pintado; el conico la recorre.
+   *
+   * LO QUE NO SE PUEDE HACER, Y CONVIENE SABERLO
+   *
+   * El Liquid Glass de Apple ademas REFRACTA: dobla y agranda lo que tiene
+   * detras en el canto. En la web eso se hace con feDisplacementMap dentro de
+   * backdrop-filter, y Safari no lo soporta —ni en iOS ni en macOS— asi que
+   * en el telefono de ustedes no se veria nada. Todas las librerias de
+   * «liquid glass en CSS» degradan justo a lo que ya teniamos. Esto es lo mas
+   * cerca que se llega sin refraccion, y lo que hace el trabajo es la
+   * diferencia optica entre canto y centro.
    */
   .barra-flotante {
-    isolation: isolate;
     position: relative;
-    /* El respaldo, para navegadores sin color-mix: opaco antes que roto. */
-    background: var(--superficie);
-    background: color-mix(in srgb, var(--superficie) 7%, transparent);
-    -webkit-backdrop-filter: blur(36px) saturate(2.6) brightness(1.06);
-    backdrop-filter: blur(36px) saturate(2.6) brightness(1.06);
-    /* Casi invisible: el canto de verdad lo dibuja ::after. Este queda solo
-       para que la geometria no cambie y para el navegador sin mascaras. */
-    border: 0.5px solid rgb(0 0 0 / 0.04);
+    /* Respaldo para navegadores sin backdrop-filter en las hijas: translucido
+       antes que invisible. */
+    background: color-mix(in srgb, var(--superficie) 10%, transparent);
+    /* Un pelo oscuro por fuera. Es lo unico que define la pastilla cuando lo
+       que pasa por detras es blanco —una tarjeta— y el especular, que es
+       blanco, desaparece contra ella. */
+    border: 0.5px solid rgb(0 0 0 / 0.07);
     box-shadow:
-      /* Pegada al piso y despues difusa: dos sombras, no una. Una sola
-         sombra grande flota; estas dos apoyan. */
-      0 1px 2px rgb(0 0 0 / 0.05),
-      0 10px 30px -12px rgb(0 0 0 / 0.22);
+      /* Tres sombras: la que la apoya, la que la despega y la que la funde
+         con el fondo. Una sola sombra grande flota sin apoyarse. */
+      0 1px 1px rgb(0 0 0 / 0.04),
+      0 2px 6px -1px rgb(0 0 0 / 0.08),
+      0 16px 38px -16px rgb(0 0 0 / 0.34);
     transition:
       padding 0.28s cubic-bezier(0.32, 0.72, 0, 1),
       transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
   }
 
-  /* La cara: la luz que entra por arriba y muere hacia el medio. */
+  /* La cara del vidrio. Muy desenfocada, pero bastante menos que antes (13px
+     contra 36px): a 36 todo lo de atras se volvia una papilla uniforme y la
+     barra parecia un muro. A 13 las formas se siguen reconociendo y se mueven
+     al hacer scroll, que es lo que la hace sentir viva. */
+  .vidrio-centro {
+    position: absolute;
+    inset: 6px;
+    z-index: 0;
+    border-radius: 20px;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--superficie) 7%, transparent);
+    -webkit-backdrop-filter: blur(13px) saturate(1.75);
+    backdrop-filter: blur(13px) saturate(1.75);
+    /* La transicion canto -> centro. Un pelo, no un segundo borde. */
+    box-shadow:
+      inset 0 0 0 0.5px rgb(0 0 0 / 0.05),
+      inset 0 1px 1.5px rgb(255 255 255 / 0.22);
+  }
+
+  /* EL CANTO. Los 6px del borde, con su propio filtro: casi sin desenfoque y
+     un punto mas denso, asi que por el se ve mas definido que por el centro.
+     Esta capa es la que hace todo el trabajo. */
   .barra-flotante::before {
     content: '';
     position: absolute;
     inset: 0;
-    z-index: 0;
+    z-index: 1;
     border-radius: inherit;
     pointer-events: none;
-    background: linear-gradient(
-      to bottom,
-      rgb(255 255 255 / 0.32) 0%,
-      rgb(255 255 255 / 0.10) 32%,
-      rgb(255 255 255 / 0) 60%,
-      rgb(255 255 255 / 0.09) 100%
-    );
+    padding: 6px;
+    -webkit-backdrop-filter: blur(0.5px) saturate(1.3) brightness(0.93) contrast(1.08);
+    backdrop-filter: blur(0.5px) saturate(1.3) brightness(0.93) contrast(1.08);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
   }
 
-  /* El canto. La mascara deja solo el aro de 0.75px y vacia el centro. */
+  /* El especular. La luz, arriba. */
   .barra-flotante::after {
     content: '';
     position: absolute;
     inset: 0;
-    z-index: 0;
+    z-index: 2;
     border-radius: inherit;
     pointer-events: none;
-    padding: 0.75px;
-    background: linear-gradient(
-      145deg,
-      rgb(255 255 255 / 0.80) 0%,
-      rgb(255 255 255 / 0.22) 26%,
-      rgb(255 255 255 / 0.05) 50%,
-      rgb(255 255 255 / 0.30) 76%,
-      rgb(255 255 255 / 0.65) 100%
+    padding: 1.2px;
+    background: conic-gradient(
+      from 348deg at 50% 50%,
+      rgb(255 255 255 / 0.98) 0deg,
+      rgb(255 255 255 / 0.42) 26deg,
+      rgb(255 255 255 / 0.08) 78deg,
+      rgb(255 255 255 / 0.05) 140deg,
+      rgb(255 255 255 / 0.46) 180deg,
+      rgb(255 255 255 / 0.05) 220deg,
+      rgb(255 255 255 / 0.08) 282deg,
+      rgb(255 255 255 / 0.42) 334deg,
+      rgb(255 255 255 / 0.98) 360deg
     );
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
     mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     mask-composite: exclude;
   }
+
   /* Luz del tab activo: un solo indicador que se desliza entre destinos. */
   .luz-deslizante {
     position: absolute;
     top: 4px;
     left: 0;
     height: 3px;
-    z-index: 1;
+    /* Por encima de las tres capas de vidrio (0, 1 y 2) y por debajo de los
+       iconos (10). La barra ya no aisla, asi que estos numeros conviven en el
+       mismo contexto y tienen que ordenarse a mano. */
+    z-index: 3;
     pointer-events: none;
     display: flex;
     justify-content: center;
@@ -372,33 +426,40 @@
       box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
     }
     :root:not([data-tema='claro']) .barra-flotante {
-      background: color-mix(in srgb, var(--superficie) 9%, transparent);
-      -webkit-backdrop-filter: blur(36px) saturate(2.2) brightness(1.12);
-      backdrop-filter: blur(36px) saturate(2.2) brightness(1.12);
-      border: 0.5px solid rgb(255 255 255 / 0.06);
+      background: color-mix(in srgb, var(--superficie) 14%, transparent);
+      /* En oscuro el borde exterior se invierte: sobre negro lo que define la
+         pastilla es un pelo de luz, no un pelo de sombra. */
+      border: 0.5px solid rgb(255 255 255 / 0.07);
       box-shadow:
-        0 1px 2px rgb(0 0 0 / 0.3),
-        0 10px 30px -12px rgb(0 0 0 / 0.6);
+        0 1px 2px rgb(0 0 0 / 0.4),
+        0 16px 38px -16px rgb(0 0 0 / 0.7);
     }
-    /* En oscuro el reflejo es un susurro: con el mismo blanco que en claro,
-       la pastilla se veia gris lechosa sobre el fondo negro. */
+    :root:not([data-tema='claro']) .vidrio-centro {
+      background: color-mix(in srgb, var(--superficie) 16%, transparent);
+      box-shadow:
+        inset 0 0 0 0.5px rgb(255 255 255 / 0.05),
+        inset 0 1px 1.5px rgb(255 255 255 / 0.07);
+    }
+    /* El canto, en oscuro, ACLARA en vez de oscurecer: sobre un fondo negro
+       un canto mas oscuro que el centro no se distingue de nada. */
     :root:not([data-tema='claro']) .barra-flotante::before {
-      background: linear-gradient(
-        to bottom,
-        rgb(255 255 255 / 0.10) 0%,
-        rgb(255 255 255 / 0.03) 34%,
-        rgb(255 255 255 / 0) 62%,
-        rgb(255 255 255 / 0.03) 100%
-      );
+      -webkit-backdrop-filter: blur(0.5px) saturate(1.3) brightness(1.06) contrast(1.05);
+      backdrop-filter: blur(0.5px) saturate(1.3) brightness(1.06) contrast(1.05);
     }
+    /* Y el especular es un susurro: con el mismo blanco que en claro, la
+       pastilla se veia gris lechosa sobre el negro. */
     :root:not([data-tema='claro']) .barra-flotante::after {
-      background: linear-gradient(
-        145deg,
-        rgb(255 255 255 / 0.38) 0%,
-        rgb(255 255 255 / 0.10) 26%,
-        rgb(255 255 255 / 0.03) 50%,
-        rgb(255 255 255 / 0.12) 76%,
-        rgb(255 255 255 / 0.30) 100%
+      background: conic-gradient(
+        from 348deg at 50% 50%,
+        rgb(255 255 255 / 0.58) 0deg,
+        rgb(255 255 255 / 0.22) 26deg,
+        rgb(255 255 255 / 0.05) 78deg,
+        rgb(255 255 255 / 0.03) 140deg,
+        rgb(255 255 255 / 0.26) 180deg,
+        rgb(255 255 255 / 0.03) 220deg,
+        rgb(255 255 255 / 0.05) 282deg,
+        rgb(255 255 255 / 0.22) 334deg,
+        rgb(255 255 255 / 0.58) 360deg
       );
     }
   }
@@ -409,47 +470,60 @@
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
   }
     :root[data-tema='oscuro'] .barra-flotante {
-      background: color-mix(in srgb, var(--superficie) 9%, transparent);
-      -webkit-backdrop-filter: blur(36px) saturate(2.2) brightness(1.12);
-      backdrop-filter: blur(36px) saturate(2.2) brightness(1.12);
-      border: 0.5px solid rgb(255 255 255 / 0.06);
+      background: color-mix(in srgb, var(--superficie) 14%, transparent);
+      /* En oscuro el borde exterior se invierte: sobre negro lo que define la
+         pastilla es un pelo de luz, no un pelo de sombra. */
+      border: 0.5px solid rgb(255 255 255 / 0.07);
       box-shadow:
-        0 1px 2px rgb(0 0 0 / 0.3),
-        0 10px 30px -12px rgb(0 0 0 / 0.6);
+        0 1px 2px rgb(0 0 0 / 0.4),
+        0 16px 38px -16px rgb(0 0 0 / 0.7);
     }
-    /* En oscuro el reflejo es un susurro: con el mismo blanco que en claro,
-       la pastilla se veia gris lechosa sobre el fondo negro. */
+    :root[data-tema='oscuro'] .vidrio-centro {
+      background: color-mix(in srgb, var(--superficie) 16%, transparent);
+      box-shadow:
+        inset 0 0 0 0.5px rgb(255 255 255 / 0.05),
+        inset 0 1px 1.5px rgb(255 255 255 / 0.07);
+    }
+    /* El canto, en oscuro, ACLARA en vez de oscurecer: sobre un fondo negro
+       un canto mas oscuro que el centro no se distingue de nada. */
     :root[data-tema='oscuro'] .barra-flotante::before {
-      background: linear-gradient(
-        to bottom,
-        rgb(255 255 255 / 0.10) 0%,
-        rgb(255 255 255 / 0.03) 34%,
-        rgb(255 255 255 / 0) 62%,
-        rgb(255 255 255 / 0.03) 100%
-      );
+      -webkit-backdrop-filter: blur(0.5px) saturate(1.3) brightness(1.06) contrast(1.05);
+      backdrop-filter: blur(0.5px) saturate(1.3) brightness(1.06) contrast(1.05);
     }
+    /* Y el especular es un susurro: con el mismo blanco que en claro, la
+       pastilla se veia gris lechosa sobre el negro. */
     :root[data-tema='oscuro'] .barra-flotante::after {
-      background: linear-gradient(
-        145deg,
-        rgb(255 255 255 / 0.38) 0%,
-        rgb(255 255 255 / 0.10) 26%,
-        rgb(255 255 255 / 0.03) 50%,
-        rgb(255 255 255 / 0.12) 76%,
-        rgb(255 255 255 / 0.30) 100%
+      background: conic-gradient(
+        from 348deg at 50% 50%,
+        rgb(255 255 255 / 0.58) 0deg,
+        rgb(255 255 255 / 0.22) 26deg,
+        rgb(255 255 255 / 0.05) 78deg,
+        rgb(255 255 255 / 0.03) 140deg,
+        rgb(255 255 255 / 0.26) 180deg,
+        rgb(255 255 255 / 0.03) 220deg,
+        rgb(255 255 255 / 0.05) 282deg,
+        rgb(255 255 255 / 0.22) 334deg,
+        rgb(255 255 255 / 0.58) 360deg
       );
     }
 }
 
 @media (prefers-reduced-transparency: reduce) {
+  /* Sin vidrio no hay canto ni especular que simular: una pastilla opaca con
+     su borde de siempre. Las tres capas se apagan a mano porque cada una
+     lleva su propio filtro. */
   .barra-flotante {
     background: var(--superficie);
+  }
+  .vidrio-centro {
+    background: none;
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+    box-shadow: none;
   }
-  /* Sin vidrio no hay canto ni reflejo que simular: una pastilla opaca con
-     su borde de siempre. */
   .barra-flotante::before {
-    background: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
   .barra-flotante::after {
     background: var(--borde);

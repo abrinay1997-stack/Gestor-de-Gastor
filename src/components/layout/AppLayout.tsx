@@ -253,6 +253,15 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
           'barra-flotante pointer-events-auto relative w-full max-w-[430px] rounded-[26px] px-2',
           compacto ? 'py-0.5' : 'py-1.5',
         )}>
+          {/* El vidrio del centro, como elemento propio y no como fondo de la
+              pastilla.
+              Tiene que ser HERMANO del canto, no estar dentro: un
+              backdrop-filter anidado filtra el resultado del de su padre, asi
+              que si el centro fuera el fondo de la barra, el canto heredaria
+              su desenfoque y no habria ninguna diferencia optica entre los
+              dos. Y es justo esa diferencia la que se lee como grosor de
+              vidrio. Ver src/index.css. */}
+          <span className="vidrio-centro" aria-hidden="true" />
           <div className="relative flex w-full">
             {enLaBarra && (
               <span
