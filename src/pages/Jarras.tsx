@@ -154,7 +154,7 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {visibles.length === 0 ? (
         <Tarjeta>
           <Vacio
@@ -471,7 +471,7 @@ function HojaTraspaso({ abierta, alCerrar, desde }: {
 
   return (
     <Hoja abierta alCerrar={alCerrar} titulo={esPago ? 'Pagarle a otra economía' : 'Mover entre jarras'}>
-      <div className="space-y-4">
+      <div className="space-y-3">
         <Selector
           etiqueta="De"
           value={origen}
@@ -683,7 +683,7 @@ function MovimientosDeJarra({ jarra, alCerrar, alVerMovimiento, alMover, alPoner
         </div>
       )}
     >
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div className="flex flex-col items-center text-center pt-1">
           <Ficha color={jarra.color} icono={jarra.icon} size={52} />
           <p className={cn(
@@ -1326,7 +1326,7 @@ function HojaAsignar({ abierta, alCerrar, disponible, hacia }: {
 
   return (
     <Hoja abierta alCerrar={alCerrar} titulo="Repartir lo que está sin asignar">
-      <div className="space-y-4">
+      <div className="space-y-3">
         <Campo
           etiqueta="Monto"
           value={montoTexto}

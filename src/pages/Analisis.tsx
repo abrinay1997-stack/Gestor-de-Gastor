@@ -167,7 +167,7 @@ export function Analisis() {
   }, [entidadActiva, entities, todos, categories, periodo]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <SelectorPeriodo periodo={periodo} alCambiar={setPeriodo} />
 
       {porEntidad.length > 1 && (

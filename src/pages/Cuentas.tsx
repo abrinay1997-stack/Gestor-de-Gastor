@@ -58,7 +58,7 @@ export function Cuentas() {
   const abrirEdicion = (c: Account) => { setEditando(c); setAbierta(true); };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {activas.length === 0 ? (
         <Tarjeta>
           <Vacio
@@ -268,7 +268,7 @@ function FormularioCuenta({ abierta, alCerrar, editando }: {
 
   return (
     <Hoja abierta={abierta} alCerrar={alCerrar} titulo={editando ? 'Editar cuenta' : 'Nueva cuenta'}>
-      <div className="space-y-4">
+      <div className="space-y-3">
         <Campo
           etiqueta="Nombre"
           value={name}

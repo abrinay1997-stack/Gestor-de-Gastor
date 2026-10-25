@@ -184,7 +184,7 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
     : [...SECCIONES_MOVIMIENTOS];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {orden.map((k) => (piezas[k] ? <div key={k}>{piezas[k]}</div> : null))}
 
       {/* Los filtros van pegados al buscador, esté donde esté: son su detalle
@@ -305,6 +305,10 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
                   key={tx.id}
                   tx={tx}
                   sinFecha
+                  /* Los mismos 16px que las filas de Jarras y de Cuentas.
+                     Acá la fila va suelta dentro de la `Lista`, que no pone
+                     relleno, así que lo tiene que poner ella. */
+                  relleno="px-4"
                   alTocar={() => alVerMovimiento(tx)}
                   alEditar={alEditarMovimiento}
                 />

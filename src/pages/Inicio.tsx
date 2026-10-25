@@ -266,7 +266,7 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <SelectorPeriodo periodo={periodo} alCambiar={setPeriodo} />
 
       {orden.map((id) => secciones[id] && <div key={id}>{secciones[id]}</div>)}
@@ -349,8 +349,22 @@ export function HeroPatrimonio({ montoMinor, moneda, pie, extra, accion, alineac
   );
 }
 
-export function FilaMovimiento({ tx, alTocar, alEditar, sinFecha, deltaMinor }: {
+export function FilaMovimiento({ tx, alTocar, alEditar, sinFecha, deltaMinor, relleno }: {
   tx: Transaction;
+  /**
+   * El relleno lateral de la fila, porque depende de quien la contiene.
+   *
+   * Esta fila vive en tres sitios con rellenos distintos: dentro de una
+   * `Tarjeta` con `p-5` en el Inicio, dentro de la hoja de una jarra alineada
+   * a `px-1`, y suelta dentro de una `Lista`, que no tiene relleno propio.
+   *
+   * El valor de siempre, `px-1`, servia cuando los tres la envolvian en algo
+   * acolchado. Al pasar Movimientos a listas agrupadas dejo de haber
+   * envoltorio, y esos 4px quedaron como TODA la separacion: los iconos y los
+   * montos terminaron pegados al canto, mientras Jarras y Cuentas respiraban
+   * sus 16. De ahi que haya que poder decirselo desde afuera.
+   */
+  relleno?: string;
   alTocar: () => void;
   /**
    * Abrir el formulario con este movimiento cargado.
@@ -434,7 +448,8 @@ export function FilaMovimiento({ tx, alTocar, alEditar, sinFecha, deltaMinor }: 
     <button
       onClick={alTocar}
       className={cn(
-        'w-full flex items-center gap-3 py-3 px-1 text-left transition-opacity active:opacity-60',
+        'w-full flex items-center gap-3 py-3 text-left transition-opacity active:opacity-60',
+        relleno ?? 'px-1',
         subiendo && 'opacity-50',
         recien && 'fila-nueva',
       )}
