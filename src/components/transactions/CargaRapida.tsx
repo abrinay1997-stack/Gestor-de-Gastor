@@ -508,11 +508,23 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
               className={cn(
                 'min-h-14 rounded-xl t-nota font-medium border transition-all',
                 'flex flex-col items-center justify-center gap-0.5 px-1',
-                tipo === t.id ? 'text-white border-transparent' : 'superficie-2 borde txt-2',
+                /* Seleccionado NO es un bloque de color saturado.
+                   «Gasto» se pintaba de rojo pleno, y en iOS el rojo
+                   significa destructivo: registrar un gasto normal no es un
+                   error. Ahora el seleccionado se marca como un segmented
+                   control del sistema —superficie elevada, borde definido y
+                   texto en negrita— y el color del tipo queda SOLO en el
+                   icono, que es donde informa sin gritar. */
+                tipo === t.id
+                  ? 'superficie borde txt font-semibold shadow-[var(--shadow-tarjeta)]'
+                  : 'superficie-2 border-transparent txt-3',
               )}
-              style={tipo === t.id ? { background: t.color } : undefined}
             >
-              <Icono nombre={t.icono} size={16} />
+              <Icono
+                nombre={t.icono}
+                size={16}
+                style={tipo === t.id ? { color: t.color } : undefined}
+              />
               <span className="truncate max-w-full">{t.etiqueta}</span>
             </button>
           ))}
@@ -746,6 +758,13 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
             </div>
           </div>
         )}
+
+        {/* Lo de aca abajo casi nunca se toca: la fecha es hoy y las notas
+            estan vacias. Antes venian pegadas al resto con el mismo aire y el
+            mismo peso, asi que el formulario se leia como siete campos
+            igual de obligatorios. Una linea y un respiro los separan de lo
+            que si hay que completar. */}
+        <div className="pt-2 border-t borde" />
 
         {/* La fecha, plegada. El campo `date` nativo abre su calendario dentro
             del formulario y se sale del ancho; casi siempre es hoy, así que se

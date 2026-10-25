@@ -65,7 +65,7 @@ export function SelectorPeriodo({ periodo, alCambiar }: {
           onClick={() => movible && alCambiar(moverPeriodo(periodo, -1))}
           disabled={!movible}
           aria-label="Período anterior"
-          className="w-8 h-8 rounded-lg flex items-center justify-center txt-3 disabled:opacity-25 shrink-0 active:superficie-2 transition-colors"
+          className="w-11 h-11 rounded-lg flex items-center justify-center txt-3 disabled:opacity-25 shrink-0 active:superficie-2 transition-colors"
         >
           <Icono nombre="chevron-left" size={18} />
         </button>
@@ -74,7 +74,7 @@ export function SelectorPeriodo({ periodo, alCambiar }: {
             320px "Septiembre de 2026" empujaba la flecha fuera de pantalla. */}
         <button
           onClick={() => setAbierto(true)}
-          className="flex-1 min-w-0 min-h-8 rounded-lg flex items-center justify-center gap-1 px-2 active:superficie-2 transition-colors"
+          className="flex-1 min-w-0 min-h-11 rounded-lg flex items-center justify-center gap-1 px-2 active:superficie-2 transition-colors"
         >
           <span className="t-fila font-semibold txt truncate">
             {mayusculaInicial(describirPeriodo(periodo))}
@@ -86,7 +86,7 @@ export function SelectorPeriodo({ periodo, alCambiar }: {
           onClick={() => haySiguiente && alCambiar(moverPeriodo(periodo, 1))}
           disabled={!haySiguiente}
           aria-label="Período siguiente"
-          className="w-8 h-8 rounded-lg flex items-center justify-center txt-3 disabled:opacity-25 shrink-0 active:superficie-2 transition-colors"
+          className="w-11 h-11 rounded-lg flex items-center justify-center txt-3 disabled:opacity-25 shrink-0 active:superficie-2 transition-colors"
         >
           <Icono nombre="chevron-right" size={18} />
         </button>
