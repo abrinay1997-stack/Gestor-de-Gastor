@@ -204,12 +204,19 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
             <button
               onClick={() => alCambiar('ajustes')}
               aria-label="Ajustes"
-              className={cn(
-                'rounded-full active:scale-[0.92] transition-transform duration-100',
-                solapa === 'ajustes' && 'ring-2 ring-marca-500 ring-offset-2 ring-offset-[var(--fondo)]',
-              )}
+              /* 44x44 aunque la foto mida 30: es la UNICA puerta a los
+                 ajustes, y un blanco de 30px es la mitad del minimo que pide
+                 Apple. El area crece con `p-1.5` y un ancho fijo; la foto no
+                 se toca. El anillo de seleccionado se dibuja en un hijo para
+                 que siga abrazando la foto y no la caja invisible. */
+              className="w-11 h-11 flex items-center justify-center shrink-0 active:scale-[0.92] transition-transform duration-100"
             >
-              <Avatar nombre={me?.displayName ?? '?'} color={me?.color ?? '#10b981'} emoji={me?.emoji} foto={me?.photo} size={30} />
+              <span className={cn(
+                'rounded-full flex',
+                solapa === 'ajustes' && 'ring-2 ring-marca-500 ring-offset-2 ring-offset-[var(--fondo)]',
+              )}>
+                <Avatar nombre={me?.displayName ?? '?'} color={me?.color ?? '#10b981'} emoji={me?.emoji} foto={me?.photo} size={30} />
+              </span>
             </button>
           </div>
         </div>
