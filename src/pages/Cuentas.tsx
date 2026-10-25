@@ -14,7 +14,8 @@ import {
 } from '@shared/types';
 import { calcularPatrimonio } from '@shared/domain';
 import {
-  Boton, Campo, COLORES, Ficha, Hoja, Icono, Selector, SelectorColor, Tarjeta, Vacio,
+  Boton, Campo, COLORES, Ficha, FilaLista, Hoja, Icono, Lista, Selector, SelectorColor,
+  Tarjeta, Vacio,
 } from '../components/ui/base.tsx';
 import { HeroPatrimonio } from './Inicio.tsx';
 import { useDescartar } from './Ajustes.tsx';
@@ -84,22 +85,25 @@ export function Cuentas() {
               /* Con la palabra, no solo el «+»: el botón flotante de abajo
                  también es un «+» y significa otra cosa (un movimiento). Dos
                  cruces iguales en la misma pantalla se prestan a confusión. */
+              /* Ya no vive sobre verde, así que deja de ser un botón
+                 translúcido —que sobre blanco no se veía— y pasa a ser el
+                 acento de la pantalla: el verde de la marca, en el texto. */
               <button
                 onClick={abrirNueva}
-                className="min-h-9 pl-2.5 pr-3 rounded-full bg-white/20 border border-white/25 flex items-center gap-1 t-fila font-medium active:scale-[0.94] transition-transform duration-100"
+                className="min-h-9 pl-2.5 pr-3 rounded-full superficie-2 borde border text-marca-700 dark:text-marca-500 flex items-center gap-1 t-fila font-medium active:scale-[0.94] transition-transform duration-100"
               >
                 <Icono nombre="plus" size={16} /> Cuenta
               </button>
             )}
             extra={pasivos.length > 0 ? (
-              <div className="grid grid-cols-2 gap-3 mt-4 pt-3.5 border-t border-white/15">
+              <div className="grid grid-cols-2 gap-3 mt-4 pt-3.5 border-t borde">
                 <div>
-                  <p className="t-nota opacity-70 mb-0.5">Tienes</p>
-                  <p className="t-seccion font-semibold tabular">{formatMonto(totalActivos, moneda)}</p>
+                  <p className="t-nota txt-3 mb-0.5">Tienes</p>
+                  <p className="t-seccion font-semibold tabular txt">{formatMonto(totalActivos, moneda)}</p>
                 </div>
                 <div>
-                  <p className="t-nota opacity-70 mb-0.5">Debes</p>
-                  <p className="t-seccion font-semibold tabular">{formatMonto(totalPasivos, moneda)}</p>
+                  <p className="t-nota txt-3 mb-0.5">Debes</p>
+                  <p className="t-seccion font-semibold tabular txt">{formatMonto(totalPasivos, moneda)}</p>
                 </div>
               </div>
             ) : undefined}
@@ -132,19 +136,14 @@ function Grupo({ titulo, cuentas, alTocar, members }: {
   members: { id: string; displayName: string }[];
 }) {
   return (
-    <Tarjeta className="py-3">
-      {titulo && <h2 className="t-seccion font-semibold txt px-1 mb-2">{titulo}</h2>}
-      <div className="divide-y divide-[var(--borde)] -mx-1">
-        {cuentas.map((c) => {
+    <Lista titulo={titulo}>
+      {cuentas.map((c) => {
           const dueno = c.owner === 'compartida'
             ? 'Compartida'
             : members.find((m) => m.id === c.owner)?.displayName ?? 'Personal';
           return (
-            <button
-              key={c.id}
-              onClick={() => alTocar(c)}
-              className="w-full flex items-center gap-3 py-3 px-1 text-left active:opacity-60 transition-opacity"
-            >
+            <FilaLista key={c.id} onClick={() => alTocar(c)}>
+              <div className="flex items-center gap-3 px-4 py-3">
               <Ficha color={c.color} icono={c.icon} size={40} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline justify-between gap-2">
@@ -160,11 +159,11 @@ function Grupo({ titulo, cuentas, alTocar, members }: {
                   {ACCOUNT_CATEGORY_LABEL[c.category]} · {dueno}
                 </p>
               </div>
-            </button>
+              </div>
+            </FilaLista>
           );
         })}
-      </div>
-    </Tarjeta>
+    </Lista>
   );
 }
 

@@ -112,6 +112,67 @@ export function Tarjeta({ className, children, onClick }: {
   );
 }
 
+/**
+ * Lista agrupada, como las de Ajustes del sistema.
+ *
+ * Es el contenedor de TODO lo que sea una lista de cosas iguales: los
+ * movimientos de un dia, las jarras, las cuentas. Antes cada elemento era una
+ * `Tarjeta` propia, con su sombra y 16px de aire alrededor; cuatro dias de
+ * movimientos llenaban la pantalla entera y tres jarras tambien.
+ *
+ * Dos diferencias con `Tarjeta`, y las dos importan:
+ *
+ * - El titulo va AFUERA, chico y gris. Adentro se comia un renglon y hacia
+ *   que la tarjeta empezara con texto en vez de con el primer dato.
+ * - No lleva sombra. Una lista agrupada de iOS no flota: se apoya sobre el
+ *   fondo hundido y lo unico que la separa es el cambio de superficie. La
+ *   sombra es justo lo que las hacia leer como fichas sueltas.
+ */
+export function Lista({ titulo, accion, className, children }: {
+  /** Solo cuando distingue algo. Un titulo que nombra lo que ya se ve sobra. */
+  titulo?: string;
+  /** Algo a la derecha del titulo, como un boton de «ver todo». */
+  accion?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section>
+      {(titulo || accion) && (
+        <div className="flex items-baseline justify-between gap-2 px-4 mb-1.5">
+          {titulo && <h2 className="t-nota font-medium txt-3 truncate">{titulo}</h2>}
+          {accion}
+        </div>
+      )}
+      <div className={cn('superficie borde border rounded-2xl overflow-hidden', className)}>
+        {children}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Una fila de lista. El hairline lo pone ella y no el contenedor, asi la
+ * ultima no lo lleva sin que nadie tenga que acordarse.
+ */
+export function FilaLista({ className, onClick, children }: {
+  className?: string; onClick?: () => void; children: ReactNode;
+}) {
+  const Caja = onClick ? 'button' : 'div';
+  return (
+    <Caja
+      onClick={onClick}
+      className={cn(
+        'w-full text-left border-b borde last:border-b-0',
+        onClick && 'active:superficie-2 transition-colors',
+        className,
+      )}
+    >
+      {children}
+    </Caja>
+  );
+}
+
 export function Vacio({ icono, titulo, texto, accion }: {
   icono: string; titulo: string; texto: string; accion?: ReactNode;
 }) {

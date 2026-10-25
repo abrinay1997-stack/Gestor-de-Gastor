@@ -27,6 +27,15 @@ import { decimalesDe } from '@shared/money';
  * Recharts entrega el valor como number | string | array, asi que se
  * normaliza antes de formatear en vez de asumir que siempre es un numero.
  */
+/**
+ * Cuantas categorias se dibujan sueltas antes de juntar el resto en «Otros».
+ *
+ * Cinco es donde una torta sigue siendo legible: con seis ya hay porciones de
+ * menos de veinte grados, y con diez son astillas que no se pueden ni tocar ni
+ * distinguir.
+ */
+const TAJADAS = 5;
+
 const formatearEje = (v: unknown, moneda: string, decimales: number): string => {
   const n = typeof v === 'number' ? v : Number(v);
   return Number.isFinite(n) ? formatMonto(Math.round(n * 10 ** decimales), moneda) : '';
@@ -60,17 +69,45 @@ export function Analisis() {
   );
   const resumen = useMemo(() => resumir(delMes), [delMes]);
 
-  const torta = useMemo(
-    () => porCategoria(delMes, categories, 'gasto')
+  /*
+   * La torta, cortada en cinco mas «Otros».
+   *
+   * Antes dibujaba TODAS las categorias con gasto —con catorce activas eso son
+   * catorce porciones— y la leyenda de abajo listaba solo las seis primeras.
+   * O sea: el grafico mostraba astillas de uno o dos grados que no estaban en
+   * la leyenda, y el conjunto se leia como un arcoiris sin orden.
+   *
+   * Los colores siguen siendo los de cada categoria y no una paleta aparte: el
+   * color de una categoria es su identidad en toda la app —el chip de la fila,
+   * la barra de «En que se fue»— y si el grafico usara otros, «Comida» seria
+   * roja en una pantalla y verde en la otra. Lo que sobraba no eran los
+   * colores sino la cantidad de porciones.
+   *
+   * «Otros» va en gris: es un cajon, no una categoria, y pintarlo de color lo
+   * haria competir con las que si lo son.
+   */
+  const torta = useMemo(() => {
+    const todas = porCategoria(delMes, categories, 'gasto')
       .filter((x) => x.totalMinor > 0)
       .map((x) => ({
         nombre: x.category?.name ?? 'Sin categoría',
         valor: x.totalMinor / 10 ** decimales,
         minor: x.totalMinor,
         color: x.category?.color ?? '#64748b',
-      })),
-    [delMes, categories, decimales],
-  );
+      }));
+
+    if (todas.length <= TAJADAS + 1) return todas;
+
+    const cabeza = todas.slice(0, TAJADAS);
+    const resto = todas.slice(TAJADAS);
+    const restoMinor = resto.reduce((a, x) => a + x.minor, 0);
+    return [...cabeza, {
+      nombre: `Otros (${resto.length})`,
+      valor: restoMinor / 10 ** decimales,
+      minor: restoMinor,
+      color: '#8e8e93',
+    }];
+  }, [delMes, categories, decimales]);
 
   /** Ultimos 6 meses de ingresos contra gastos. */
   const tendencia = useMemo(() => {
@@ -223,7 +260,7 @@ export function Analisis() {
               </div>
 
               <div className="space-y-2 mt-2">
-                {torta.slice(0, 6).map((d) => (
+                {torta.map((d) => (
                   <div key={d.nombre} className="flex items-center gap-2.5 t-fila">
                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: d.color }} />
                     <span className="flex-1 txt-2 truncate">{d.nombre}</span>
