@@ -11,10 +11,12 @@
  * jarras no ven.
  */
 
-import { aJar, aJarImputacion, listarCategorias, listarEntidades, listarJarras } from './db.ts';
+import {
+  aJar, aJarImputacion, listarCategorias, listarCuentas, listarEntidades, listarJarras,
+} from './db.ts';
 import type { Env } from './env.ts';
 import {
-  entidadDe, entidadPorDefecto, imputacionJarras, indexarCategorias, jarrasDe,
+  entidadDe, entidadPorDefecto, imputacionJarras, indexarCategorias, jarrasDe, sinAsignar,
 } from '../shared/domain.ts';
 import type { JarImputacion, Jar, Transaction } from '../shared/types.ts';
 
@@ -156,3 +158,38 @@ export async function ambitoDeReparto(
 }
 
 export { listarJarras };
+
+/**
+ * Cuanta plata hay que todavia no esta en ninguna jarra.
+ *
+ * POR QUE ESTO VIVE EN EL SERVIDOR Y NO SOLO EN LA PANTALLA
+ *
+ * Las jarras son una ETIQUETA sobre plata que esta en las cuentas, no un lugar
+ * aparte donde la plata se guarda. De ahi sale el unico invariante que importa
+ * en toda esta parte de la app:
+ *
+ *     lo que suman las jarras <= lo que suman las cuentas
+ *
+ * `sinAsignar` calculaba exactamente esa diferencia, pero solo se usaba para
+ * PINTAR un numero en la pantalla de jarras. El servidor no la miraba nunca, y
+ * por eso habia dos maneras distintas de meter la misma plata dos veces:
+ *
+ *   - Repartir a mano con «Repartirla entre las jarras» (un aporte) y despues
+ *     apretar «Repartirlos ahora» (que escribe imputaciones). Los dos suman al
+ *     saldo de la jarra, ninguno sabe del otro: tres ingresos de $2.800
+ *     terminaban como $5.600 adentro de las jarras.
+ *   - Pedir un aporte mas grande que lo que hay libre, o pedirlo dos veces.
+ *
+ * En los dos casos las jarras pasaban a declarar plata que la casa no tiene, y
+ * la pantalla mostraba un «sin repartir» NEGATIVO, que no significa nada.
+ *
+ * Ahora el invariante se defiende donde se escribe, que es el unico lugar
+ * donde se puede defender de verdad.
+ */
+export async function libreParaRepartir(env: Env, householdId: string): Promise<number> {
+  const [cuentas, jarras] = await Promise.all([
+    listarCuentas(env, householdId),
+    listarJarras(env, householdId),
+  ]);
+  return sinAsignar(cuentas, new Map(jarras.map((j) => [j.id, j.balanceMinor])));
+}

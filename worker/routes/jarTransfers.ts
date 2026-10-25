@@ -11,7 +11,7 @@ import {
   aJarTransfer, listarAportes, listarCuentas, listarImputaciones, listarJarras,
   listarTraspasos,
 } from '../db.ts';
-import { ambitoDeReparto, sentenciasImputacion } from '../jarras.ts';
+import { ambitoDeReparto, libreParaRepartir, sentenciasImputacion } from '../jarras.ts';
 import { repartirEnJarras, validarJarras } from '../../shared/domain.ts';
 import { TxType } from '../../shared/types.ts';
 import type { Env } from '../env.ts';
@@ -173,6 +173,21 @@ export async function ponerAlDia(_r: Request, env: Env, sesion: Sesion): Promise
   const jars = await listarJarras(env, sesion.householdId);
   if (jars.length === 0) return error('No hay jarras configuradas', 400);
 
+  /*
+   * Lo que todavia no esta en ninguna jarra.
+   *
+   * Un ingreso puede estar repartido SIN tener imputaciones: alcanza con que
+   * alguien haya movido esa plata a las jarras a mano, con «Repartirla entre
+   * las jarras», que escribe un aporte y no toca el movimiento. Para la base
+   * ese ingreso sigue siendo huerfano; para la casa ya esta repartido.
+   *
+   * Repartirlo de nuevo sumaria la misma plata por segunda vez. Por eso lo que
+   * manda no es cuantos huerfanos hay sino cuanto queda libre: si no queda
+   * nada, no hay nada que poner al dia por mas huerfanos que figuren.
+   */
+  const libre = await libreParaRepartir(env, sesion.householdId);
+  if (libre <= 0) return json({ repartidos: 0, jars });
+
   const ambito = await ambitoDeReparto(env, sesion.householdId);
 
   // Ingresos sin jarra y sin ninguna imputacion escrita.
@@ -281,6 +296,19 @@ export async function asignar(req: Request, env: Env, sesion: Sesion): Promise<R
 
   const todas = await listarJarras(env, sesion.householdId);
   if (todas.length === 0) return error('No hay jarras configuradas', 400);
+
+  /* Las jarras etiquetan plata que esta en las cuentas: no pueden declarar
+     mas de la que hay. Sin esto, pedir dos veces el mismo aporte dejaba a las
+     jarras con el doble y el «sin repartir» en negativo. */
+  const libre = await libreParaRepartir(env, sesion.householdId);
+  if (amountMinor > libre) {
+    return error(
+      libre <= 0
+        ? 'No hay plata sin repartir: ya está toda en las jarras.'
+        : `Solo hay ${(libre / 100).toFixed(2)} sin repartir.`,
+      400,
+    );
+  }
 
   // A una sola jarra, o repartido entre las de una economia.
   let partes: Map<string, number>;

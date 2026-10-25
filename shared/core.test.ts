@@ -874,3 +874,51 @@ describe('formatMonto nunca abrevia', () => {
     expect(formatMonto(8000, 'USD')).toBe('$80.00');
   });
 });
+
+/*
+ * EL INVARIANTE DE LAS JARRAS.
+ *
+ * Una jarra no es un lugar donde se guarda plata: es una ETIQUETA sobre plata
+ * que esta en las cuentas. De ahi sale la unica regla que no se puede romper
+ * nunca en esta parte de la app:
+ *
+ *     lo que suman las jarras <= lo que suman las cuentas
+ *
+ * Se rompio de verdad, con plata real adentro. Habia dos caminos de escritura
+ * que suman al saldo de una jarra —los aportes («Repartirla entre las jarras»)
+ * y las imputaciones («Repartirlos ahora»)— y ninguno de los dos sabia del
+ * otro. Repartir a mano y despues aceptar el aviso de «ingresos que nunca se
+ * repartieron» metia la MISMA plata dos veces: $2.800 de ingresos terminaban
+ * como $5.600 declarados dentro de las jarras, y la pantalla mostraba un «sin
+ * repartir» negativo.
+ *
+ * `sinAsignar` ya sabia calcular la diferencia, pero solo se usaba para pintar
+ * un numero: el servidor no la miraba al escribir. Estos casos fijan el signo,
+ * que es lo que el servidor comprueba ahora antes de dejar escribir.
+ */
+describe('el invariante de las jarras', () => {
+  const cuenta = (balanceMinor: number, archived = false) =>
+    ({ id: 'c' + balanceMinor, balanceMinor, archived } as Account);
+
+  it('lo libre es lo que hay en cuentas menos lo que ya esta etiquetado', () => {
+    const jarras = new Map([['a', 60_000], ['b', 40_000]]);
+    expect(sinAsignar([cuenta(250_000)], jarras)).toBe(150_000);
+  });
+
+  it('con todo etiquetado no queda nada libre, y repartir de nuevo seria duplicar', () => {
+    const jarras = new Map([['a', 180_000], ['b', 100_000]]);
+    // Justo el caso reproducido: $2.800 de ingresos, ya repartidos a mano.
+    expect(sinAsignar([cuenta(280_000)], jarras)).toBe(0);
+  });
+
+  it('da negativo cuando las jarras declaran mas plata de la que la casa tiene', () => {
+    // Lo que pasaba al apretar los dos botones: el doble adentro de las jarras.
+    const jarras = new Map([['a', 360_000], ['b', 200_000]]);
+    expect(sinAsignar([cuenta(280_000)], jarras)).toBeLessThan(0);
+  });
+
+  it('una cuenta archivada no aporta plata que repartir', () => {
+    const jarras = new Map([['a', 0]]);
+    expect(sinAsignar([cuenta(100_000), cuenta(50_000, true)], jarras)).toBe(100_000);
+  });
+});
