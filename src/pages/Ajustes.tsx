@@ -1118,7 +1118,7 @@ function EditorCategoria({ categoria, alCerrar }: {
               value={entityId}
               onChange={(e) => setEntityId(e.target.value)}
             >
-              <option value="">Sin clasificar</option>
+              <option value="">Sin economía</option>
               {visibles.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
             </Selector>
             {cambiaDeEntidad && cuantos > 0 && (

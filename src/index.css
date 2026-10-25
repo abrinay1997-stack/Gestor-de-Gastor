@@ -474,11 +474,33 @@
  * sueltas: si viviesen aca, la clase le ganaria por orden a la utilidad y no
  * se podria poner un titulo en negrita sin pelearse con el CSS.
  */
+/*
+ * UN PUNTO MAS GRANDE QUE ANTES, Y POR QUE NO TRES.
+ *
+ * El cuerpo de la app era de 14px y el secundario de 12px. iOS usa 17pt para
+ * el cuerpo y 13pt para el pie, asi que la app se leia como una pagina web
+ * encogida dentro de un telefono: de todo lo que la delataba como no nativa,
+ * esto era lo primero.
+ *
+ * Subir el cuerpo de 14 a 17 de una vez era lo logico sobre el papel y lo
+ * equivocado en la practica: un 21% mas de alto por renglon se come la
+ * densidad que acabamos de ganar pasando las tarjetas a listas agrupadas, y
+ * donde entran siete movimientos volverian a entrar cinco. Dos cambios
+ * tirando en direcciones opuestas en la misma pantalla.
+ *
+ * Asi que un punto, no tres: el cuerpo a 15 —el `subheadline` de iOS, que es
+ * el tamaño real de las filas de una lista agrupada, no el del cuerpo de un
+ * articulo— y el secundario a 13, que es el `footnote`. Se gana legibilidad
+ * sin perder lo otro, y queda medido mas abajo.
+ *
+ * `t-campo` pasa a 17 por una razon distinta: Safari hace zoom solo al tocar
+ * un campo de menos de 16px, y 17 deja margen.
+ */
 @layer utilities {
-  .t-seccion { font-size: 0.9375rem; line-height: 1.25rem; }
-  .t-fila    { font-size: 0.875rem;  line-height: 1.25rem; }
-  .t-nota    { font-size: 0.75rem;   line-height: 1rem; }
-  .t-campo   { font-size: 1rem;      line-height: 1.5rem; }
+  .t-seccion { font-size: 1rem;      line-height: 1.375rem; }
+  .t-fila    { font-size: 0.9375rem; line-height: 1.3125rem; }
+  .t-nota    { font-size: 0.8125rem; line-height: 1.125rem; }
+  .t-campo   { font-size: 1.0625rem; line-height: 1.5rem; }
   .t-monto   { font-size: 1.5rem;    line-height: 1.75rem; }
   .t-cifra   { font-size: 2.25rem;   line-height: 2.5rem; }
   .t-glifo   { font-size: 1.25rem;   line-height: 1; }
