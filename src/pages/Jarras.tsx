@@ -207,7 +207,15 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
             </Tarjeta>
           )}
 
-          {huerfanos.length > 0 && (
+          {/* El aviso SOLO si de verdad queda plata afuera de las jarras.
+              Un ingreso puede estar repartido sin tener imputaciones: alcanza
+              con haber movido esa plata a mano con el botón de arriba, que
+              escribe un aporte y no toca el movimiento. Para la base ese
+              ingreso sigue siendo huérfano; para la casa ya está repartido, y
+              el aviso decía «nunca se repartieron» sobre plata que ya estaba
+              adentro — y encima no había forma de hacerlo desaparecer, porque
+              el botón que ofrecía repartía de nuevo lo mismo. */}
+          {huerfanos.length > 0 && libre > 0 && (
             <Tarjeta className="border-marca-500/40">
               <h2 className="t-seccion font-semibold txt mb-1">
                 {huerfanos.length === 1
