@@ -181,7 +181,17 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
             arriba de cada pantalla. El estado de la conexion solo aparece
             cuando hay algo que decir —conectando o sin conexion—; cuando todo
             anda, el punto verde sobre el avatar de la pareja ya lo dice. */}
-        <div className="md:hidden flex items-center justify-between gap-2 mb-3 safe-top">
+        {/* `mb-1` y no `mb-3`: la fila de las fotos mide 44px de alto porque el
+            avatar es el único acceso a Ajustes y necesita ese blanco táctil,
+            pero la foto adentro mide 30, así que ya aporta 7px de aire arriba
+            y abajo. Lo mismo el selector de fecha de abajo. Sumando los tres
+            márgenes, entre la foto y el mes quedaban más de 30px de nada.
+            Se recorta el margen propio, que es el único que no está
+            cumpliendo una función; los blancos táctiles no se tocan.
+            `safe-top` tampoco: es el espacio del notch, y con
+            `viewport-fit=cover` puesto es real cuando abren la app desde la
+            pantalla de inicio. */}
+        <div className="md:hidden flex items-center justify-between gap-2 mb-1 safe-top">
           {/* Solo donde la economia cambia lo que se ve. En Cuentas no manda
               —las cuentas estan mezcladas a proposito— y en Ajustes tampoco,
               asi que ahi la pastilla seria un control que no hace nada. */}
