@@ -138,9 +138,14 @@ function Grupo({ titulo, cuentas, alTocar, members }: {
   return (
     <Lista titulo={titulo}>
       {cuentas.map((c) => {
-          const dueno = c.owner === 'compartida'
-            ? 'Compartida'
-            : members.find((m) => m.id === c.owner)?.displayName ?? 'Personal';
+          /* Con una sola persona en la casa, TODAS las cuentas son
+             «Compartida» y la palabra sale en cada fila sin separar ninguna
+             de otra. Misma regla que en los movimientos. */
+          const dueno = members.length <= 1
+            ? null
+            : c.owner === 'compartida'
+              ? 'Compartida'
+              : members.find((m) => m.id === c.owner)?.displayName ?? 'Personal';
           return (
             <FilaLista key={c.id} onClick={() => alTocar(c)}>
               <div className="flex items-center gap-3 px-4 py-3">
@@ -156,7 +161,7 @@ function Grupo({ titulo, cuentas, alTocar, members }: {
                   </p>
                 </div>
                 <p className="t-nota txt-3 truncate mt-0.5">
-                  {ACCOUNT_CATEGORY_LABEL[c.category]} · {dueno}
+                  {[ACCOUNT_CATEGORY_LABEL[c.category], dueno].filter(Boolean).join(' · ')}
                 </p>
               </div>
               </div>

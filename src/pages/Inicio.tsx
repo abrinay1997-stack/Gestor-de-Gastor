@@ -389,8 +389,21 @@ export function FilaMovimiento({ tx, alTocar, alEditar, sinFecha, deltaMinor }: 
   const entidad = entidadActiva === null && entities.length > 1
     ? entities.find((e) => e.id === (tx.entityId ?? cat?.entityId ?? null))
     : undefined;
-  const cuenta = accounts.find((c) => c.id === tx.accountId);
-  const quien = members.find((m) => m.id === autorDe(tx));
+  /*
+   * La cuenta y la persona SOLO cuando distinguen algo.
+   *
+   * La fila ya se callaba la fecha cuando el grupo del dia la decia. Faltaba
+   * aplicar la misma regla a las otras dos: en una casa de una sola persona,
+   * o con una sola cuenta, «BG principal · Abrinay» salia identico en las
+   * diecisiete filas. Ocupaba la mitad del renglon de abajo y no separaba una
+   * fila de otra: eso no es informacion, es relleno.
+   */
+  const cuenta = accounts.length > 1
+    ? accounts.find((c) => c.id === tx.accountId)
+    : undefined;
+  const quien = members.length > 1
+    ? members.find((m) => m.id === autorDe(tx))
+    : undefined;
   const subiendo = enVuelo.has(tx.id);
   const confirmar = useConfirmar();
   // Acaba de cargarlo la otra persona, en este momento. Ver aparecer la fila
@@ -462,6 +475,9 @@ export function FilaMovimiento({ tx, alTocar, alEditar, sinFecha, deltaMinor }: 
             ? `${deltaMinor > 0 ? '+' : '−'}${formatMonto(Math.abs(deltaMinor), moneda)}`
             : `${esTransferencia ? '' : esIngreso ? '+' : '−'}${formatMonto(tx.amountMinor, moneda)}`}
         </p>
+        {/* El punto es el color de QUIEN cargo el movimiento. Con una sola
+            persona en la casa sale igual en todas las filas, asi que no dice
+            nada: `quien` ya viene vacio en ese caso y el punto no se dibuja. */}
         {quien && (
           <span
             className="w-1.5 h-1.5 rounded-full shrink-0"

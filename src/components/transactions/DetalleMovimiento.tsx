@@ -87,7 +87,11 @@ export function DetalleMovimiento({ tx, alCerrar, alEditar }: {
             size={56}
           />
           <p className={cn(
-            'text-4xl font-bold tabular mt-3.5',
+            /* `t-cifra` y no `text-4xl`: miden lo mismo, pero una sale de
+               la escala de la app y la otra de Tailwind. Teniendo escala
+               propia, usarla es lo que evita que dentro de un año midan
+               distinto sin que nadie lo decida. */
+            't-cifra font-bold tabular mt-3.5',
             esIngreso ? 'text-marca-600 dark:text-marca-500' : 'txt',
           )}>
             {esTransferencia ? '' : esIngreso ? '+' : '−'}

@@ -172,7 +172,7 @@ export function Analisis() {
 
       {porEntidad.length > 1 && (
         <Tarjeta>
-          <p className="t-nota txt-2 mb-3">Resultado por economía</p>
+          <p className="t-nota txt-2 mb-3">Cómo viene cada economía</p>
           <div className="space-y-2.5">
             {porEntidad.map((r) => (
               <div key={r.entityId ?? 'sin'} className="flex items-center gap-3">
@@ -183,7 +183,7 @@ export function Analisis() {
                 />
                 <div className="flex-1 min-w-0">
                   <p className="t-fila font-medium txt truncate">
-                    {r.entidad?.name ?? 'Sin clasificar'}
+                    {r.entidad?.name ?? 'Sin economía'}
                   </p>
                   <p className="t-nota txt-3 tabular">
                     {formatMonto(r.ingresoMinor, moneda, { compacto: true })} entró ·{' '}
