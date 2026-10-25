@@ -275,13 +275,19 @@ export function Inicio({ alVerMovimiento, alEditarMovimiento, alAgregar }: {
   );
 }
 
-/** Una fila de la lista de movimientos. Se reusa en varias pantallas. */
-/**
- * El patrimonio en grande. Lo unico que se pinta de color en toda la app.
+/*
+ * El patrimonio, que es la cifra que corona el Inicio y la de Cuentas.
  *
  * Vive aca y se exporta porque Cuentas muestra el mismo numero: dos copias del
  * mismo bloque terminan divergiendo en el primer retoque, y entonces la misma
  * plata se ve distinta en dos pantallas.
+ *
+ * Era una tarjeta de verde saturado de borde a borde, con texto blanco. Se
+ * quitó: en iOS el color de marca es ACENTO —texto, íconos, controles— y no
+ * fondo de superficies grandes. Esa tarjeta además peleaba con otros dos
+ * verdes que están a centímetros: el botón de registrar y los montos de
+ * ingreso. Ahora es una tarjeta normal y el número se lee como dato, que es
+ * lo que es.
  */
 export function HeroPatrimonio({ montoMinor, moneda, pie, extra, accion, alineacion = 'centrado' }: {
   montoMinor: number;
@@ -315,7 +321,7 @@ export function HeroPatrimonio({ montoMinor, moneda, pie, extra, accion, alineac
   const izquierda = alineacion === 'izquierda';
 
   return (
-    <Tarjeta className="bg-linear-to-br from-marca-600 to-marca-700 border-transparent text-white">
+    <Tarjeta>
       <div className={cn(
         izquierda ? 'flex items-start justify-between gap-3' : 'relative text-center',
       )}>
@@ -326,14 +332,14 @@ export function HeroPatrimonio({ montoMinor, moneda, pie, extra, accion, alineac
         {accion && !izquierda && <div className="absolute right-0 -top-1">{accion}</div>}
 
         <div className={cn('min-w-0', izquierda && 'text-left')}>
-          {/* Del mismo tamaño y grosor que los demás encabezados de tarjeta.
-              La opacidad se queda: acá el fondo es verde y el blanco pleno lo
-              pondría a competir con la cifra, que es lo que hay que leer. */}
-          <h2 className="t-seccion font-semibold opacity-80 mb-1">Patrimonio</h2>
-          <p className="t-cifra font-bold tabular tracking-tight">
+          {/* Chiquito y gris, como el pie de una cifra en iOS. Antes era un
+              encabezado blanco sobre verde, del tamaño de los demás títulos,
+              y competía con el número que está justo debajo. */}
+          <h2 className="t-nota font-medium txt-3 mb-0.5">Patrimonio</h2>
+          <p className="t-cifra font-bold tabular tracking-tight txt">
             {formatMonto(montoMinor, moneda)}
           </p>
-          {pie && <p className="t-nota opacity-70 mt-1.5">{pie}</p>}
+          {pie && <p className="t-nota txt-3 mt-1.5">{pie}</p>}
         </div>
 
         {accion && izquierda && <div className="shrink-0 -mt-1">{accion}</div>}

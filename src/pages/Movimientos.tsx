@@ -14,7 +14,7 @@ import {
   SECCIONES_MOVIMIENTOS, TxType, type SeccionMovimientos, type Transaction,
 } from '@shared/types';
 import { fechaCorta } from '../lib/utils.ts';
-import { Boton, Campo, Icono, Tarjeta, Vacio } from '../components/ui/base.tsx';
+import { Boton, Campo, Icono, Lista, Tarjeta, Vacio } from '../components/ui/base.tsx';
 import { SelectorPeriodo } from '../components/ui/periodo.tsx';
 import { FilaMovimiento } from './Inicio.tsx';
 import { cn } from '../lib/utils.ts';
@@ -283,21 +283,22 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
         </Tarjeta>
       ) : (
         <div className="space-y-3">
+          {/* Una lista agrupada por dia, con la fecha afuera y chiquita. Antes
+              cada dia era una tarjeta con sombra y la fecha adentro: un dia
+              con un solo movimiento ocupaba 210px, y cuatro dias llenaban la
+              pantalla. */}
           {porDia.map(([dia, txs]) => (
-            <Tarjeta key={dia} className="py-3">
-              <p className="t-nota font-medium txt-3 px-1 mb-1">{fechaCorta(txs[0].date)}</p>
-              <div className="divide-y divide-[var(--borde)] -mx-1">
-                {txs.map((tx) => (
-                  <FilaMovimiento
-                    key={tx.id}
-                    tx={tx}
-                    sinFecha
-                    alTocar={() => alVerMovimiento(tx)}
-                    alEditar={alEditarMovimiento}
-                  />
-                ))}
-              </div>
-            </Tarjeta>
+            <Lista key={dia} titulo={fechaCorta(txs[0].date)}>
+              {txs.map((tx) => (
+                <FilaMovimiento
+                  key={tx.id}
+                  tx={tx}
+                  sinFecha
+                  alTocar={() => alVerMovimiento(tx)}
+                  alEditar={alEditarMovimiento}
+                />
+              ))}
+            </Lista>
           ))}
         </div>
       )}

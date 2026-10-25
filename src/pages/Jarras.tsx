@@ -18,7 +18,8 @@ import { periodoMes, type Periodo } from '@shared/periodo';
 import type { Entity, Jar, Transaction } from '@shared/types';
 import { FilaMovimiento } from './Inicio.tsx';
 import {
-  Barra, Boton, Campo, Ficha, Hoja, Icono, Selector, SelectorIcono, Tarjeta, Vacio,
+  Barra, Boton, Campo, Ficha, FilaLista, Hoja, Icono, Lista, Selector, SelectorIcono,
+  Tarjeta, Vacio,
 } from '../components/ui/base.tsx';
 import { SelectorPeriodo } from '../components/ui/periodo.tsx';
 import { useConfirmar } from '../components/ui/confirmar.tsx';
@@ -219,16 +220,11 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
 
           <SelectorPeriodo periodo={periodo} alCambiar={setPeriodo} />
 
+          {/* Una lista agrupada por economia. Antes cada jarra era una tarjeta
+              con sombra: tres jarras llenaban la pantalla y cada una repetia
+              «Sin movimientos» debajo de una barra vacia. */}
           {grupos.map((g) => (
-          <div key={g.entidad?.id ?? 'todas'} className="space-y-2.5">
-            {g.entidad && (
-              <div className="flex items-center gap-2 pt-1" style={{ color: g.entidad.color }}>
-                <Icono nombre={g.entidad.icon} size={15} />
-                <span className="t-nota font-semibold uppercase tracking-wide">
-                  {g.entidad.name}
-                </span>
-              </div>
-            )}
+          <Lista key={g.entidad?.id ?? 'todas'} titulo={g.entidad?.name}>
             {g.jarras.map((j) => {
               const f = flujo.get(j.id) ?? { entroMinor: 0, salioMinor: 0 };
               const vida = flujoVida.get(j.id) ?? { entroMinor: 0, salioMinor: 0 };
@@ -243,9 +239,8 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
                 : vida.entroMinor > 0 ? vida.salioMinor / vida.entroMinor : 0;
 
               return (
-                <Tarjeta key={j.id} className="p-4 active:opacity-70 transition-opacity cursor-pointer"
-                  onClick={() => setAbierta(j)}>
-                  <div className="flex items-center gap-3 mb-3">
+                <FilaLista key={j.id} className="px-4 py-3.5" onClick={() => setAbierta(j)}>
+                  <div className="flex items-center gap-3">
                     <Ficha color={j.color} icono={j.icon} size={42} />
                     <div className="flex-1 min-w-0">
                       <p className="t-fila font-medium txt truncate">{j.name}</p>
@@ -273,36 +268,33 @@ export function Jarras({ alVerMovimiento }: { alVerMovimiento: (tx: Transaction)
                       rojo pasando el 100%, asi que una jarra sana que uso el
                       70% de lo suyo se veia como un problema. El rojo queda
                       para lo unico que si lo es: que no quede nada. */}
-                  <Barra ratio={gastado} color={enRojo ? '#ef4444' : j.color} />
+                  <div className="mt-2.5">
+                    <Barra ratio={gastado} color={enRojo ? '#ef4444' : j.color} />
+                  </div>
 
-                  {/* Una sola linea abajo, y cambia segun haga falta: si algo
-                      anda mal, lo que anda mal; si no, como viene el mes. El
-                      resto del detalle esta a un toque de distancia. */}
+                  {/* Una linea abajo SOLO si hay algo que decir. Antes, una
+                      jarra sin movimientos del mes escribia «Sin movimientos»
+                      debajo de una barra en cero: dos maneras de decir nada,
+                      repetidas en cada jarra. */}
                   {enRojo ? (
                     <p className="t-nota text-red-500 mt-2 leading-relaxed">
                       Salió más de lo que esta jarra recibió en toda su vida.
                       Pásale plata desde otra con «Mover».
                     </p>
-                  ) : (
+                  ) : (f.entroMinor !== 0 || f.salioMinor !== 0) && (
                     /* Sin el nombre del mes: lo dice el selector de arriba, y
                        repetirlo en cada una de las seis jarras es la misma
                        palabra seis veces. */
                     <p className="t-nota txt-3 mt-2">
-                      {f.entroMinor === 0 && f.salioMinor === 0 ? (
-                        'Sin movimientos'
-                      ) : (
-                        <>
-                          Entró <span className="tabular">{formatMonto(f.entroMinor, moneda)}</span>
-                          {' · Salió '}
-                          <span className="tabular">{formatMonto(f.salioMinor, moneda)}</span>
-                        </>
-                      )}
+                      Entró <span className="tabular">{formatMonto(f.entroMinor, moneda)}</span>
+                      {' · Salió '}
+                      <span className="tabular">{formatMonto(f.salioMinor, moneda)}</span>
                     </p>
                   )}
-                </Tarjeta>
+                </FilaLista>
               );
             })}
-          </div>
+          </Lista>
           ))}
 
         </>
