@@ -73,9 +73,16 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
     // buscador normalmente no sabe de qué mes era —por eso lo pega—. Buscándolo
     // dentro del mes que está en pantalla, la respuesta habitual habría sido
     // «no hay movimientos», que es una mentira incómoda de descubrir.
+    //
+    // Pero solo si ese código existe. Cinco letras del alfabeto de los códigos
+    // las cumplen palabras de todos los días —«renta», «pasta», «tarea»— y,
+    // tratándolas siempre como código, buscar «renta» devolvía una lista
+    // vacía aunque hubiera diez movimientos que la mencionan. Si nadie lleva
+    // ese código, era una palabra: la búsqueda sigue como texto.
     if (pareceCodigo(busqueda)) {
       const codigo = normalizarCodigo(busqueda);
-      return todos.filter((t) => t.code === codigo);
+      const conEseCodigo = todos.filter((t) => t.code === codigo);
+      if (conEseCodigo.length > 0) return conEseCodigo;
     }
 
     let lista = transactions.filter((t) => dentroDe(t.date, periodo));
@@ -146,6 +153,12 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
             placeholder="Buscar o pegar un código..."
             type="search"
             className="w-full"
+            // Un código no es una palabra: que el teléfono no le cambie
+            // letras ni le ponga la primera en mayúscula al tecleárselo.
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
           />
         </div>
         <button
@@ -283,7 +296,9 @@ export function Movimientos({ alVerMovimiento, alEditarMovimiento, alAgregar }: 
             texto={vacioPorLaEconomia
               ? `Hay ${hayEnElPeriodo} movimiento${hayEnElPeriodo === 1 ? '' : 's'} este mes, pero ninguno es de ${nombreActiva}. Un movimiento pertenece a la economía de su categoría: asigna las categorías de ${nombreActiva} en Ajustes → Categorías.`
               : activos > 0
-                ? 'Prueba cambiando los filtros o buscando otra cosa.'
+                ? (pareceCodigo(busqueda)
+                  ? `Ningún movimiento lleva el código ${normalizarCodigo(busqueda)} ni lo menciona. Revisa que esté completo.`
+                  : 'Prueba cambiando los filtros o buscando otra cosa.')
                 : 'No hay movimientos registrados en este período.'}
             accion={vacioPorLaEconomia
               ? <Boton variante="secundario" onClick={() => verEntidad(null)}>Ver todo</Boton>

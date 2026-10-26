@@ -74,6 +74,24 @@ describe('normalizarCodigo', () => {
   });
 
   /**
+   * Lo que se cuela al copiar de un chat. En el telefono pasaba que pegar un
+   * codigo dejaba el buscador en «Nada coincide»: a la vista era el mismo
+   * texto, pero traia una marca invisible o los acentos graves de un bloque de
+   * codigo.
+   */
+  it('quita lo que se cuela al copiar de un chat', () => {
+    expect(normalizarCodigo('‎7K2MQ')).toBe('7K2MQ');           // marca izquierda-a-derecha
+    expect(normalizarCodigo('​7K2MQ​')).toBe('7K2MQ');     // espacio de ancho cero
+    expect(normalizarCodigo('﻿7K2MQ')).toBe('7K2MQ');           // BOM
+    expect(normalizarCodigo('`7K2MQ`')).toBe('7K2MQ');               // bloque de codigo
+    expect(normalizarCodigo('«7K2MQ»')).toBe('7K2MQ');
+    expect(normalizarCodigo('"7K2MQ".')).toBe('7K2MQ');
+    expect(normalizarCodigo('**7K2MQ**')).toBe('7K2MQ');             // negrita de markdown
+    expect(normalizarCodigo('7K2MQ\n')).toBe('7K2MQ');
+    expect(normalizarCodigo(' 7K2MQ ')).toBe('7K2MQ');     // espacio duro
+  });
+
+  /**
    * Lo que NO hace, que es la mitad del punto: traducir los simbolos parecidos
    * seria adivinar, y adivinar mal convierte un codigo correcto en otro que
    * existe y apunta a otro movimiento.
@@ -88,6 +106,7 @@ describe('pareceCodigo', () => {
   it('acepta lo que puede ser un codigo', () => {
     expect(pareceCodigo('7K2MQ')).toBe(true);
     expect(pareceCodigo(' 7k2mq ')).toBe(true);
+    expect(pareceCodigo('‎`7K2MQ`')).toBe(true);
     for (let i = 0; i < 200; i++) expect(pareceCodigo(generarCodigo())).toBe(true);
   });
 

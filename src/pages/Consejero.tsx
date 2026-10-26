@@ -230,7 +230,10 @@ export function Consejero() {
               </div>
             </div>
           ))}
-          <div ref={finRef} />
+          {/* El margen es lo que ocupan el campo y la barra de abajo: sin él,
+              el autoscroll alineaba el final de la respuesta con el borde de
+              la pantalla y sus últimas líneas quedaban tapadas. */}
+          <div ref={finRef} className="scroll-mb-36" />
         </div>
       )}
 
@@ -238,8 +241,17 @@ export function Consejero() {
           El campo ya NO se deshabilita mientras responde: se puede ir
           escribiendo la siguiente pregunta mientras se lee la anterior, que es
           lo que uno hace. Mandarla sigue estando bloqueado —`enviar` corta si
-          `pensando`— así que no se pisan dos respuestas. */}
-      <div className="flex gap-2 items-end sticky bottom-2">
+          `pensando`— así que no se pisan dos respuestas.
+
+          Se pega ENCIMA de la barra de abajo, no al borde de la pantalla. Con
+          `bottom-2` el campo quedaba justo detrás de la barra flotante del
+          celular (`fixed`, `z-30`): se veía a través del vidrio pero cada toque
+          lo recibía el icono de al lado —un toque sobre el campo mandaba a
+          Jarras—, así que en cuanto la conversación era más larga que la
+          pantalla no había forma de escribir. 4.75rem es la altura de la barra
+          más un respiro; `--piso` es lo que ella misma sube del borde. En
+          pantalla grande no hay barra de abajo y vuelve a ser `bottom-2`. */}
+      <div className="flex gap-2 items-end sticky z-40 bottom-[calc(4.75rem+var(--piso))] md:bottom-2">
         <input
           value={pregunta}
           onChange={(e) => setPregunta(e.target.value)}

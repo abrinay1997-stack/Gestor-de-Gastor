@@ -3,6 +3,7 @@
  */
 
 import type { Sesion } from '../auth.ts';
+import { rellenarCodigos } from '../codigo.ts';
 import {
   aBudget, aCategory, aMember, cuentaPorId, listarCategorias, listarCuentas,
   listarJarras, listarPresupuestos, snapshot,
@@ -23,6 +24,11 @@ const FORMAS_DE_LLENAR = ['porcentaje', 'fijo', 'resto'] as const;
 // --- snapshot ------------------------------------------------------------
 
 export async function traerTodo(_req: Request, env: Env, sesion: Sesion): Promise<Response> {
+  // Antes de leer, para que lo que viaja ya lleve su codigo. Un fallo aca no
+  // puede dejar la app sin abrir: se anota y se sigue, que el proximo intento
+  // lo repite.
+  await rellenarCodigos(env).catch((e) => console.error('No se pudieron rellenar los codigos', e));
+
   const snap = await snapshot(env, sesion.householdId, sesion.memberId);
   if (!snap) return error('No se encontro el hogar', 404);
   return json(snap);

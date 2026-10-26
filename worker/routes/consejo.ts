@@ -34,8 +34,9 @@ import { listarCategorias, listarEntidades, listarMovimientos } from '../db.ts';
 import type { Env } from '../env.ts';
 import { cuerpo, error, json } from '../http.ts';
 import { resumenDelHogar } from './resumen.ts';
+import { normalizarCodigo } from '../../shared/codigo.ts';
 import { entidadDe, indexarCategorias } from '../../shared/domain.ts';
-import { TxType } from '../../shared/types.ts';
+import { TxType, type Transaction } from '../../shared/types.ts';
 
 const MODELO = 'claude-opus-5';
 
@@ -80,7 +81,11 @@ Esto es lo que existe, entero:
   jarras de su economia o entrar entero sin repartir. Se cargan escribiendo
   ("super 12500" se lee solo y propone categoria), se editan y se borran
   deslizando la fila. La pantalla de Movimientos busca por texto y filtra por
-  persona, tipo, categoria, cuenta y periodo.
+  persona, tipo, categoria, cuenta y periodo. Cada movimiento tiene ademas un
+  CODIGO de cinco caracteres (como 7K2MQ) que se ve al abrirlo y se puede
+  pegar en ese buscador. Si te pasan uno, buscalo con la herramienta, usando su
+  parametro "codigo"; y cuando hables de un movimiento concreto, nombralo por
+  su codigo para que lo encuentren de un toque.
 - ECONOMIAS. La casa y cada negocio, en el mismo libro. Un movimiento hereda la
   economia de su categoria, asi que mover una categoria de economia reclasifica
   toda su historia de una vez. Las cuentas estan mezcladas a proposito: el
@@ -219,6 +224,12 @@ const HERRAMIENTA: Anthropic.Tool = {
   input_schema: {
     type: 'object',
     properties: {
+      codigo: {
+        type: 'string',
+        description:
+          'Código de cinco caracteres de UN movimiento, como "7K2MQ". Si viene, '
+          + 'se devuelve ese movimiento y se ignoran los demás filtros.',
+      },
       economia: {
         type: 'string',
         description: 'Nombre de la economía, tal como figura en el contexto.',
@@ -241,6 +252,18 @@ const claveMesDe = (epoch: number): string => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
+/**
+ * Un movimiento en una linea. Termina con su codigo entre parentesis para que,
+ * cuando el consejero hable de uno concreto, la persona pueda copiar ese codigo
+ * y pegarlo en el buscador de Movimientos.
+ */
+function lineaDeMovimiento(t: Transaction, nombreCat: Map<string, string>): string {
+  const signo = t.type === TxType.INGRESO ? '+' : t.type === TxType.GASTO ? '-' : '~';
+  return `${new Date(t.date).toISOString().slice(0, 10)} ${signo}${t.amountMinor} `
+    + `${t.description} [${nombreCat.get(t.categoryId ?? '') ?? 'sin categoría'}]`
+    + `${t.code ? ` (código ${t.code})` : ''}`;
+}
+
 /** Ejecuta la herramienta contra la base. Devuelve texto compacto. */
 async function buscarMovimientos(
   env: Env, householdId: string, args: Record<string, unknown>,
@@ -253,6 +276,19 @@ async function buscarMovimientos(
 
   const indice = indexarCategorias(categorias);
   const nombreCat = new Map(categorias.map((c) => [c.id, c.name]));
+
+  // Un movimiento con nombre y apellido: es lo que se pide cuando la persona
+  // pega un código en el chat. No se mezcla con los demás filtros porque un
+  // código nombra uno solo.
+  const codigoPedido = typeof args.codigo === 'string' ? normalizarCodigo(args.codigo) : '';
+  if (codigoPedido) {
+    const t = movimientos.find((m) => m.code === codigoPedido);
+    if (!t) {
+      return `Ningún movimiento tiene el código ${codigoPedido}. Puede estar mal copiado, `
+        + 'o el movimiento ya se borró.';
+    }
+    return lineaDeMovimiento(t, nombreCat);
+  }
 
   const pedida = typeof args.economia === 'string' ? args.economia.toLowerCase() : null;
   const entidad = pedida
@@ -288,11 +324,7 @@ async function buscarMovimientos(
     0,
   );
 
-  const lineas = filtrados.slice(0, 60).map((t) => {
-    const signo = t.type === TxType.INGRESO ? '+' : t.type === TxType.GASTO ? '-' : '~';
-    return `${new Date(t.date).toISOString().slice(0, 10)} ${signo}${t.amountMinor} `
-      + `${t.description} [${nombreCat.get(t.categoryId ?? '') ?? 'sin categoría'}]`;
-  });
+  const lineas = filtrados.slice(0, 60).map((t) => lineaDeMovimiento(t, nombreCat));
 
   return `${filtrados.length} movimientos, neto ${neto} centavos`
     + `${filtrados.length > 60 ? ' (van los 60 más nuevos)' : ''}:\n`

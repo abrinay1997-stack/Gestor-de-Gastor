@@ -21,14 +21,24 @@ const Analisis = lazy(() =>
 );
 
 export default function App() {
-  const { cargando, autenticado, aviso, cola } = useStore();
+  const { cargando, autenticado, aviso, cola, transactions } = useStore();
 
   const [solapa, setSolapa] = useState<Solapa>('inicio');
   const [cargaAbierta, setCargaAbierta] = useState(false);
   const [editando, setEditando] = useState<Transaction | null>(null);
   // Movimiento cuyo detalle se esta mirando. Tocar uno abre esto, no el
   // formulario: mirar es mucho mas frecuente que corregir.
-  const [viendo, setViendo] = useState<Transaction | null>(null);
+  //
+  // Se guarda el ID y no el movimiento. Guardar el objeto era sacarle una
+  // foto: si se lo tocaba justo despues de cargarlo, la foto no tenia codigo
+  // todavia —lo asigna el servidor— y la hoja se quedaba sin la fila «Código»
+  // aunque la respuesta llegara un segundo despues. Lo mismo con un cambio
+  // que mandara la otra persona. Buscandolo en el store en cada dibujo, la
+  // hoja siempre muestra lo ultimo que se sabe, y si lo borran desde el otro
+  // telefono se cierra sola.
+  const [viendoId, setViendoId] = useState<string | null>(null);
+  const viendo = viendoId ? transactions.find((t) => t.id === viendoId) ?? null : null;
+  const verMovimiento = (tx: Transaction) => setViendoId(tx.id);
 
   if (cargando) {
     return (
@@ -44,7 +54,7 @@ export default function App() {
   const abrirNuevo = () => { setEditando(null); setCargaAbierta(true); };
 
   const abrirEdicion = (tx: Transaction) => {
-    setViendo(null);
+    setViendoId(null);
     setEditando(tx);
     setCargaAbierta(true);
   };
@@ -53,17 +63,17 @@ export default function App() {
     <>
       <AppLayout solapa={solapa} alCambiar={setSolapa} alAgregar={abrirNuevo}>
         {solapa === 'inicio' && (
-          <Inicio alVerMovimiento={setViendo} alEditarMovimiento={abrirEdicion} alAgregar={abrirNuevo} />
+          <Inicio alVerMovimiento={verMovimiento} alEditarMovimiento={abrirEdicion} alAgregar={abrirNuevo} />
         )}
         {solapa === 'movimientos' && (
           <Movimientos
-            alVerMovimiento={setViendo}
+            alVerMovimiento={verMovimiento}
             alEditarMovimiento={abrirEdicion}
             alAgregar={abrirNuevo}
           />
         )}
         {solapa === 'cuentas' && <Cuentas />}
-        {solapa === 'jarras' && <Jarras alVerMovimiento={setViendo} />}
+        {solapa === 'jarras' && <Jarras alVerMovimiento={verMovimiento} />}
         {solapa === 'ajustes' && (
           <Ajustes
             alVerConsejero={() => setSolapa('consejero')}
@@ -83,7 +93,7 @@ export default function App() {
 
       <DetalleMovimiento
         tx={viendo}
-        alCerrar={() => setViendo(null)}
+        alCerrar={() => setViendoId(null)}
         alEditar={abrirEdicion}
       />
 

@@ -61,6 +61,30 @@ for (const ruta of ARCHIVOS) {
   }
 }
 
+// Y que el relleno siga conectado. Los INSERT de arriba evitan que nazcan
+// movimientos mudos desde ESTE codigo, pero no desde uno viejo: en produccion un
+// Worker anterior estuvo sirviendo un mes y dejo 113 movimientos sin codigo, que
+// ninguna migracion vuelve a mirar. `rellenarCodigos` los repara, y solo sirve
+// si alguien lo llama —al abrir la app y de noche—. Nada mas lo agarra: borrar
+// la llamada compila igual y los tests pasan.
+const CONECTAN_EL_RELLENO = ['worker/routes/data.ts', 'worker/index.ts'];
+
+for (const ruta of CONECTAN_EL_RELLENO) {
+  let codigo;
+  try {
+    codigo = readFileSync(ruta, 'utf8');
+  } catch {
+    fallos.push(`${ruta}: no existe. Si lo renombraron, actualizá esta lista.`);
+    continue;
+  }
+  if (!/\brellenarCodigos\(/.test(codigo)) {
+    fallos.push(
+      `${ruta}: ya no llama a rellenarCodigos(). Los movimientos que nazcan sin `
+      + 'código (un Worker viejo, un rollback) quedarían así para siempre.',
+    );
+  }
+}
+
 if (fallos.length > 0) {
   console.error('\nMovimientos que nacerían sin código:\n');
   for (const f of fallos) console.error(`  - ${f}`);
@@ -68,4 +92,4 @@ if (fallos.length > 0) {
   process.exit(1);
 }
 
-console.log(`Los ${revisados} INSERT de movimientos escriben su código.`);
+console.log(`Los ${revisados} INSERT de movimientos escriben su código, y el relleno está conectado.`);

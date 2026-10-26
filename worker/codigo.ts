@@ -55,3 +55,44 @@ export async function nuevoCodigo(env: Env): Promise<string> {
   const [c] = await nuevosCodigos(env, 1);
   return c;
 }
+
+/** Cuantos movimientos sin codigo se rellenan por pasada. */
+const LOTE_RELLENO = 200;
+
+/**
+ * Le pone codigo a los movimientos que nacieron sin.
+ *
+ * La migracion 0014 rellena una sola vez, el dia que se aplica. Pero la
+ * columna admite NULL, y si por cualquier motivo vuelve a correr un Worker que
+ * no escribe `code` —una publicacion vieja, un rollback— cada movimiento que
+ * cargue nace mudo y nada lo arregla despues. En produccion paso: 113 de 187
+ * movimientos sin codigo, todos creados entre dos publicaciones.
+ *
+ * Por eso el relleno no es solo una migracion: corre cada vez que se abre la
+ * app y de noche. Cuando no hay nada que rellenar cuesta una consulta sobre el
+ * indice de `code`, que indexa los NULL.
+ *
+ * Solo escribe `code`: no toca `updated_at`, porque ponerle nombre a un
+ * movimiento no es editarlo. Y el `AND code IS NULL` hace que dos telefonos
+ * rellenando a la vez no se pisen: el que llega segundo no cambia nada, asi un
+ * codigo ya entregado jamas vuelve a cambiar.
+ *
+ * Devuelve cuantos tenia pendientes.
+ */
+export async function rellenarCodigos(env: Env): Promise<number> {
+  const { results } = await env.DB
+    .prepare('SELECT id FROM tx WHERE code IS NULL ORDER BY created_at, id LIMIT ?1')
+    .bind(LOTE_RELLENO)
+    .all<{ id: string }>();
+
+  if (results.length === 0) return 0;
+
+  const codigos = await nuevosCodigos(env, results.length);
+  await env.DB.batch(
+    results.map((r, i) => env.DB
+      .prepare('UPDATE tx SET code = ?1 WHERE id = ?2 AND code IS NULL')
+      .bind(codigos[i], r.id)),
+  );
+
+  return results.length;
+}

@@ -50,16 +50,24 @@ export function generarCodigo(): string {
 }
 
 /**
- * Lo que tecleo una persona, listo para comparar contra un codigo guardado.
+ * Lo que tecleo o pego una persona, listo para comparar contra un codigo
+ * guardado.
  *
- * Solo se arregla lo que es seguro arreglar: mayusculas, espacios y guiones.
+ * Solo se arregla lo que es seguro arreglar: las mayusculas y todo lo que no
+ * es letra ni numero. Eso incluye espacios y guiones, y tambien lo que se cuela
+ * al copiar de un chat: comillas, los acentos graves de «`7K2MQ`», puntos y los
+ * caracteres invisibles que WhatsApp o iMessage agregan sin que se vean. Antes
+ * solo se quitaban espacios y guiones, y un codigo pegado con una marca
+ * invisible delante no se reconocia como codigo aunque a la vista fuera
+ * identico.
+ *
  * Traducir los simbolos parecidos —la O por la Q, el 1 por la J— seria
  * adivinar, y adivinar mal convierte un codigo correcto en otro que existe y
  * apunta a otro movimiento. Por eso el alfabeto los evita de entrada: el
  * problema se resuelve al generar, no al leer.
  */
 export function normalizarCodigo(texto: string): string {
-  return texto.trim().toUpperCase().replace(/[\s-]+/g, '');
+  return texto.toUpperCase().replace(/[^\p{L}\p{N}]+/gu, '');
 }
 
 /** Si lo que se escribio puede llegar a ser un codigo. */

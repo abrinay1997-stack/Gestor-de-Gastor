@@ -238,24 +238,30 @@ export function AppLayout({ solapa, alCambiar, alAgregar, children }: {
           Justo encima de la barra, no flotando en el medio: a 128px del piso
           se posaba sobre la lista y tapaba los botones de la fila que tenia
           debajo —el check de un pago habitual, por ejemplo, no se podia
-          tocar—. Acompaña a la barra cuando se encoge. */}
-      <button
-        onClick={alAgregar}
-        aria-label="Registrar movimiento"
-        className={cn(
-          'md:hidden fixed right-4 w-13 h-13 rounded-full bg-marca-600 text-white',
-          'border border-white/20 shadow-lg shadow-marca-600/30 flex items-center justify-center',
-          'active:scale-[0.92] transition-[bottom,transform] duration-[280ms] z-30',
-        )}
-        style={{
-          bottom: compacto
-            ? 'calc(3.75rem + var(--piso))'
-            : 'calc(5rem + var(--piso))',
-          transitionTimingFunction: 'cubic-bezier(.32,.72,0,1)',
-        }}
-      >
-        <Plus size={24} />
-      </button>
+          tocar—. Acompaña a la barra cuando se encoge.
+
+          No en el consejero: ahi el borde de abajo es del campo de la pregunta
+          y su boton de enviar, y este boton se les sentaba encima. Es un chat;
+          cargar un movimiento se hace desde cualquier otra pantalla. */}
+      {solapa !== 'consejero' && (
+        <button
+          onClick={alAgregar}
+          aria-label="Registrar movimiento"
+          className={cn(
+            'md:hidden fixed right-4 w-13 h-13 rounded-full bg-marca-600 text-white',
+            'border border-white/20 shadow-lg shadow-marca-600/30 flex items-center justify-center',
+            'active:scale-[0.92] transition-[bottom,transform] duration-[280ms] z-30',
+          )}
+          style={{
+            bottom: compacto
+              ? 'calc(3.75rem + var(--piso))'
+              : 'calc(5rem + var(--piso))',
+            transitionTimingFunction: 'cubic-bezier(.32,.72,0,1)',
+          }}
+        >
+          <Plus size={24} />
+        </button>
+      )}
 
       {/* Barra inferior flotante, solo en celular.
           Sin etiquetas: eran las que la hacian alta, y cinco iconos de casa,

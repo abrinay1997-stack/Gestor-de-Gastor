@@ -20,6 +20,7 @@ import * as consejo from './routes/consejo.ts';
 import * as jarTransfers from './routes/jarTransfers.ts';
 import * as recurring from './routes/recurring.ts';
 import * as tx from './routes/transactions.ts';
+import { rellenarCodigos } from './codigo.ts';
 import { correrPagosHabituales } from './cron.ts';
 import { barrerPapelera } from './papelera-vieja.ts';
 
@@ -96,6 +97,16 @@ export default {
           }
         })
         .catch((e) => console.error('Fallo el disparador de pagos habituales', e)),
+    );
+
+    // Le pone nombre a los movimientos que hayan nacido sin codigo, aunque
+    // nadie abra la app. Ver rellenarCodigos.
+    ctx.waitUntil(
+      rellenarCodigos(env)
+        .then((rellenados) => {
+          if (rellenados > 0) console.log(`Codigos: ${rellenados} movimiento(s) sin codigo rellenados`);
+        })
+        .catch((e) => console.error('Fallo el relleno de codigos', e)),
     );
 
     // Y de paso se lleva lo que lleva 30 dias en la papelera. Va aparte para
