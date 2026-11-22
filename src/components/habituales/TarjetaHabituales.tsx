@@ -84,7 +84,7 @@ export function TarjetaHabituales({ habituales, alVerMovimiento }: {
 
       {/* Pestañas de carpeta: mitad y mitad, la activa se funde con la
           tarjeta y la otra queda atrás. */}
-      <div role="tablist" className="flex gap-1 relative z-[1] -mb-px">
+      <div role="tablist" className="flex items-end gap-1 relative z-[1] -mb-px">
         {([
           ['proximos', 'Próximos'],
           ['completados', 'Completados'],
@@ -97,10 +97,13 @@ export function TarjetaHabituales({ habituales, alVerMovimiento }: {
               aria-selected={activa}
               onClick={() => setPestana(id)}
               className={cn(
-                'flex-1 min-h-11 rounded-t-2xl border border-b-0 t-fila transition-colors',
+                'flex-1 rounded-t-2xl border t-fila transition-colors',
+                // La activa no tiene borde abajo: se funde con la tarjeta. La
+                // otra es un poco mas baja y SI lo tiene, asi queda apoyada
+                // sobre la linea de la tarjeta, detras, y no flotando suelta.
                 activa
-                  ? 'superficie borde font-semibold txt'
-                  : 'superficie-2 borde font-medium txt-3',
+                  ? 'min-h-12 superficie borde border-b-0 font-semibold txt'
+                  : 'min-h-11 superficie-2 borde font-medium txt-3',
               )}
             >
               {etiqueta}
@@ -118,8 +121,10 @@ export function TarjetaHabituales({ habituales, alVerMovimiento }: {
       <div
         role="tabpanel"
         className={cn(
-          'superficie borde border rounded-3xl px-4 py-1 shadow-[var(--shadow-tarjeta)]',
-          pestana === 'proximos' ? 'rounded-tl-none' : 'rounded-tr-none',
+          // Arriba recta en todo el ancho: las dos pestañas la cubren de punta
+          // a punta, y una esquina redonda debajo de la que no esta elegida
+          // dejaba un hueco que la hacia ver despegada.
+          'superficie borde border rounded-3xl rounded-t-none px-4 py-1 shadow-[var(--shadow-tarjeta)]',
         )}
       >
         {pestana === 'proximos'
