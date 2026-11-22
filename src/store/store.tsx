@@ -380,8 +380,9 @@ interface Acciones {
   }) => Promise<void>;
   guardarRecurrente: (r: Partial<Recurring> & { startAt?: number }, id?: string) => Promise<void>;
   borrarRecurrente: (id: string) => Promise<void>;
-  cobrarRecurrente: (id: string, d?: { amountMinor?: number; date?: number }) => Promise<void>;
-  deshacerCobro: (id: string) => Promise<void>;
+  cobrarRecurrente: (id: string, d?: { amountMinor?: number; date?: number; ciclo?: 'pendiente' | 'proximo' }) => Promise<void>;
+  /** Con txId: desmarcar ESE pago (desde Completados). Vuelve a Proximos como pendiente. */
+  deshacerCobro: (id: string, txId?: string) => Promise<void>;
   /** «Lo vi en el banco». No mueve ningun saldo: el pago ya se resto. */
   confirmarPago: (txId: string, confirmado: boolean) => Promise<void>;
   invitar: (d: { email: string; password: string; displayName: string }) => Promise<void>;
@@ -798,8 +799,8 @@ export function Store({ children }: { children: ReactNode }) {
       }
     },
 
-    deshacerCobro: async (id) => {
-      const r = await api.deshacerCobro(id);
+    deshacerCobro: async (id, txId) => {
+      const r = await api.deshacerCobro(id, txId);
       dispatch({ t: 'recurring:upsert', recurring: r.recurring });
       dispatch({ t: 'tx:delete', id: r.txBorrado });
     },

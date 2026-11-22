@@ -278,17 +278,17 @@ export async function cobrar(
   // Si veniamos de un "deshacer", el ciclo ya estaba consumido y `next_run` ya
   // apunta al siguiente: adelantarlo otra vez se saltearia un cobro entero.
   //
-  // Salvo que este pago este mas cerca del cobro que viene que del que se
-  // deshizo: entonces es el pago del ciclo nuevo, y `next_run` TIENE que
-  // avanzar. Sin esto, el Spotify pagado el 21 de noviembre (con un «deshacer»
-  // pendiente de octubre) dejo `next_run` en el 22 de noviembre y el
-  // disparador lo iba a cobrar otra vez al dia siguiente.
+  // Que ciclo se esta pagando lo dice la pantalla, porque ahi se ven los dos:
+  // en «Proximos» el pendiente (el que se desmarco) y el que viene son filas
+  // distintas. 'pendiente' paga el que se desmarco y deja `next_run` como
+  // esta; 'proximo' paga por adelantado el que viene, lo avanza, y el
+  // pendiente sigue pendiente. Sin decirlo, se paga el pendiente si lo hay.
+  const ciclo = body.ciclo === 'proximo' || body.ciclo === 'pendiente' ? body.ciclo : null;
   const regla = reglaDe({
     frequency: r.frequency, dayOfMonth: r.dayOfMonth, dayOfMonth2: r.dayOfMonth2,
     dayOfWeek: r.dayOfWeek, monthOfYear: r.monthOfYear,
   });
-  const esperaba = r.esperandoDesde !== null &&
-    Math.abs(date - r.esperandoDesde) <= Math.abs(r.nextRun - date);
+  const esperaba = r.esperandoDesde !== null && ciclo !== 'proximo';
   const proxima = esperaba ? r.nextRun : siguienteFecha(regla, r.nextRun);
 
   // Igual que en el barrido nocturno: repartir sin jarras no reparte nada, y
@@ -312,9 +312,9 @@ export async function cobrar(
       type: r.type, amountMinor, distributeToJars: reparte, jarId: r.jarId,
     }, jars, t),
     env.DB.prepare(
-      `UPDATE recurring SET next_run = ?1, last_run = ?2, esperando_desde = NULL,
+      `UPDATE recurring SET next_run = ?1, last_run = ?2, esperando_desde = ?6,
                             updated_at = ?3 WHERE id = ?4 AND household_id = ?5`,
-    ).bind(proxima, date, t, id, sesion.householdId),
+    ).bind(proxima, date, t, id, sesion.householdId, esperaba ? null : r.esperandoDesde),
   ]);
 
   const [recurrente, tx] = await Promise.all([
@@ -344,10 +344,19 @@ export async function cobrar(
  * llegue de verdad.
  */
 export async function deshacerCobro(
-  _req: Request, env: Env, sesion: Sesion, id: string,
+  req: Request, env: Env, sesion: Sesion, id: string,
 ): Promise<Response> {
   const r = await recurrentePorId(env, sesion.householdId, id);
   if (!r) return error('El pago habitual no existe', 404);
+
+  // Hay un solo lugar para «lo que quedo pendiente». Desmarcar otro pago
+  // encima pisaria el primero, y ese ciclo no se volveria a cobrar nunca.
+  if (r.esperandoDesde !== null) {
+    return error(`${r.name} ya tiene un pago pendiente en Próximos. Registralo primero.`, 409);
+  }
+
+  const body = await cuerpo(req).catch(() => ({} as Record<string, unknown>));
+  const txId = idOpcional(body.txId, 'txId');
 
   const fila = await env.DB.prepare(
     `SELECT id, date FROM tx WHERE household_id = ?1 AND recurring_id = ?2
@@ -356,18 +365,27 @@ export async function deshacerCobro(
 
   if (!fila) return error('No hay ningún cobro que deshacer', 404);
 
-  // Solo se deshace el pago del ciclo en curso. Antes se borraba «el ultimo»,
-  // fuera de cuando fuera: tocar el check un dia antes del cobro de noviembre
-  // borraba el gasto real de octubre. Un pago viejo se borra desde
-  // Movimientos, donde se ve que es viejo.
-  const t = ahora();
-  const inicio = inicioDelCiclo(reglaDe(r), r.nextRun, t);
-  if (inicio === null || fila.date < inicio) {
-    return error(
-      'El último pago es de un ciclo anterior. Si de verdad querés borrarlo, hacelo desde Movimientos.',
-      409,
-    );
+  // Desde «Completados» se desmarca un pago CONCRETO, que se ve con su fecha:
+  // ahi no hay ambiguedad, pero tiene que ser el ultimo de este pago
+  // habitual (es el que vuelve a quedar pendiente). Uno anterior se borra
+  // desde Movimientos.
+  if (txId) {
+    if (fila.id !== txId) {
+      return error(`Solo se puede desmarcar el último pago de ${r.name}. Uno anterior se borra desde Movimientos.`, 409);
+    }
+  } else {
+    // Sin txId (la pantalla vieja): solo el pago del ciclo en curso. Antes se
+    // borraba «el ultimo», fuera de cuando fuera: tocar el check un dia antes
+    // del cobro de noviembre borraba el gasto real de octubre.
+    const inicio = inicioDelCiclo(reglaDe(r), r.nextRun, ahora());
+    if (inicio === null || fila.date < inicio) {
+      return error(
+        'El último pago es de un ciclo anterior. Si de verdad querés borrarlo, hacelo desde Movimientos.',
+        409,
+      );
+    }
   }
+  const t = ahora();
 
   await env.DB.batch([
     env.DB.prepare('DELETE FROM tx WHERE id = ?1 AND household_id = ?2')
