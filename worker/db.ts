@@ -461,7 +461,13 @@ export async function snapshot(
     listarCategorias(env, householdId),
     listarPresupuestos(env, householdId),
     listarMiembros(env, householdId),
-    listarMovimientos(env, householdId),
+    // TODO el historial, sin tope. El telefono calcula los saldos sumando los
+    // movimientos que tiene (calcularSaldos), asi que si le faltara el mas
+    // viejo, cada cuenta mostraria un saldo corrido por ese monto. Con el tope
+    // de 2000 que habia, a unos 100 movimientos por mes, eso pasaba solo en
+    // un año y medio, sin ningun aviso. Son filas chicas: diez años de una
+    // pareja entran sin problema.
+    listarMovimientos(env, householdId, 1_000_000),
     listarRecurrentes(env, householdId),
     listarImputaciones(env, householdId),
     listarTraspasos(env, householdId),
