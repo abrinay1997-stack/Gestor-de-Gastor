@@ -249,10 +249,10 @@ export const api = {
   /** "Ya me pagaron": crea el movimiento ahora, sin esperar a la fecha. */
   confirmarTx: (id: string, confirmado: boolean) =>
     post<{ transaction: Transaction }>(`/api/transactions/confirmar/${id}`, { confirmado }),
-  cobrarRecurrente: (id: string, d?: { amountMinor?: number; date?: number }) =>
+  cobrarRecurrente: (id: string, d?: { amountMinor?: number; date?: number; ciclo?: 'pendiente' | 'proximo' }) =>
     post<{ recurring: Recurring; tx: Transaction }>(`/api/recurring/cobrar/${id}`, d ?? {}),
 
   /** "Todavia no me pagaron": borra el movimiento que se dio por cobrado. */
-  deshacerCobro: (id: string) =>
-    post<{ recurring: Recurring; txBorrado: string }>(`/api/recurring/deshacer/${id}`, {}),
+  deshacerCobro: (id: string, txId?: string) =>
+    post<{ recurring: Recurring; txBorrado: string }>(`/api/recurring/deshacer/${id}`, txId ? { txId } : {}),
 };
