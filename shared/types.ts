@@ -97,6 +97,13 @@ export interface Transaction {
    * hay categoria (una transferencia).
    */
   entityId: string | null;
+  /**
+   * Cuando alguien confirmo que este movimiento aparece en el banco. NULL =
+   * todavia no. Solo tiene sentido en los que nacen de un pago habitual: el
+   * disparador los registra (y resta) solo, y esto dice si ya se vieron en el
+   * extracto. No toca ningun saldo. Ver la migracion 0015.
+   */
+  bankConfirmedAt: number | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -104,7 +111,7 @@ export interface Transaction {
 /** Lo que el cliente manda para crear o editar. El servidor pone el resto. */
 export type TransactionInput = Omit<
   Transaction,
-  'id' | 'code' | 'householdId' | 'createdBy' | 'createdAt' | 'updatedAt'
+  'id' | 'code' | 'householdId' | 'createdBy' | 'createdAt' | 'updatedAt' | 'bankConfirmedAt'
 > & { id?: string };
 
 // ---------------------------------------------------------------------------

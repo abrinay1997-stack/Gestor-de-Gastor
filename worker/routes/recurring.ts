@@ -297,8 +297,8 @@ export async function cobrar(
       `INSERT INTO tx (id, code, household_id, type, amount_minor, account_id, dest_account_id,
                        dest_amount_minor, category_id, jar_id, distribute_to_jars,
                        description, notes, date, created_by, paid_by, recurring_id,
-                       created_at, updated_at)
-       VALUES (?1,?15,?2,?3,?4,?5,NULL,NULL,?6,?7,?8,?9,NULL,?10,?11,?12,?13,?14,?14)`,
+                       created_at, updated_at, bank_confirmed_at)
+       VALUES (?1,?15,?2,?3,?4,?5,NULL,NULL,?6,?7,?8,?9,NULL,?10,?11,?12,?13,?14,?14,?14)`,
     ).bind(
       txId, sesion.householdId, r.type, amountMinor, r.accountId, r.categoryId,
       r.jarId, reparte ? 1 : 0, r.name, date, sesion.memberId,

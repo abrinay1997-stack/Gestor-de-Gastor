@@ -158,7 +158,7 @@ export const aTransaction = (f: Fila): Transaction => ({
   budgetId: strOpt(f.budget_id),
   createdAt: int(f.created_at),
   updatedAt: int(f.updated_at),
-  entityId: strOpt(f.entity_id),
+  entityId: strOpt(f.entity_id),  bankConfirmedAt: intOpt(f.bank_confirmed_at),
 });
 
 export const aBudget = (f: Fila): Budget => ({

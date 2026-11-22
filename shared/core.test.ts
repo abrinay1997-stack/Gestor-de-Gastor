@@ -19,7 +19,7 @@ import {
 const tx = (p: Partial<Transaction>): Transaction => ({
   id: crypto.randomUUID(), code: generarCodigo(), householdId: 'h', type: TxType.GASTO, amountMinor: 0,
   accountId: 'a1', destAccountId: null, destAmountMinor: null, categoryId: null,
-  jarId: null, distributeToJars: false, description: '', notes: null,
+  jarId: null, distributeToJars: false, description: '', notes: null, bankConfirmedAt: null,
   date: Date.now(), createdBy: 'u1', paidBy: null, recurringId: null, budgetId: null,
   entityId: null, createdAt: 0, updatedAt: 0, ...p,
 });

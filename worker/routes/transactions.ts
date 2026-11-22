@@ -272,6 +272,29 @@ export async function borrar(
 }
 
 /**
+ * «Lo vi en el banco» / «todavia no». Solo marca la conciliacion: el monto ya
+ * se resto cuando se registro, asi que ningun saldo cambia.
+ */
+export async function confirmar(
+  req: Request, env: Env, sesion: Sesion, id: string,
+): Promise<Response> {
+  const body = await cuerpo(req);
+  const si = booleano(body.confirmado ?? true);
+  const t = ahora();
+
+  const { meta } = await env.DB.prepare(
+    'UPDATE tx SET bank_confirmed_at = ?1 WHERE id = ?2 AND household_id = ?3',
+  ).bind(si ? t : null, id, sesion.householdId).run();
+  if (!meta.changes) return error('El movimiento no existe', 404);
+
+  const tx = await movimientoPorId(env, sesion.householdId, id);
+  if (!tx) return error('El movimiento no existe', 404);
+
+  await difundir(env, sesion.householdId, { kind: 'tx:upsert', tx, by: sesion.memberId });
+  return json({ transaction: tx });
+}
+
+/**
  * Cuentas y jarras recalculadas, que viajan con la respuesta de cada mutacion.
  * Asi el cliente no tiene que pedirlas aparte y los saldos que muestra son
  * siempre los del servidor, no una estimacion propia.
