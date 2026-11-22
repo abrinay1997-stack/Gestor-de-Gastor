@@ -16,8 +16,8 @@ import {
 } from '../http.ts';
 import { TxType } from '../../shared/types.ts';
 import {
-  FRECUENCIAS, primeraFecha, QUINCENA_POR_DEFECTO, reglaDe, siguienteFecha,
-  type Frecuencia,
+  FRECUENCIAS, inicioDelCiclo, primeraFecha, proximaTrasCambio, QUINCENA_POR_DEFECTO, reglaDe,
+  siguienteFecha, type Frecuencia,
 } from '../../shared/recurrencia.ts';
 
 /** Solo ingreso o gasto: una transferencia automatica no tiene sentido aca. */
@@ -178,7 +178,11 @@ export async function editar(
     v.dayOfWeek !== existente.dayOfWeek ||
     v.monthOfYear !== existente.monthOfYear;
 
-  const nextRun = cambioLaRegla ? primeraFecha(reglaDe(v)) : existente.nextRun;
+  // Y al recalcular se respeta el ciclo que ya esta pagado: ver
+  // proximaTrasCambio. Antes partia de hoy y podia cobrar dos veces el mismo mes.
+  const nextRun = cambioLaRegla
+    ? proximaTrasCambio(reglaDe(existente), reglaDe(v), existente.nextRun)
+    : existente.nextRun;
 
   await env.DB.prepare(
     `UPDATE recurring SET name=?1, type=?2, amount_minor=?3, account_id=?4,
@@ -273,11 +277,19 @@ export async function cobrar(
 
   // Si veniamos de un "deshacer", el ciclo ya estaba consumido y `next_run` ya
   // apunta al siguiente: adelantarlo otra vez se saltearia un cobro entero.
-  const esperaba = r.esperandoDesde !== null;
-  const proxima = esperaba ? r.nextRun : siguienteFecha(reglaDe({
+  //
+  // Salvo que este pago este mas cerca del cobro que viene que del que se
+  // deshizo: entonces es el pago del ciclo nuevo, y `next_run` TIENE que
+  // avanzar. Sin esto, el Spotify pagado el 21 de noviembre (con un «deshacer»
+  // pendiente de octubre) dejo `next_run` en el 22 de noviembre y el
+  // disparador lo iba a cobrar otra vez al dia siguiente.
+  const regla = reglaDe({
     frequency: r.frequency, dayOfMonth: r.dayOfMonth, dayOfMonth2: r.dayOfMonth2,
     dayOfWeek: r.dayOfWeek, monthOfYear: r.monthOfYear,
-  }), r.nextRun);
+  });
+  const esperaba = r.esperandoDesde !== null &&
+    Math.abs(date - r.esperandoDesde) <= Math.abs(r.nextRun - date);
+  const proxima = esperaba ? r.nextRun : siguienteFecha(regla, r.nextRun);
 
   // Igual que en el barrido nocturno: repartir sin jarras no reparte nada, y
   // guardarlo encendido escondia el ingreso de la puesta al dia.
@@ -289,8 +301,8 @@ export async function cobrar(
       `INSERT INTO tx (id, code, household_id, type, amount_minor, account_id, dest_account_id,
                        dest_amount_minor, category_id, jar_id, distribute_to_jars,
                        description, notes, date, created_by, paid_by, recurring_id,
-                       created_at, updated_at)
-       VALUES (?1,?15,?2,?3,?4,?5,NULL,NULL,?6,?7,?8,?9,NULL,?10,?11,?12,?13,?14,?14)`,
+                       created_at, updated_at, bank_confirmed_at)
+       VALUES (?1,?15,?2,?3,?4,?5,NULL,NULL,?6,?7,?8,?9,NULL,?10,?11,?12,?13,?14,?14,?14)`,
     ).bind(
       txId, sesion.householdId, r.type, amountMinor, r.accountId, r.categoryId,
       r.jarId, reparte ? 1 : 0, r.name, date, sesion.memberId,
@@ -344,7 +356,19 @@ export async function deshacerCobro(
 
   if (!fila) return error('No hay ningún cobro que deshacer', 404);
 
+  // Solo se deshace el pago del ciclo en curso. Antes se borraba «el ultimo»,
+  // fuera de cuando fuera: tocar el check un dia antes del cobro de noviembre
+  // borraba el gasto real de octubre. Un pago viejo se borra desde
+  // Movimientos, donde se ve que es viejo.
   const t = ahora();
+  const inicio = inicioDelCiclo(reglaDe(r), r.nextRun, t);
+  if (inicio === null || fila.date < inicio) {
+    return error(
+      'El último pago es de un ciclo anterior. Si de verdad querés borrarlo, hacelo desde Movimientos.',
+      409,
+    );
+  }
+
   await env.DB.batch([
     env.DB.prepare('DELETE FROM tx WHERE id = ?1 AND household_id = ?2')
       .bind(fila.id, sesion.householdId),

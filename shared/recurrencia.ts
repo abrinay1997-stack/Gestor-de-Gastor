@@ -256,6 +256,80 @@ export function siguienteFecha(regla: ReglaRecurrencia, ultima: number): number 
 }
 
 /**
+ * La fecha de cobro que vino justo antes de `proxima`.
+ *
+ * No hay una cuenta inversa limpia para todas las frecuencias (el 31 recortado
+ * en febrero, la quincena con dias que coinciden), asi que se camina hacia
+ * adelante desde bastante antes con las mismas funciones que usa el
+ * disparador: lo que devuelve es por construccion una fecha que la regla
+ * habria cobrado.
+ */
+export function anteriorFecha(regla: ReglaRecurrencia, proxima: number): number {
+  // Un año y un mes cubren el ciclo mas largo (anual) con margen.
+  let fecha = primeraFecha(regla, proxima - 400 * 86_400_000);
+  let anterior = fecha;
+  for (let i = 0; i < 120 && fecha < proxima; i++) {
+    anterior = fecha;
+    const siguiente = siguienteFecha(regla, fecha);
+    if (siguiente <= fecha) break;
+    fecha = siguiente;
+  }
+  return anterior < proxima ? anterior : proxima - 30 * 86_400_000;
+}
+
+/**
+ * Desde cuando un movimiento cuenta como «el pago de este ciclo».
+ *
+ * Devuelve null cuando lo que corresponde mirar ya es el cobro que viene: la
+ * mitad del camino hasta `proxima` ya paso, asi que el pago anterior es
+ * historia y no se puede «deshacer» desde el boton del pago habitual.
+ *
+ * Este era el agujero de DKE96: el 21 de noviembre la fila de Spotify seguia
+ * diciendo «Pagado el 22 oct» con el check prendido. Tocarlo para marcar el
+ * pago de noviembre DESHACIA el de octubre —borraba un gasto real y el saldo
+ * subia 9,99— y tocarlo otra vez creaba el de noviembre. Resultado: un pago
+ * registrado que «no restaba», y cada vuelta se comia un mes de historia.
+ */
+export function inicioDelCiclo(
+  regla: ReglaRecurrencia, proxima: number, ahora = Date.now(),
+): number | null {
+  const anterior = anteriorFecha(regla, proxima);
+  const largo = proxima - anterior;
+  if (ahora >= anterior + largo / 2) return null;
+  // Medio ciclo de margen hacia atras: un sueldo del 15 que cayo el 12 sigue
+  // siendo el sueldo del 15.
+  return anterior - largo / 2;
+}
+
+/**
+ * La proxima fecha cuando se cambia la regla de un pago habitual.
+ *
+ * Antes se recalculaba desde hoy, como si el pago fuera nuevo. Con eso, mover
+ * Spotify del 22 al 25 el dia 23 —con noviembre ya pagado— lo dejaba para el
+ * 25 de noviembre, y el disparador lo cobraba dos veces en el mismo mes. Lo
+ * mismo con cualquier pago habitual.
+ *
+ * La regla vieja ya sabe que ciclo es el que falta: el de `proximaVieja`. La
+ * nueva arranca en ese mismo ciclo —el mismo mes, para las que van por meses;
+ * medio ciclo antes, para la semanal y la quincenal—, nunca antes de hoy.
+ */
+export function proximaTrasCambio(
+  vieja: ReglaRecurrencia,
+  nueva: ReglaRecurrencia,
+  proximaVieja: number,
+  ahora = Date.now(),
+): number {
+  let desde: number;
+  if (PASO_EN_MESES[nueva.frecuencia]) {
+    const d = new Date(proximaVieja);
+    desde = new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0).getTime();
+  } else {
+    desde = proximaVieja - (proximaVieja - anteriorFecha(vieja, proximaVieja)) / 2;
+  }
+  return primeraFecha(nueva, Math.max(ahora, desde));
+}
+
+/**
  * Todas las fechas vencidas hasta hoy, empezando por la que toca.
  *
  * Devuelve una lista porque puede haber mas de una: si nadie abre la app ni

@@ -382,6 +382,8 @@ interface Acciones {
   borrarRecurrente: (id: string) => Promise<void>;
   cobrarRecurrente: (id: string, d?: { amountMinor?: number; date?: number }) => Promise<void>;
   deshacerCobro: (id: string) => Promise<void>;
+  /** «Lo vi en el banco». No mueve ningun saldo: el pago ya se resto. */
+  confirmarPago: (txId: string, confirmado: boolean) => Promise<void>;
   invitar: (d: { email: string; password: string; displayName: string }) => Promise<void>;
   avisar: (texto: string, tipo?: 'error' | 'ok') => void;
 }
@@ -609,6 +611,7 @@ export function Store({ children }: { children: ReactNode }) {
         createdBy: previo?.createdBy ?? estado.me?.id ?? '',
         createdAt: previo?.createdAt ?? Date.now(),
         updatedAt: Date.now(),
+        bankConfirmedAt: previo?.bankConfirmedAt ?? null,
       };
 
       dispatch({ t: 'tx:upsert', tx: optimista });
@@ -779,6 +782,20 @@ export function Store({ children }: { children: ReactNode }) {
       const r = await api.cobrarRecurrente(id, d);
       dispatch({ t: 'recurring:upsert', recurring: r.recurring });
       dispatch({ t: 'tx:upsert', tx: r.tx });
+    },
+
+    confirmarPago: async (txId, confirmado) => {
+      const previo = estado.transactions.find((t) => t.id === txId);
+      if (previo) {
+        dispatch({ t: 'tx:upsert', tx: { ...previo, bankConfirmedAt: confirmado ? Date.now() : null } });
+      }
+      try {
+        const r = await api.confirmarTx(txId, confirmado);
+        dispatch({ t: 'tx:upsert', tx: r.transaction });
+      } catch (e) {
+        if (previo) dispatch({ t: 'tx:upsert', tx: previo });
+        avisar(e instanceof Error ? e.message : 'No se pudo confirmar');
+      }
     },
 
     deshacerCobro: async (id) => {

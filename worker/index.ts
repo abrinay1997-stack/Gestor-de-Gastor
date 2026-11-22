@@ -64,6 +64,9 @@ const RUTAS: Record<string, Partial<Record<string, Handler>>> = {
 
 /** Rutas con un id al final: /api/algo/:id */
 const RUTAS_CON_ID: { prefijo: string; metodos: Partial<Record<string, HandlerConId>> }[] = [
+  // Antes que el generico de /api/transactions/, por la misma razon que los
+  // de recurring mas abajo.
+  { prefijo: '/api/transactions/confirmar/', metodos: { POST: tx.confirmar } },
   { prefijo: '/api/transactions/', metodos: { PUT: tx.editar, DELETE: tx.borrar } },
   { prefijo: '/api/accounts/', metodos: { PUT: data.editarCuenta, DELETE: data.borrarCuenta } },
   { prefijo: '/api/categories/', metodos: { PUT: data.editarCategoria } },

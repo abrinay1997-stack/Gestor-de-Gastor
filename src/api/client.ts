@@ -247,6 +247,8 @@ export const api = {
   borrarRecurrente: (id: string) => del<{ ok: true }>(`/api/recurring/${id}`),
 
   /** "Ya me pagaron": crea el movimiento ahora, sin esperar a la fecha. */
+  confirmarTx: (id: string, confirmado: boolean) =>
+    post<{ transaction: Transaction }>(`/api/transactions/confirmar/${id}`, { confirmado }),
   cobrarRecurrente: (id: string, d?: { amountMinor?: number; date?: number }) =>
     post<{ recurring: Recurring; tx: Transaction }>(`/api/recurring/cobrar/${id}`, d ?? {}),
 

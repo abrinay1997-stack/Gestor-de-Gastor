@@ -20,6 +20,9 @@ import { esEvento, TxType, type Transaction, type TransactionInput } from '@shar
 import { aInputDate, deInputDate, fechaCorta, vibrar } from '../../lib/utils.ts';
 import { Avatar, Boton, Campo, Hoja, Icono, Selector } from '../ui/base.tsx';
 import { cn } from '../../lib/utils.ts';
+import {
+  borrarBorrador, cerrarBorrador, escribirBorrador, leerBorrador, tieneContenido,
+} from '../../lib/borrador.ts';
 
 /**
  * El valor del selector de jarra que significa «repartir entre todas».
@@ -148,8 +151,28 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
   const refFrase = useRef<HTMLInputElement>(null);
   const refMonto = useRef<HTMLInputElement>(null);
 
+  /** Si al abrir se recupero lo que habia escrito antes de salir de la app. */
+  const [recuperado, setRecuperado] = useState(false);
+
+  // Lo que el reinicio del formulario necesita leer, pero que NO tiene que
+  // dispararlo. Antes `activas` y `me` eran dependencias del efecto de abajo,
+  // y cambian de identidad con cada dato que llega: el otro telefono guarda
+  // algo, la app vuelve del fondo y se resincroniza, el disparador nocturno
+  // avisa. Cada una de esas cosas vaciaba el formulario a mitad de escribir.
+  const activasRef = useRef(activas);
+  activasRef.current = activas;
+  const meRef = useRef(me);
+  meRef.current = me;
+  const monedaRef = useRef(moneda);
+  monedaRef.current = moneda;
+
+  // Se reinicia SOLO al abrir la hoja o al cambiar que movimiento se edita.
   useEffect(() => {
     if (!abierta) return;
+    const activas = activasRef.current;
+    const me = meRef.current;
+    const moneda = monedaRef.current;
+    setRecuperado(false);
 
     if (editando) {
       setTipo(editando.type);
@@ -165,7 +188,30 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
       setFecha(aInputDate(editando.date));
       setNotas(editando.notes ?? '');
       setFrase('');
+    } else if ((() => {
+      const b = leerBorrador();
+      if (!b || !tieneContenido(b)) return false;
+      // Lo que habia escrito antes de que el telefono cerrara la app.
+      ultimaFraseLeida.current = b.frase;
+      setFrase(b.frase);
+      setTipo(b.tipo as TxType);
+      setMontoTexto(b.montoTexto);
+      setDescripcion(b.descripcion);
+      setAccountId(activas.some((c) => c.id === b.accountId) ? b.accountId : (activas[0]?.id ?? ''));
+      setDestAccountId(activas.some((c) => c.id === b.destAccountId) ? b.destAccountId : '');
+      setCategoryId(b.categoryId);
+      setJarId(b.jarId);
+      setJarraTocada(b.jarraTocada);
+      setBudgetId(b.budgetId);
+      setPaidBy(b.paidBy || (me?.id ?? ''));
+      setFecha(b.fecha || aInputDate(Date.now()));
+      setNotas(b.notas);
+      setRecuperado(true);
+      return true;
+    })()) {
+      // Restaurado arriba.
     } else {
+      ultimaFraseLeida.current = '';
       setTipo(TxType.GASTO);
       setMontoTexto('');
       setDescripcion('');
@@ -186,20 +232,65 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
     if (!editando) setTimeout(() => refMonto.current?.focus(), 120);
     setFechaAbierta(false);
     setError(null);
-  }, [abierta, editando, moneda, activas, me]);
+  }, [abierta, editando]);
+
+  // Cada cambio queda escrito en el telefono, para que salir a otra app y
+  // volver no cueste lo que se habia tecleado. Solo en un movimiento nuevo: al
+  // editar, el original ya esta guardado en el servidor.
+  useEffect(() => {
+    if (!abierta || editando) return;
+    const datos = {
+      frase, tipo, montoTexto, descripcion, accountId, destAccountId, categoryId,
+      jarId, jarraTocada, budgetId, paidBy, fecha, notas,
+    };
+    if (tieneContenido(datos)) escribirBorrador({ ...datos, abierta: true });
+  }, [
+    abierta, editando, frase, tipo, montoTexto, descripcion, accountId, destAccountId,
+    categoryId, jarId, jarraTocada, budgetId, paidBy, fecha, notas,
+  ]);
+
+  /** Cerrar la hoja sin guardar: lo escrito se conserva para la proxima vez. */
+  const cerrar = () => {
+    cerrarBorrador();
+    alCerrar();
+  };
+
+  const descartarBorrador = () => {
+    borrarBorrador();
+    ultimaFraseLeida.current = '';
+    setRecuperado(false);
+    setFrase('');
+    setTipo(TxType.GASTO);
+    setMontoTexto('');
+    setDescripcion('');
+    setCategoryId('');
+    setJarId('');
+    setJarraTocada(false);
+    setBudgetId('');
+    setPaidBy(me?.id ?? '');
+    setFecha(aInputDate(Date.now()));
+    setNotas('');
+  };
 
   const lectura = useMemo(() => {
     if (!frase.trim() || editando) return null;
     return leer(frase, { categories, historial: transactions, currency: moneda });
   }, [frase, categories, transactions, moneda, editando]);
 
+  // La frase solo manda cuando cambia la frase. Antes este efecto tambien
+  // corria cada vez que llegaba un movimiento nuevo (la lectura depende del
+  // historial), y pisaba el monto o la descripcion que se habian corregido a
+  // mano.
+  const ultimaFraseLeida = useRef('');
   useEffect(() => {
     if (!lectura) return;
+    if (ultimaFraseLeida.current === frase) return;
+    ultimaFraseLeida.current = frase;
     if (lectura.amountMinor !== null) setMontoTexto(montoPlano(lectura.amountMinor, moneda));
     setDescripcion(lectura.description);
     setTipo(lectura.type);
     if (lectura.categoryId) setCategoryId(lectura.categoryId);
-  }, [lectura, moneda]);
+  }, [lectura, moneda, frase]);
 
   const montoMinor = parseMonto(montoTexto, moneda);
   const esTransferencia = tipo === TxType.TRANSFERENCIA;
@@ -402,6 +493,38 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
     return queda < 0 ? { jarra, queda } : null;
   }, [tipo, jarId, montoMinor, jars, editando]);
 
+  // ---------------------------------------------------------------------------
+  // Avisos antes de guardar. Ninguno bloquea ni cambia nada: lo que se registra
+  // lo deciden ustedes, y el sistema solo suma o resta segun el tipo —un gasto
+  // SIEMPRE resta, un ingreso SIEMPRE suma, tenga la fecha que tenga—. Estos
+  // dos solo atrapan errores de dedo, de los que salieron descuadres reales.
+  // ---------------------------------------------------------------------------
+
+  const fechaMs = deInputDate(fecha);
+
+  /**
+   * Una fecha en otro año o muy lejos de hoy. La rueda del selector de fecha
+   * del telefono se mueve sola con el dedo: asi entraron dos movimientos de
+   * noviembre fechados en 2025, que restaban bien pero caian en otro mes.
+   */
+  const avisoFecha = useMemo(() => {
+    const dias = Math.round((Date.now() - fechaMs) / 86_400_000);
+    const otroAnio = new Date(fechaMs).getFullYear() !== new Date().getFullYear();
+    if (dias < -7) return `La fecha es dentro de ${-dias} días.`;
+    if (otroAnio && dias > 31) return `La fecha es de ${new Date(fechaMs).getFullYear()}, hace ${dias} días.`;
+    if (dias > 90) return `La fecha es de hace ${dias} días.`;
+    return null;
+  }, [fechaMs]);
+
+  /** El mismo monto, en la misma cuenta, el mismo dia: muy probablemente ya esta. */
+  const posibleDuplicado = useMemo(() => {
+    if (montoMinor === null || montoMinor <= 0 || !accountId) return null;
+    return transactions.find((t) =>
+      t.id !== editando?.id && t.type === tipo && t.amountMinor === montoMinor &&
+      t.accountId === accountId && Math.abs(t.date - fechaMs) <= 36 * 3_600_000,
+    ) ?? null;
+  }, [transactions, editando, tipo, montoMinor, accountId, fechaMs]);
+
   async function guardar() {
     if (!puedeGuardar || montoMinor === null) return;
     setGuardando(true);
@@ -433,6 +556,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
 
     try {
       await guardarTx(entrada, editando?.id);
+      if (!editando) borrarBorrador();
       vibrar();
       alCerrar();
     } catch (e) {
@@ -445,7 +569,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
   return (
     <Hoja
       abierta={abierta}
-      alCerrar={alCerrar}
+      alCerrar={cerrar}
       titulo={editando ? 'Editar movimiento' : 'Nuevo movimiento'}
       /* Guardar al pie y siempre visible. Antes vivia al final del formulario:
          en pantalla completa, con el teclado abierto y quince controles arriba,
@@ -457,6 +581,18 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
       )}
     >
       <div className="space-y-4">
+        {recuperado && !editando && (
+          <div className="flex items-center justify-between gap-3 rounded-xl superficie-2 px-3 py-2">
+            <span className="t-nota txt-2">Recuperamos lo que estabas escribiendo.</span>
+            <button
+              type="button"
+              onClick={descartarBorrador}
+              className="t-nota font-medium text-marca-700 dark:text-marca-500 min-h-11 px-2"
+            >
+              Empezar de cero
+            </button>
+          </div>
+        )}
         {!editando && (
           <div>
             <div className="relative">
@@ -789,6 +925,11 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
               <Icono nombre="calendar-days" size={17} className="txt-3 shrink-0" />
             </button>
           )}
+          {avisoFecha && (
+            <p className="t-nota text-amber-700 dark:text-amber-500 mt-1.5 px-1">
+              {avisoFecha} ¿Es correcta?
+            </p>
+          )}
         </div>
 
         <Campo
@@ -797,6 +938,22 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           onChange={(e) => setNotas(e.target.value)}
           placeholder="Opcional"
         />
+
+        {posibleDuplicado && (
+          <div className="rounded-2xl p-3 border"
+            style={{ borderColor: '#f59e0b66', background: '#f59e0b14' }}>
+            <p className="t-nota txt-2 leading-relaxed">
+              Ya hay un movimiento igual:{' '}
+              <span className="font-semibold txt">{posibleDuplicado.description}</span> por{' '}
+              <span className="font-semibold tabular txt">
+                {formatMonto(posibleDuplicado.amountMinor, moneda)}
+              </span>{' '}
+              el {fechaCorta(posibleDuplicado.date)}
+              {posibleDuplicado.code ? ` (${posibleDuplicado.code})` : ''}. Se guarda igual.
+            </p>
+          </div>
+        )}
+
 
         {cuentaSel && montoMinor !== null && montoMinor > 0 && tipo === TxType.GASTO && (
           <p className="t-nota txt-3 text-center">

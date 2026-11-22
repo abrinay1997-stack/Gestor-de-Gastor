@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from 'react';
 import { useStore } from './store/store.tsx';
 import { AppLayout, type Solapa } from './components/layout/AppLayout.tsx';
 import { CargaRapida } from './components/transactions/CargaRapida.tsx';
+import { leerBorrador } from './lib/borrador.ts';
 import { DetalleMovimiento } from './components/transactions/DetalleMovimiento.tsx';
 import { Acceso } from './pages/Acceso.tsx';
 import { Inicio } from './pages/Inicio.tsx';
@@ -24,7 +25,9 @@ export default function App() {
   const { cargando, autenticado, aviso, cola } = useStore();
 
   const [solapa, setSolapa] = useState<Solapa>('inicio');
-  const [cargaAbierta, setCargaAbierta] = useState(false);
+  // Si el telefono cerro la app con un movimiento a medio cargar, al volver la
+  // hoja se reabre con lo que se habia escrito.
+  const [cargaAbierta, setCargaAbierta] = useState(() => leerBorrador()?.abierta ?? false);
   const [editando, setEditando] = useState<Transaction | null>(null);
   // Movimiento cuyo detalle se esta mirando. Tocar uno abre esto, no el
   // formulario: mirar es mucho mas frecuente que corregir.
