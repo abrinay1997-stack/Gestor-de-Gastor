@@ -17,7 +17,7 @@ import { dentroDe, periodoMes, type Periodo } from '@shared/periodo';
 import {
   SECCIONES_INICIO, TxType, type Recurring, type SeccionInicio, type Transaction,
 } from '@shared/types';
-import { describirRegla } from '@shared/recurrencia';
+import { describirRegla, inicioDelCiclo, reglaDe } from '@shared/recurrencia';
 import { fechaCorta } from '../lib/utils.ts';
 import {
   Avatar, Barra, Boton, Deslizable, Ficha, Icono, Tarjeta, Vacio,
@@ -545,9 +545,16 @@ function FilaHabitual({ recurrente: r }: { recurrente: Recurring }) {
   );
 
   // Pendiente = el ciclo se dio por cobrado y se deshizo, o todavia no llego
-  // la fecha. Cobrado = hay un movimiento de este ciclo sin deshacer.
+  // la fecha. Cobrado = hay un movimiento DE ESTE CICLO sin deshacer.
+  //
+  // «De este ciclo» es lo que faltaba. Antes bastaba con que existiera algun
+  // movimiento: el 21 de noviembre Spotify seguia «Pagado el 22 oct», y tocar
+  // el check para pagar noviembre borraba el gasto de octubre (DKE96). Pasada
+  // la mitad del camino al proximo cobro, la fila ya habla del que viene.
   const esperando = r.esperandoDesde !== null;
-  const cobrado = !esperando && ultimo !== undefined && r.lastRun !== null;
+  const inicio = inicioDelCiclo(reglaDe(r), r.nextRun);
+  const cobrado = !esperando && ultimo !== undefined && r.lastRun !== null &&
+    inicio !== null && ultimo.date >= inicio;
   const esIngreso = r.type === TxType.INGRESO;
 
   async function alternar() {

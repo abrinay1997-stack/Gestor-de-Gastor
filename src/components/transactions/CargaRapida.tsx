@@ -20,6 +20,9 @@ import { esEvento, TxType, type Transaction, type TransactionInput } from '@shar
 import { aInputDate, deInputDate, fechaCorta, vibrar } from '../../lib/utils.ts';
 import { Avatar, Boton, Campo, Hoja, Icono, Selector } from '../ui/base.tsx';
 import { cn } from '../../lib/utils.ts';
+import {
+  borrarBorrador, cerrarBorrador, escribirBorrador, leerBorrador, tieneContenido,
+} from '../../lib/borrador.ts';
 
 /**
  * El valor del selector de jarra que significa «repartir entre todas».
@@ -148,8 +151,28 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
   const refFrase = useRef<HTMLInputElement>(null);
   const refMonto = useRef<HTMLInputElement>(null);
 
+  /** Si al abrir se recupero lo que habia escrito antes de salir de la app. */
+  const [recuperado, setRecuperado] = useState(false);
+
+  // Lo que el reinicio del formulario necesita leer, pero que NO tiene que
+  // dispararlo. Antes `activas` y `me` eran dependencias del efecto de abajo,
+  // y cambian de identidad con cada dato que llega: el otro telefono guarda
+  // algo, la app vuelve del fondo y se resincroniza, el disparador nocturno
+  // avisa. Cada una de esas cosas vaciaba el formulario a mitad de escribir.
+  const activasRef = useRef(activas);
+  activasRef.current = activas;
+  const meRef = useRef(me);
+  meRef.current = me;
+  const monedaRef = useRef(moneda);
+  monedaRef.current = moneda;
+
+  // Se reinicia SOLO al abrir la hoja o al cambiar que movimiento se edita.
   useEffect(() => {
     if (!abierta) return;
+    const activas = activasRef.current;
+    const me = meRef.current;
+    const moneda = monedaRef.current;
+    setRecuperado(false);
 
     if (editando) {
       setTipo(editando.type);
@@ -165,7 +188,30 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
       setFecha(aInputDate(editando.date));
       setNotas(editando.notes ?? '');
       setFrase('');
+    } else if ((() => {
+      const b = leerBorrador();
+      if (!b || !tieneContenido(b)) return false;
+      // Lo que habia escrito antes de que el telefono cerrara la app.
+      ultimaFraseLeida.current = b.frase;
+      setFrase(b.frase);
+      setTipo(b.tipo as TxType);
+      setMontoTexto(b.montoTexto);
+      setDescripcion(b.descripcion);
+      setAccountId(activas.some((c) => c.id === b.accountId) ? b.accountId : (activas[0]?.id ?? ''));
+      setDestAccountId(activas.some((c) => c.id === b.destAccountId) ? b.destAccountId : '');
+      setCategoryId(b.categoryId);
+      setJarId(b.jarId);
+      setJarraTocada(b.jarraTocada);
+      setBudgetId(b.budgetId);
+      setPaidBy(b.paidBy || (me?.id ?? ''));
+      setFecha(b.fecha || aInputDate(Date.now()));
+      setNotas(b.notas);
+      setRecuperado(true);
+      return true;
+    })()) {
+      // Restaurado arriba.
     } else {
+      ultimaFraseLeida.current = '';
       setTipo(TxType.GASTO);
       setMontoTexto('');
       setDescripcion('');
@@ -186,20 +232,65 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
     if (!editando) setTimeout(() => refMonto.current?.focus(), 120);
     setFechaAbierta(false);
     setError(null);
-  }, [abierta, editando, moneda, activas, me]);
+  }, [abierta, editando]);
+
+  // Cada cambio queda escrito en el telefono, para que salir a otra app y
+  // volver no cueste lo que se habia tecleado. Solo en un movimiento nuevo: al
+  // editar, el original ya esta guardado en el servidor.
+  useEffect(() => {
+    if (!abierta || editando) return;
+    const datos = {
+      frase, tipo, montoTexto, descripcion, accountId, destAccountId, categoryId,
+      jarId, jarraTocada, budgetId, paidBy, fecha, notas,
+    };
+    if (tieneContenido(datos)) escribirBorrador({ ...datos, abierta: true });
+  }, [
+    abierta, editando, frase, tipo, montoTexto, descripcion, accountId, destAccountId,
+    categoryId, jarId, jarraTocada, budgetId, paidBy, fecha, notas,
+  ]);
+
+  /** Cerrar la hoja sin guardar: lo escrito se conserva para la proxima vez. */
+  const cerrar = () => {
+    cerrarBorrador();
+    alCerrar();
+  };
+
+  const descartarBorrador = () => {
+    borrarBorrador();
+    ultimaFraseLeida.current = '';
+    setRecuperado(false);
+    setFrase('');
+    setTipo(TxType.GASTO);
+    setMontoTexto('');
+    setDescripcion('');
+    setCategoryId('');
+    setJarId('');
+    setJarraTocada(false);
+    setBudgetId('');
+    setPaidBy(me?.id ?? '');
+    setFecha(aInputDate(Date.now()));
+    setNotas('');
+  };
 
   const lectura = useMemo(() => {
     if (!frase.trim() || editando) return null;
     return leer(frase, { categories, historial: transactions, currency: moneda });
   }, [frase, categories, transactions, moneda, editando]);
 
+  // La frase solo manda cuando cambia la frase. Antes este efecto tambien
+  // corria cada vez que llegaba un movimiento nuevo (la lectura depende del
+  // historial), y pisaba el monto o la descripcion que se habian corregido a
+  // mano.
+  const ultimaFraseLeida = useRef('');
   useEffect(() => {
     if (!lectura) return;
+    if (ultimaFraseLeida.current === frase) return;
+    ultimaFraseLeida.current = frase;
     if (lectura.amountMinor !== null) setMontoTexto(montoPlano(lectura.amountMinor, moneda));
     setDescripcion(lectura.description);
     setTipo(lectura.type);
     if (lectura.categoryId) setCategoryId(lectura.categoryId);
-  }, [lectura, moneda]);
+  }, [lectura, moneda, frase]);
 
   const montoMinor = parseMonto(montoTexto, moneda);
   const esTransferencia = tipo === TxType.TRANSFERENCIA;
@@ -433,6 +524,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
 
     try {
       await guardarTx(entrada, editando?.id);
+      if (!editando) borrarBorrador();
       vibrar();
       alCerrar();
     } catch (e) {
@@ -445,7 +537,7 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
   return (
     <Hoja
       abierta={abierta}
-      alCerrar={alCerrar}
+      alCerrar={cerrar}
       titulo={editando ? 'Editar movimiento' : 'Nuevo movimiento'}
       /* Guardar al pie y siempre visible. Antes vivia al final del formulario:
          en pantalla completa, con el teclado abierto y quince controles arriba,
@@ -457,6 +549,18 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
       )}
     >
       <div className="space-y-4">
+        {recuperado && !editando && (
+          <div className="flex items-center justify-between gap-3 rounded-xl superficie-2 px-3 py-2">
+            <span className="t-nota txt-2">Recuperamos lo que estabas escribiendo.</span>
+            <button
+              type="button"
+              onClick={descartarBorrador}
+              className="t-nota font-medium text-marca-700 dark:text-marca-500 min-h-11 px-2"
+            >
+              Empezar de cero
+            </button>
+          </div>
+        )}
         {!editando && (
           <div>
             <div className="relative">
