@@ -302,6 +302,34 @@ export function inicioDelCiclo(
 }
 
 /**
+ * La proxima fecha cuando se cambia la regla de un pago habitual.
+ *
+ * Antes se recalculaba desde hoy, como si el pago fuera nuevo. Con eso, mover
+ * Spotify del 22 al 25 el dia 23 —con noviembre ya pagado— lo dejaba para el
+ * 25 de noviembre, y el disparador lo cobraba dos veces en el mismo mes. Lo
+ * mismo con cualquier pago habitual.
+ *
+ * La regla vieja ya sabe que ciclo es el que falta: el de `proximaVieja`. La
+ * nueva arranca en ese mismo ciclo —el mismo mes, para las que van por meses;
+ * medio ciclo antes, para la semanal y la quincenal—, nunca antes de hoy.
+ */
+export function proximaTrasCambio(
+  vieja: ReglaRecurrencia,
+  nueva: ReglaRecurrencia,
+  proximaVieja: number,
+  ahora = Date.now(),
+): number {
+  let desde: number;
+  if (PASO_EN_MESES[nueva.frecuencia]) {
+    const d = new Date(proximaVieja);
+    desde = new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0).getTime();
+  } else {
+    desde = proximaVieja - (proximaVieja - anteriorFecha(vieja, proximaVieja)) / 2;
+  }
+  return primeraFecha(nueva, Math.max(ahora, desde));
+}
+
+/**
  * Todas las fechas vencidas hasta hoy, empezando por la que toca.
  *
  * Devuelve una lista porque puede haber mas de una: si nadie abre la app ni

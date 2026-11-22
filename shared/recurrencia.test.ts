@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  anteriorFecha, describirRegla, diasDelMes, fechaSegura, fechasVencidas, inicioDelCiclo,
+  anteriorFecha, describirRegla, proximaTrasCambio, diasDelMes, fechaSegura, fechasVencidas, inicioDelCiclo,
   mesesDelCiclo, primeraFecha, siguienteFecha, type ReglaRecurrencia,
 } from './recurrencia.ts';
 
@@ -496,5 +496,30 @@ describe('inicioDelCiclo (el caso DKE96)', () => {
     expect(en(2026, 11, 21)).toBeGreaterThanOrEqual(inicio!);
     // Pero el de octubre no.
     expect(en(2026, 10, 22)).toBeLessThan(inicio!);
+  });
+});
+
+describe('proximaTrasCambio (cambiar la regla no cobra dos veces)', () => {
+  const del22: ReglaRecurrencia = { frecuencia: 'mensual', diaDelMes: 22 };
+
+  it('pagado noviembre, mover del 22 al 25 deja el 25 de diciembre', () => {
+    const r = proximaTrasCambio(del22, { frecuencia: 'mensual', diaDelMes: 25 }, en(2026, 12, 22), en(2026, 11, 23));
+    expect(f(r)).toBe('2026-12-25');
+  });
+
+  it('pagado noviembre, mover al 5 deja el 5 de diciembre', () => {
+    const r = proximaTrasCambio(del22, { frecuencia: 'mensual', diaDelMes: 5 }, en(2026, 12, 22), en(2026, 11, 23));
+    expect(f(r)).toBe('2026-12-05');
+  });
+
+  it('sin pagar este mes, mover al 25 lo deja para este mes', () => {
+    const r = proximaTrasCambio(del22, { frecuencia: 'mensual', diaDelMes: 25 }, en(2026, 11, 22), en(2026, 11, 10));
+    expect(f(r)).toBe('2026-11-25');
+  });
+
+  it('quincenal: cobrada la primera, cambiar los dias deja la segunda', () => {
+    const q = (a: number, b: number): ReglaRecurrencia => ({ frecuencia: 'quincenal', diaDelMes: a, diaDelMes2: b });
+    const r = proximaTrasCambio(q(15, 31), q(10, 25), en(2026, 11, 30), en(2026, 11, 20));
+    expect(f(r)).toBe('2026-11-25');
   });
 });

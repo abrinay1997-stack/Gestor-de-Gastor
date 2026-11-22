@@ -16,7 +16,7 @@ import {
 } from '../http.ts';
 import { TxType } from '../../shared/types.ts';
 import {
-  FRECUENCIAS, inicioDelCiclo, primeraFecha, QUINCENA_POR_DEFECTO, reglaDe,
+  FRECUENCIAS, inicioDelCiclo, primeraFecha, proximaTrasCambio, QUINCENA_POR_DEFECTO, reglaDe,
   siguienteFecha, type Frecuencia,
 } from '../../shared/recurrencia.ts';
 
@@ -178,7 +178,11 @@ export async function editar(
     v.dayOfWeek !== existente.dayOfWeek ||
     v.monthOfYear !== existente.monthOfYear;
 
-  const nextRun = cambioLaRegla ? primeraFecha(reglaDe(v)) : existente.nextRun;
+  // Y al recalcular se respeta el ciclo que ya esta pagado: ver
+  // proximaTrasCambio. Antes partia de hoy y podia cobrar dos veces el mismo mes.
+  const nextRun = cambioLaRegla
+    ? proximaTrasCambio(reglaDe(existente), reglaDe(v), existente.nextRun)
+    : existente.nextRun;
 
   await env.DB.prepare(
     `UPDATE recurring SET name=?1, type=?2, amount_minor=?3, account_id=?4,
