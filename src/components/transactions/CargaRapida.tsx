@@ -493,6 +493,38 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
     return queda < 0 ? { jarra, queda } : null;
   }, [tipo, jarId, montoMinor, jars, editando]);
 
+  // ---------------------------------------------------------------------------
+  // Avisos antes de guardar. Ninguno bloquea ni cambia nada: lo que se registra
+  // lo deciden ustedes, y el sistema solo suma o resta segun el tipo —un gasto
+  // SIEMPRE resta, un ingreso SIEMPRE suma, tenga la fecha que tenga—. Estos
+  // dos solo atrapan errores de dedo, de los que salieron descuadres reales.
+  // ---------------------------------------------------------------------------
+
+  const fechaMs = deInputDate(fecha);
+
+  /**
+   * Una fecha en otro año o muy lejos de hoy. La rueda del selector de fecha
+   * del telefono se mueve sola con el dedo: asi entraron dos movimientos de
+   * noviembre fechados en 2025, que restaban bien pero caian en otro mes.
+   */
+  const avisoFecha = useMemo(() => {
+    const dias = Math.round((Date.now() - fechaMs) / 86_400_000);
+    const otroAnio = new Date(fechaMs).getFullYear() !== new Date().getFullYear();
+    if (dias < -7) return `La fecha es dentro de ${-dias} días.`;
+    if (otroAnio && dias > 31) return `La fecha es de ${new Date(fechaMs).getFullYear()}, hace ${dias} días.`;
+    if (dias > 90) return `La fecha es de hace ${dias} días.`;
+    return null;
+  }, [fechaMs]);
+
+  /** El mismo monto, en la misma cuenta, el mismo dia: muy probablemente ya esta. */
+  const posibleDuplicado = useMemo(() => {
+    if (montoMinor === null || montoMinor <= 0 || !accountId) return null;
+    return transactions.find((t) =>
+      t.id !== editando?.id && t.type === tipo && t.amountMinor === montoMinor &&
+      t.accountId === accountId && Math.abs(t.date - fechaMs) <= 36 * 3_600_000,
+    ) ?? null;
+  }, [transactions, editando, tipo, montoMinor, accountId, fechaMs]);
+
   async function guardar() {
     if (!puedeGuardar || montoMinor === null) return;
     setGuardando(true);
@@ -893,6 +925,11 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
               <Icono nombre="calendar-days" size={17} className="txt-3 shrink-0" />
             </button>
           )}
+          {avisoFecha && (
+            <p className="t-nota text-amber-700 dark:text-amber-500 mt-1.5 px-1">
+              {avisoFecha} ¿Es correcta?
+            </p>
+          )}
         </div>
 
         <Campo
@@ -901,6 +938,22 @@ export function CargaRapida({ abierta, alCerrar, editando }: {
           onChange={(e) => setNotas(e.target.value)}
           placeholder="Opcional"
         />
+
+        {posibleDuplicado && (
+          <div className="rounded-2xl p-3 border"
+            style={{ borderColor: '#f59e0b66', background: '#f59e0b14' }}>
+            <p className="t-nota txt-2 leading-relaxed">
+              Ya hay un movimiento igual:{' '}
+              <span className="font-semibold txt">{posibleDuplicado.description}</span> por{' '}
+              <span className="font-semibold tabular txt">
+                {formatMonto(posibleDuplicado.amountMinor, moneda)}
+              </span>{' '}
+              el {fechaCorta(posibleDuplicado.date)}
+              {posibleDuplicado.code ? ` (${posibleDuplicado.code})` : ''}. Se guarda igual.
+            </p>
+          </div>
+        )}
+
 
         {cuentaSel && montoMinor !== null && montoMinor > 0 && tipo === TxType.GASTO && (
           <p className="t-nota txt-3 text-center">
